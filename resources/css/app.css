@@ -1,0 +1,25 @@
+@import 'tailwindcss';
+
+/* Use the app's .dark class (set by the navbar toggle) instead of OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+@layer base {
+    body { font-family: Inter, 'Instrument Sans', ui-sans-serif, system-ui, sans-serif; }
+    [x-cloak] { display: none !important; }
+}
+
+@layer utilities {
+    .glass-card { @apply border border-white/70 bg-white/80 shadow-sm shadow-slate-200/60 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none; }
+    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-indigo-100 transition duration-200 hover:translate-x-1 hover:bg-white/15 hover:text-white; }
+    .nav-link-active { @apply bg-white/20 text-white shadow-sm ring-1 ring-white/15; }
+}
