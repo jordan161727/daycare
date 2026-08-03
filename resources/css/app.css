@@ -11,6 +11,37 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Little Angel brand palette — #B6C3E6 is the primary theme color. */
+    --color-blue-50: #f4f6fc;
+    --color-blue-100: #e7ecf8;
+    --color-blue-200: #d9e0f1;
+    --color-blue-300: #c8d2ea;
+    --color-blue-400: #b6c3e6;
+    --color-blue-500: #93a4d1;
+    --color-blue-600: #7486b6;
+    --color-blue-700: #5b6c98;
+    --color-blue-800: #465577;
+    --color-blue-900: #303a53;
+    --color-blue-950: #20283b;
+
+    --color-indigo-50: #f4f6fc;
+    --color-indigo-100: #e7ecf8;
+    --color-indigo-200: #d9e0f1;
+    --color-indigo-300: #c8d2ea;
+    --color-indigo-400: #b6c3e6;
+    --color-indigo-500: #93a4d1;
+    --color-indigo-600: #7486b6;
+    --color-indigo-700: #5b6c98;
+    --color-indigo-800: #465577;
+    --color-indigo-900: #303a53;
+    --color-indigo-950: #20283b;
+
+    --color-violet-400: #b6c3e6;
+    --color-violet-500: #93a4d1;
+    --color-violet-600: #7486b6;
+    --color-violet-700: #5b6c98;
+    --color-violet-800: #465577;
 }
 
 @layer base {
@@ -20,6 +51,6 @@
 
 @layer utilities {
     .glass-card { @apply border border-white/70 bg-white/80 shadow-sm shadow-slate-200/60 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none; }
-    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-indigo-100 transition duration-200 hover:translate-x-1 hover:bg-white/15 hover:text-white; }
-    .nav-link-active { @apply bg-white/20 text-white shadow-sm ring-1 ring-white/15; }
+    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950; }
+    .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70; }
 }

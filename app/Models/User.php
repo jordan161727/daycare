@@ -22,6 +22,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'classroom',
     ];
 
     /**
@@ -45,5 +47,20 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function canAccessClassroom(?string $classroom): bool
+    {
+        return $this->isAdmin() || ($this->classroom !== null && $this->classroom === $classroom);
+    }
+
+    public function students()
+    {
+        return $this->hasMany(Child::class, 'classroom', 'classroom');
     }
 }

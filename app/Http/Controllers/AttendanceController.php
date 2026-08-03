@@ -10,17 +10,18 @@ class AttendanceController extends Controller
 {
     public function index()
     {
+            $user = request()->user();
             $selectedDate = request('date', today()->toDateString());
             validator(['date' => $selectedDate], ['date' => ['required', 'date_format:Y-m-d']])->validate();
 
             // Active children
-            $children = Child::where('status', 'Active')
+            $children = Child::visibleTo($user)->where('status', 'Active')
                 ->orderBy('last_name')
                 ->orderBy('first_name')
                 ->get();
 
             // Classroom filters
-            $classrooms = Child::where('status', 'Active')
+            $classrooms = Child::visibleTo($user)->where('status', 'Active')
                 ->select('classroom')
                 ->distinct()
                 ->orderBy('classroom')
@@ -28,24 +29,27 @@ class AttendanceController extends Controller
 
             // Today's attendance
             $todayAttendance = Attendance::whereDate('attendance_date', $selectedDate)
+                ->whereHas('child', fn ($query) => $query->visibleTo($user))
                 ->get()
                 ->keyBy('child_id');
 
             // Dashboard Statistics
-            $totalChildren = Child::where('status', 'Active')->count();
+            $totalChildren = Child::visibleTo($user)->where('status', 'Active')->count();
 
             $presentToday = Attendance::whereDate('attendance_date', $selectedDate)
+                ->whereHas('child', fn ($query) => $query->visibleTo($user))
                 ->count();
 
             $absentToday = $totalChildren - $presentToday;
 
-            $totalRooms = Child::where('status', 'Active')
+            $totalRooms = Child::visibleTo($user)->where('status', 'Active')
                 ->distinct('classroom')
                 ->count('classroom');
 
             // Recent Sign-ins
             $recentAttendance = Attendance::with('child')
                 ->whereDate('attendance_date', $selectedDate)
+                ->whereHas('child', fn ($query) => $query->visibleTo($user))
                 ->latest('signed_in_at')
                 ->take(10)
                 ->get();
@@ -65,15 +69,17 @@ class AttendanceController extends Controller
 
     public function signIn(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'child_id' => 'required|exists:children,id',
             'attendance_date' => 'required|date_format:Y-m-d',
         ]);
 
+        $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+
         $attendance = Attendance::firstOrCreate(
             [
-                'child_id' => $request->child_id,
-                'attendance_date' => $request->attendance_date,
+                'child_id' => $child->id,
+                'attendance_date' => $validated['attendance_date'],
             ],
             [
                 'signed_in_at' => now(),
