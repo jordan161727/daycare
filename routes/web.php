@@ -5,6 +5,7 @@ use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\ChildController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TeacherController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
 
 use Illuminate\Support\Facades\Route;
@@ -56,10 +57,11 @@ Route::put('/children/{child}', [ChildController::class, 'update'])->name('child
 Route::get('/children/import',[ChildrenController::class,'showImport'])->name('children.import.form');
 
 Route::post('/children/import',[ChildrenController::class,'import'])->name('children.import');
-
-Route::view('/reports', 'reports.index')->name('reports.index');
 });
 
+Route::middleware('role:admin,teacher')->group(function () {
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+});
 
 Route::get('/attendance', [AttendanceController::class, 'index'])
     ->name('attendance.index');

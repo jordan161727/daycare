@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,6 +31,68 @@ class TeacherClassroomAccessTest extends TestCase
         $this->actingAs($teacher)
             ->postJson(route('attendance.signin'), ['child_id' => $assignedChild->id, 'attendance_date' => today()->toDateString()])
             ->assertOk();
+    }
+
+    public function test_teacher_can_view_attendance_report_only_for_assigned_classroom(): void
+    {
+        $teacher = User::factory()->create(['classroom' => 'Sunflowers']);
+        $assignedChild = Child::create([
+            'lan' => 'LAN-3',
+            'status' => 'Active',
+            'first_name' => 'Assigned',
+            'last_name' => 'Child',
+            'classroom' => 'Sunflowers',
+        ]);
+        $otherChild = Child::create([
+            'lan' => 'LAN-4',
+            'status' => 'Active',
+            'first_name' => 'Other',
+            'last_name' => 'Child',
+            'classroom' => 'Roses',
+        ]);
+
+        Attendance::create([
+            'child_id' => $assignedChild->id,
+            'attendance_date' => today()->toDateString(),
+            'signed_in_at' => now(),
+        ]);
+
+        Attendance::create([
+            'child_id' => $otherChild->id,
+            'attendance_date' => today()->toDateString(),
+            'signed_in_at' => now(),
+        ]);
+
+        $this->actingAs($teacher)
+            ->get(route('reports.index', ['date' => today()->toDateString()]))
+            ->assertOk()
+            ->assertSee('Assigned Child')
+            ->assertDontSee('Other Child');
+    }
+
+    public function test_admin_can_view_all_children_in_reports(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $childOne = Child::create([
+            'lan' => 'LAN-5',
+            'status' => 'Active',
+            'first_name' => 'AdminOne',
+            'last_name' => 'Child',
+            'classroom' => 'Sunflowers',
+        ]);
+        $childTwo = Child::create([
+            'lan' => 'LAN-6',
+            'status' => 'Active',
+            'first_name' => 'AdminTwo',
+            'last_name' => 'Child',
+            'classroom' => 'Roses',
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('reports.index', ['date' => today()->toDateString()]))
+            ->assertOk()
+            ->assertSee('AdminOne Child')
+            ->assertSee('AdminTwo Child');
     }
 
     private function childData(string $lan, string $classroom): array
