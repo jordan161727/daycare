@@ -11,6 +11,7 @@ class Attendance extends Model
         'child_id',
         'attendance_date',
         'signed_in_at',
+        'session',
     ];
 
     protected $casts = [

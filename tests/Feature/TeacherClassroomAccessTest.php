@@ -33,41 +33,44 @@ class TeacherClassroomAccessTest extends TestCase
             ->assertOk();
     }
 
-    public function test_teacher_can_view_attendance_report_only_for_assigned_classroom(): void
+    public function test_teacher_can_view_attendance_report_only_for_selected_assigned_classroom(): void
     {
-        $teacher = User::factory()->create(['classroom' => 'Sunflowers']);
-        $assignedChild = Child::create([
+        $teacher = User::factory()->create([
+            'classrooms' => ['Sunflowers', 'Roses'],
+        ]);
+
+        $sunflowerChild = Child::create([
             'lan' => 'LAN-3',
             'status' => 'Active',
-            'first_name' => 'Assigned',
+            'first_name' => 'Sunflower',
             'last_name' => 'Child',
             'classroom' => 'Sunflowers',
         ]);
-        $otherChild = Child::create([
+        $roseChild = Child::create([
             'lan' => 'LAN-4',
             'status' => 'Active',
-            'first_name' => 'Other',
+            'first_name' => 'Rose',
             'last_name' => 'Child',
             'classroom' => 'Roses',
         ]);
 
         Attendance::create([
-            'child_id' => $assignedChild->id,
+            'child_id' => $sunflowerChild->id,
             'attendance_date' => today()->toDateString(),
             'signed_in_at' => now(),
         ]);
 
         Attendance::create([
-            'child_id' => $otherChild->id,
+            'child_id' => $roseChild->id,
             'attendance_date' => today()->toDateString(),
             'signed_in_at' => now(),
         ]);
 
         $this->actingAs($teacher)
-            ->get(route('reports.index', ['date' => today()->toDateString()]))
+            ->get(route('reports.index', ['date' => today()->toDateString(), 'classroom' => 'Roses']))
             ->assertOk()
-            ->assertSee('Assigned Child')
-            ->assertDontSee('Other Child');
+            ->assertSee('Rose Child')
+            ->assertDontSee('Sunflower Child');
     }
 
     public function test_admin_can_view_all_children_in_reports(): void
@@ -93,6 +96,25 @@ class TeacherClassroomAccessTest extends TestCase
             ->assertOk()
             ->assertSee('AdminOne Child')
             ->assertSee('AdminTwo Child');
+    }
+
+    public function test_admin_can_assign_multiple_classrooms_to_a_teacher_from_selection(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->post(route('teachers.store'), [
+                'name' => 'Ms. Rivera',
+                'email' => 'teacher@example.com',
+                'classrooms' => ['School Age', 'PreK'],
+                'password' => 'password123',
+                'password_confirmation' => 'password123',
+            ])
+            ->assertRedirect(route('teachers.index'));
+
+        $teacher = User::where('email', 'teacher@example.com')->firstOrFail();
+
+        $this->assertSame(['School Age', 'PreK'], $teacher->assignedClassrooms());
     }
 
     private function childData(string $lan, string $classroom): array

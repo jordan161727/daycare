@@ -13,7 +13,14 @@ class TeacherController extends Controller
 {
     public function index()
     {
-        $teachers = User::where('role', 'teacher')->withCount('students')->orderBy('name')->paginate(10);
+        $teachers = User::where('role', 'teacher')
+            ->orderBy('name')
+            ->paginate(10);
+
+        $teachers->getCollection()->transform(function (User $teacher) {
+            $teacher->students_count = Child::whereIn('classroom', $teacher->assignedClassrooms())->count();
+            return $teacher;
+        });
 
         return view('teachers.index', compact('teachers'));
     }
@@ -73,7 +80,8 @@ class TeacherController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users')->ignore($teacher)],
-            'classroom' => ['nullable', 'string', 'max:255'],
+            'classrooms' => ['nullable', 'array'],
+            'classrooms.*' => ['string', 'max:255'],
             'password' => $passwordRules,
         ]);
 
@@ -84,7 +92,14 @@ class TeacherController extends Controller
         }
 
         $data['role'] = 'teacher';
+        $data['classrooms'] = $this->normalizeAssignedClassrooms($data['classrooms'] ?? []);
+        $data['classroom'] = $data['classrooms'][0] ?? null;
 
         return $data;
+    }
+
+    private function normalizeAssignedClassrooms(array $classrooms): array
+    {
+        return array_values(array_filter(array_unique(array_map(static fn (string $value): string => trim($value), $classrooms))));
     }
 }

@@ -43,8 +43,16 @@ class Child extends Model
     /** Limit records to the classroom assigned to a teacher. */
     public function scopeVisibleTo($query, User $user)
     {
-        return $user->isAdmin()
-            ? $query
-            : $query->where('classroom', $user->classroom ?? '__unassigned__');
+        if ($user->isAdmin()) {
+            return $query;
+        }
+
+        $classrooms = $user->assignedClassrooms();
+
+        if (empty($classrooms)) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        return $query->whereIn('classroom', $classrooms);
     }
 }

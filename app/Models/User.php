@@ -24,6 +24,7 @@ class User extends Authenticatable
         'password',
         'role',
         'classroom',
+        'classrooms',
     ];
 
     /**
@@ -46,17 +47,32 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'classrooms' => 'array',
         ];
+    }
+
+    public function assignedClassrooms(): array
+    {
+        $classrooms = array_filter(array_merge(
+            $this->classrooms ?? [],
+            [$this->classroom ?? null]
+        ));
+
+        return array_values(array_unique($classrooms));
+    }
+
+    public function canAccessClassroom(?string $classroom): bool
+    {
+        if ($this->isAdmin()) {
+            return true;
+        }
+
+        return in_array($classroom, $this->assignedClassrooms(), true);
     }
 
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
-    }
-
-    public function canAccessClassroom(?string $classroom): bool
-    {
-        return $this->isAdmin() || ($this->classroom !== null && $this->classroom === $classroom);
     }
 
     public function students()

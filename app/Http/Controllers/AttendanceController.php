@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use App\Models\Attendance;
 use App\Models\Child;
+use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
@@ -24,21 +26,32 @@ class AttendanceController extends Controller
             $classrooms = Child::visibleTo($user)->where('status', 'Active')
                 ->select('classroom')
                 ->distinct()
-                ->orderBy('classroom')
                 ->pluck('classroom');
 
-            // Today's attendance
-            $todayAttendance = Attendance::whereDate('attendance_date', $selectedDate)
+            $selectedCarbon = Carbon::parse($selectedDate);
+            $weekStart = $selectedCarbon->startOfWeek(Carbon::MONDAY);
+            $weekDates = collect(range(0, 4))->map(fn ($offset) => $weekStart->copy()->addDays($offset));
+
+            $attendanceRecords = Attendance::with('child')
+                ->whereBetween('attendance_date', [$weekDates->first(), $weekDates->last()])
                 ->whereHas('child', fn ($query) => $query->visibleTo($user))
-                ->get()
-                ->keyBy('child_id');
+                ->get();
+
+            $attendanceMap = [];
+            $timezone = config('app.timezone');
+            foreach ($attendanceRecords as $attendance) {
+                $date = $attendance->attendance_date->toDateString();
+                $session = $attendance->session ?? 'FULL';
+                $attendanceMap[$attendance->child_id][$date][$session] = $attendance->signed_in_at->timezone($timezone)->format('g:i A');
+            }
 
             // Dashboard Statistics
             $totalChildren = Child::visibleTo($user)->where('status', 'Active')->count();
 
             $presentToday = Attendance::whereDate('attendance_date', $selectedDate)
                 ->whereHas('child', fn ($query) => $query->visibleTo($user))
-                ->count();
+                ->distinct()
+                ->count('child_id');
 
             $absentToday = $totalChildren - $presentToday;
 
@@ -57,7 +70,8 @@ class AttendanceController extends Controller
             return view('attendance.index', compact(
                 'children',
                 'classrooms',
-                'todayAttendance',
+                'weekDates',
+                'attendanceMap',
                 'totalChildren',
                 'presentToday',
                 'absentToday',
@@ -67,35 +81,85 @@ class AttendanceController extends Controller
             ));
     }
 
+    // public function signIn(Request $request)
+    // {
+    //     $validated = $request->validate([
+    //         'child_id' => 'required|exists:children,id',
+    //         'attendance_date' => 'required|date_format:Y-m-d',
+    //         'session' => 'nullable|in:AM,PM,FULL',
+    //     ]);
+
+    //     $validated['session'] = $validated['session'] ?? 'FULL';
+
+    //     $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+
+    //     $attendance = Attendance::firstOrCreate(
+    //         [
+    //             'child_id' => $child->id,
+    //             'attendance_date' => $validated['attendance_date'],
+    //             'session' => $validated['session'],
+    //         ],
+    //         [
+    //             'signed_in_at' => now(),
+    //         ]
+    //     );
+
+    //     $attendance->load('child');
+
+    //     return response()->json([
+    //         'success' => true,
+    //         'created' => $attendance->wasRecentlyCreated,
+    //         'time' => $attendance->signed_in_at->format('h:i A'),
+    //         'child' => [
+    //             'name' => $attendance->child->first_name.' '.$attendance->child->last_name,
+    //             'classroom' => $attendance->child->classroom,
+    //         ],
+    //         'session' => $attendance->session,
+    //     ]);
+    // }
     public function signIn(Request $request)
-    {
-        $validated = $request->validate([
-            'child_id' => 'required|exists:children,id',
-            'attendance_date' => 'required|date_format:Y-m-d',
-        ]);
+{
+    $validated = $request->validate([
+        'child_id' => 'required|exists:children,id',
+        'attendance_date' => [
+            'required',
+            'date_format:Y-m-d',
+            function ($attribute, $value, $fail) {
+                if ($value !== now()->toDateString()) {
+                    $fail('Attendance can only be signed in for today.');
+                }
+            },
+        ],
+        'session' => 'nullable|in:AM,PM,FULL',
+    ]);
 
-        $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+    $validated['session'] = $validated['session'] ?? 'FULL';
 
-        $attendance = Attendance::firstOrCreate(
-            [
-                'child_id' => $child->id,
-                'attendance_date' => $validated['attendance_date'],
-            ],
-            [
-                'signed_in_at' => now(),
-            ]
-        );
+    $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
 
-        $attendance->load('child');
+    $attendance = Attendance::firstOrCreate(
+        [
+            'child_id' => $child->id,
+            'attendance_date' => $validated['attendance_date'],
+            'session' => $validated['session'],
+        ],
+        [
+            'signed_in_at' => now(),
+        ]
+    );
 
-        return response()->json([
-            'success' => true,
-            'created' => $attendance->wasRecentlyCreated,
-            'time' => $attendance->signed_in_at->format('h:i A'),
-            'child' => [
-                'name' => $attendance->child->first_name.' '.$attendance->child->last_name,
-                'classroom' => $attendance->child->classroom,
-            ],
-        ]);
-    }
+    $attendance->load('child');
+
+    return response()->json([
+        'success' => true,
+        'created' => $attendance->wasRecentlyCreated,
+        'time' => $attendance->signed_in_at->format('h:i A'),
+        'child' => [
+            'name' => $attendance->child->first_name.' '.$attendance->child->last_name,
+            'classroom' => $attendance->child->classroom,
+        ],
+        'session' => $attendance->session,
+    ]);
+}
+
 }

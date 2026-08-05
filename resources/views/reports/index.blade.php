@@ -19,6 +19,15 @@
                     @endforeach
                 </select>
             </label>
+        @else
+            <label class="block">
+                <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Classroom</span>
+                <select name="classroom" class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-slate-900 dark:text-slate-100">
+                    @foreach($classrooms as $classroom)
+                        <option value="{{ $classroom }}" @selected($selectedClassroom === $classroom)>{{ $classroom }}</option>
+                    @endforeach
+                </select>
+            </label>
         @endif
         <div class="flex items-end">
             <button type="submit" class="inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Generate report</button>

@@ -24,18 +24,22 @@ class ReportController extends Controller
             $dates->push($startOfWeek->copy()->addDays($day));
         }
 
-        $classrooms = Child::visibleTo($user)
-            ->where('status', 'Active')
-            ->distinct()
-            ->orderBy('classroom')
-            ->pluck('classroom');
+        $classrooms = $user->isAdmin()
+            ? Child::visibleTo($user)->where('status', 'Active')->distinct()->orderBy('classroom')->pluck('classroom')
+            : collect($user->assignedClassrooms());
 
         $selectedClassroom = $request->input('classroom', '');
 
         $childrenQuery = Child::visibleTo($user)
             ->where('status', 'Active');
 
-        if ($user->isAdmin() && $selectedClassroom !== '') {
+        if (! $user->isAdmin()) {
+            if ($selectedClassroom === '' && $classrooms->isNotEmpty()) {
+                $selectedClassroom = $classrooms->first();
+            }
+        }
+
+        if ($selectedClassroom !== '') {
             $childrenQuery->where('classroom', $selectedClassroom);
         }
 
