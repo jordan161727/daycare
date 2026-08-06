@@ -119,6 +119,7 @@ class AttendanceController extends Controller
     // }
     public function signIn(Request $request)
 {
+    
     $validated = $request->validate([
         'child_id' => 'required|exists:children,id',
         'attendance_date' => [
