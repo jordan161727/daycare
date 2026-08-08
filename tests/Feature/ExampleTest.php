@@ -8,12 +8,11 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * The root path redirects to the dashboard, which is behind auth.
      */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_root_path_sends_guests_to_the_login_screen(): void
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(200);
+        $this->get('/')->assertRedirect('/dashboard');
+        $this->get('/dashboard')->assertRedirect(route('login'));
     }
 }

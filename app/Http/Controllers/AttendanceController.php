@@ -13,7 +13,8 @@ class AttendanceController extends Controller
     public function index()
     {
             $user = request()->user();
-            $selectedDate = request('date', today()->toDateString());
+            // A cleared date field arrives as null, not '', so fall back to today.
+            $selectedDate = trim((string) request('date')) ?: today()->toDateString();
             validator(['date' => $selectedDate], ['date' => ['required', 'date_format:Y-m-d']])->validate();
 
             // Active children

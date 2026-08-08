@@ -15,7 +15,7 @@
 <body class="bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100" x-data="appShell" :class="{ 'overflow-hidden': mobileOpen }">
 
 
-<div class="min-h-screen lg:flex">
+<div class="min-h-screen desktop:flex">
 
     {{-- Sidebar --}}
     @include('layouts.sidebar')
@@ -29,7 +29,7 @@
 
 
         {{-- Content --}}
-        <main class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main class="px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
 
             @yield('content')
 

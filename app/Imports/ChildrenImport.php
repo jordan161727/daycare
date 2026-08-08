@@ -31,7 +31,9 @@ class ChildrenImport implements ToCollection, WithHeadingRow
                 'first_name' => trim((string) ($row['first_name'] ?? '')),
                 'last_name' => trim((string) ($row['last_name'] ?? '')),
                 'dob' => $row['dob'] ?? null,
-                'age' => $row['age'] ?? null,
+                // Spreadsheets hand back a number for a plain age, which the string
+                // rule below rejects — normalise it like every other text field.
+                'age' => filled($row['age'] ?? null) ? trim((string) $row['age']) : null,
                 'classroom' => trim((string) ($row['classroom'] ?? '')),
             ];
 

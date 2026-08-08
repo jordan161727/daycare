@@ -35,6 +35,21 @@ class Child extends Model
         return "{$this->last_name}, {$this->first_name}";
     }
 
+    /**
+     * The next LAN in sequence: one past the highest numeric LAN on file.
+     * Non-numeric LANs from older records are ignored.
+     */
+    public static function nextLan(): string
+    {
+        $highest = static::query()
+            ->pluck('lan')
+            ->filter(fn ($lan) => ctype_digit((string) $lan))
+            ->map(fn ($lan) => (int) $lan)
+            ->max();
+
+        return (string) (($highest ?? 1000) + 1);
+    }
+
     public function attendances()
     {
         return $this->hasMany(Attendance::class);

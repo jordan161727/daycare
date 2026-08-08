@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -18,7 +17,9 @@ return new class extends Migration
             });
         }
 
-        $indexes = collect(DB::select("SHOW INDEX FROM attendances"))->pluck('Key_name')->unique();
+        // Schema::getIndexes works on every driver; "SHOW INDEX" is MySQL-only and
+        // broke the sqlite test database.
+        $indexes = collect(Schema::getIndexes('attendances'))->pluck('name')->unique();
 
         Schema::table('attendances', function (Blueprint $table) use ($indexes) {
             if (! $indexes->contains('attendances_child_id_index')) {
@@ -44,7 +45,9 @@ return new class extends Migration
             return;
         }
 
-        $indexes = collect(DB::select("SHOW INDEX FROM attendances"))->pluck('Key_name')->unique();
+        // Schema::getIndexes works on every driver; "SHOW INDEX" is MySQL-only and
+        // broke the sqlite test database.
+        $indexes = collect(Schema::getIndexes('attendances'))->pluck('name')->unique();
 
         Schema::table('attendances', function (Blueprint $table) use ($indexes) {
             if ($indexes->contains('attendances_child_id_attendance_date_session_unique')) {

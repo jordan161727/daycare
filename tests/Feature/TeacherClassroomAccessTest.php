@@ -69,8 +69,8 @@ class TeacherClassroomAccessTest extends TestCase
         $this->actingAs($teacher)
             ->get(route('reports.index', ['date' => today()->toDateString(), 'classroom' => 'Roses']))
             ->assertOk()
-            ->assertSee('Rose Child')
-            ->assertDontSee('Sunflower Child');
+            ->assertSee('Child, Rose')
+            ->assertDontSee('Child, Sunflower');
     }
 
     public function test_admin_can_view_all_children_in_reports(): void
@@ -94,8 +94,8 @@ class TeacherClassroomAccessTest extends TestCase
         $this->actingAs($admin)
             ->get(route('reports.index', ['date' => today()->toDateString()]))
             ->assertOk()
-            ->assertSee('AdminOne Child')
-            ->assertSee('AdminTwo Child');
+            ->assertSee('Child, AdminOne')
+            ->assertSee('Child, AdminTwo');
     }
 
     public function test_admin_can_assign_multiple_classrooms_to_a_teacher_from_selection(): void

@@ -3,6 +3,11 @@
 /* Use the app's .dark class (set by the navbar toggle) instead of OS preference. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Pinned sidebar on desktop only. Anything 1441px+ is a desktop monitor; between
+   1280px and 1440px it counts as desktop only with a mouse/trackpad, so an iPad Pro
+   in landscape (1366px, touch) keeps the off-canvas drawer and its hamburger toggle. */
+@custom-variant desktop (@media (min-width: 1441px) or ((min-width: 1280px) and (pointer: fine)));
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
@@ -47,6 +52,14 @@
 @layer base {
     body { font-family: Inter, 'Instrument Sans', ui-sans-serif, system-ui, sans-serif; }
     [x-cloak] { display: none !important; }
+}
+
+/* Reports print as a plain sheet: no sidebar, navbar, or page chrome. */
+@media print {
+    aside, header, .no-print { display: none !important; }
+    main { padding: 0 !important; }
+    body { background: #fff !important; color: #000 !important; }
+    @page { size: landscape; margin: 10mm; }
 }
 
 @layer utilities {

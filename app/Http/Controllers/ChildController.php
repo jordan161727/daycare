@@ -16,8 +16,8 @@ class ChildController extends Controller
     public function index()
     {
         $allowedSorts = ['lan', 'first_name', 'last_name', 'age', 'classroom', 'status'];
-        $sort = request('sort', 'last_name');
-        $direction = request('direction', 'asc');
+        $sort = trim((string) request('sort')) ?: 'last_name';
+        $direction = trim((string) request('direction')) ?: 'asc';
 
         abort_unless(in_array($sort, $allowedSorts, true), 404);
         abort_unless(in_array($direction, ['asc', 'desc'], true), 404);
@@ -37,7 +37,7 @@ class ChildController extends Controller
      */
     public function create()
     {
-        return view('children.create');
+        return view('children.create', ['nextLan' => Child::nextLan()]);
     }
 
     /**
@@ -46,6 +46,9 @@ class ChildController extends Controller
     public function store(Request $request)
     {
         Child::create($this->validatedData($request));
+
+        // The child is on file, so the imported document no longer needs keeping.
+        ChildDocumentController::discard($request->input('import_token'));
 
         return redirect()->route('children.index')->with('success', 'Child added successfully.');
     }

@@ -1,110 +1,131 @@
 @extends('layouts.app')
-@section('title', 'Attendance')
+@section('title', 'Class Attendance')
 @section('content')
 <div x-data="attendanceApp()">
-    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><x-page-header title="Attendance" subtitle="Mark arrivals and review attendance by date." /><form method="GET" action="{{ route('attendance.index') }}" class="glass-card flex items-center gap-2 rounded-xl p-2"><label class="sr-only" for="attendance-date">Attendance date</label><input id="attendance-date" type="date" name="date" value="{{ $selectedDate }}" class="rounded-lg border-0 bg-slate-100 px-3 py-2 text-sm text-slate-800 dark:bg-slate-800 dark:text-slate-100"><button class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">View date</button></form></div>
-    <div class="mt-6 grid gap-4 sm:grid-cols-3">
-        <x-stat-card icon="children" title="Children enrolled" :value="$totalChildren" color="indigo"/>
-        <div class="glass-card rounded-2xl p-5"><p class="text-sm font-medium text-slate-500 dark:text-slate-400">Present today</p><p class="mt-3 text-3xl font-bold text-emerald-600" x-text="presentCount"></p></div>
-        <div class="glass-card rounded-2xl p-5"><p class="text-sm font-medium text-slate-500 dark:text-slate-400">Not signed in</p><p class="mt-3 text-3xl font-bold text-rose-600" x-text="{{ $totalChildren }} - presentCount"></p></div>
-    </div>
-    <div class="mt-7 flex flex-col gap-4">
+    <div class="flex flex-col gap-4">
         <section class="min-w-0 flex-1">
-            <div class="glass-card rounded-2xl p-4">
-                <label class="relative block"><svg class="pointer-events-none absolute left-4 top-3.5 h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg><input x-model="search" @input="page = 1" class="w-full rounded-xl border-0 bg-slate-100 py-3 pl-11 pr-4 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:ring-white/10" placeholder="Search children..."></label>
-                <div class="mt-4 flex flex-wrap gap-2">
-                    <button @click="room=''; page = 1" :class="room === '' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="rounded-lg px-3.5 py-2 text-sm font-semibold">All</button>
-                    @foreach($classrooms as $classroom)
-                        <button @click="room=@js($classroom); page = 1" :class="room === @js($classroom) ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800'" class="rounded-lg px-3.5 py-2 text-sm font-semibold">{{ $classroom }}</button>
-                    @endforeach
-                    <label class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200">
-                        <span>Sort</span>
-                        <select x-model="sortDirection" @change="page = 1" class="rounded-md border border-slate-200 bg-transparent px-2 py-1 text-sm outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-100">
-                            <option value="asc">Ascending</option>
-                            <option value="desc">Descending</option>
-                        </select>
-                    </label>
-                    <label class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200">
-                        <span>Show</span>
-                        <select x-model.number="pageSize" @change="page = 1" class="rounded-md border border-slate-200 bg-transparent px-2 py-1 text-sm outline-none dark:border-white/10 dark:bg-slate-900 dark:text-slate-100">
-                            <option value="10">10</option>
-                            <option value="15">15</option>
-                            <option value="20">20</option>
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                        </select>
-                    </label>
+            <div class="glass-card rounded-2xl px-3 py-2.5">
+                {{-- Title, live counts and the date picker share one line. --}}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <h1 class="text-base font-bold tracking-tight sm:text-lg">Class Attendance</h1>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span><span class="font-bold text-slate-900 dark:text-white">{{ $totalChildren }}</span> enrolled</span>
+                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span><span class="font-bold" x-text="presentCount"></span> present</span>
+                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span><span class="font-bold" x-text="{{ $totalChildren }} - presentCount"></span> not signed in</span>
+                    </div>
+                    <form method="GET" action="{{ route('attendance.index') }}" class="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">
+                        <label class="sr-only" for="attendance-date">Attendance date</label>
+                        <input id="attendance-date" type="date" name="date" value="{{ $selectedDate }}" class="min-w-0 flex-1 rounded-lg border-0 bg-slate-100 px-2 py-1.5 text-xs text-slate-800 sm:flex-none dark:bg-slate-800 dark:text-slate-100">
+                        <button class="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">View</button>
+                    </form>
                 </div>
-            </div>
-            <div class="mt-4 overflow-x-auto">
-                <div class="glass-card rounded-2xl p-4">
-                    <div class="hidden gap-3 border-b border-slate-200 pb-4 text-sm text-slate-500 dark:border-white/10 md:grid md:grid-cols-[1.5fr_repeat(5,minmax(0,1fr))]">
-                        <div class="font-semibold">Student</div>
-                        @foreach($weekDates as $date)
-                            <div class="text-center">
-                                <div class="text-xs uppercase tracking-wide text-slate-400">{{ $date->format('D') }}</div>
-                                <div class="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{{ $date->format('M d') }}</div>
-                            </div>
+                {{-- Search and room filters on the second line. --}}
+                <div class="mt-2.5 flex flex-col gap-1.5 border-t border-slate-200/70 pt-2.5 sm:flex-row sm:items-center dark:border-white/10">
+                    <label class="relative w-full shrink-0 sm:w-56"><svg class="pointer-events-none absolute left-3 top-2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg><input x-model="search" class="w-full rounded-lg border-0 bg-slate-100 py-1.5 pl-9 pr-3 text-xs ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:ring-white/10" placeholder="Search children..."></label>
+                    <span class="hidden h-5 w-px shrink-0 bg-slate-200 sm:block dark:bg-white/10"></span>
+                    {{-- Rooms scroll sideways on a phone instead of stacking three rows deep. --}}
+                    <div class="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+                        <button @click="room=''" :class="room === '' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'" class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition">All</button>
+                        @foreach($classrooms as $classroom)
+                            <button @click="room=@js($classroom)" :class="room === @js($classroom) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'" class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition">{{ $classroom }}</button>
                         @endforeach
                     </div>
-                    <div class="space-y-3 mt-4">
-                        <template x-for="(child, index) in pagedChildren()" :key="child.id">
-                            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900 md:p-5">
-                                <div class="grid gap-3 md:grid-cols-[1.5fr_repeat(5,minmax(0,1fr))] md:items-center">
-                                    <div class="flex items-center gap-3">
-                                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200" x-text="((page - 1) * pageSize) + index + 1"></span>
-                                        <span class="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-blue-100 to-violet-100 font-bold text-indigo-700" x-text="(child.first_name.charAt(0) + child.last_name.charAt(0)).toUpperCase()"></span>
-                                        <div class="min-w-0">
-                                            <h2 class="truncate font-bold" x-text="child.first_name + ' ' + child.last_name"></h2>
-                                            <p class="text-sm text-slate-500" x-text="child.classroom"></p>
-                                        </div>
-                                    </div>
-
+                </div>
+            </div>
+            <div class="mt-3">
+                <div class="glass-card overflow-hidden rounded-2xl">
+                    {{-- Week grid: needs the width, so it only appears from md up. --}}
+                    <div class="hidden overflow-x-auto md:block">
+                        <table class="w-full min-w-[860px] border-collapse text-left">
+                            <thead>
+                                <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
+                                    <th scope="col" class="w-12 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">#</th>
+                                    <th scope="col" :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'" class="px-3 py-2.5 text-left">
+                                        <button type="button" @click="toggleSort" class="group inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300" :title="sortDirection === 'asc' ? 'Sorted A–Z, click for Z–A' : 'Sorted Z–A, click for A–Z'">
+                                            <span>Student</span>
+                                            <span class="text-[10px] leading-none text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-300" x-text="sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A'"></span>
+                                        </button>
+                                    </th>
                                     @foreach($weekDates as $date)
-                                        <div class="grid min-h-[72px] place-items-center md:justify-center md:items-center">
-                                            <template x-if="child.classroom === 'School Age'">
-                                                <div class="flex flex-wrap items-center justify-center gap-2">
-                                                    <button @click="signIn(child.id, '{{ $date->toDateString() }}', 'AM')" :disabled="isPresent(child.id, '{{ $date->toDateString() }}', 'AM')" :class="isPresent(child.id, '{{ $date->toDateString() }}', 'AM') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'" class="rounded-xl border px-3 py-2 text-xs font-semibold transition">
-                                                        <span x-text="isPresent(child.id, '{{ $date->toDateString() }}', 'AM') ? 'AM ✓ ' + sessionTime(child.id, '{{ $date->toDateString() }}', 'AM') : 'AM'"></span>
-                                                    </button>
-                                                    <button @click="signIn(child.id, '{{ $date->toDateString() }}', 'PM')" :disabled="isPresent(child.id, '{{ $date->toDateString() }}', 'PM')" :class="isPresent(child.id, '{{ $date->toDateString() }}', 'PM') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'" class="rounded-xl border px-3 py-2 text-xs font-semibold transition">
-                                                        <span x-text="isPresent(child.id, '{{ $date->toDateString() }}', 'PM') ? 'PM ✓ ' + sessionTime(child.id, '{{ $date->toDateString() }}', 'PM') : 'PM'"></span>
-                                                    </button>
+                                        <th scope="col" class="px-2 py-2 text-center">
+                                            <span class="block text-[11px] uppercase tracking-wide text-slate-400">{{ $date->format('D') }}</span>
+                                            <span class="block text-xs font-semibold text-slate-700 dark:text-slate-200">{{ $date->format('M d') }}</span>
+                                        </th>
+                                    @endforeach
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 dark:divide-white/10">
+                                <template x-for="(child, index) in filteredChildren" :key="child.id">
+                                    <tr class="transition hover:bg-slate-50 dark:hover:bg-white/5">
+                                        <td class="px-3 py-2 text-sm text-slate-400" x-text="index + 1"></td>
+                                        <td class="px-3 py-2">
+                                            <div class="flex items-center gap-3">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-100 to-violet-100 text-xs font-bold text-indigo-700" x-text="(child.first_name.charAt(0) + child.last_name.charAt(0)).toUpperCase()"></span>
+                                                <div class="min-w-0">
+                                                    <p class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></p>
+                                                    <p class="truncate text-xs text-slate-500" x-text="child.classroom"></p>
                                                 </div>
-                                            </template>
-                                            <template x-if="child.classroom !== 'School Age'">
-                                                <button @click="signIn(child.id, '{{ $date->toDateString() }}', 'FULL')" :disabled="isPresent(child.id, '{{ $date->toDateString() }}', 'FULL')" :class="isPresent(child.id, '{{ $date->toDateString() }}', 'FULL') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'" class="rounded-xl border px-4 py-2 text-sm font-semibold transition">
-                                                    <span x-text="isPresent(child.id, '{{ $date->toDateString() }}', 'FULL') ? 'Present ✓ ' + sessionTime(child.id, '{{ $date->toDateString() }}', 'FULL') : 'Present'"></span>
-                                                </button>
-                                            </template>
+                                            </div>
+                                        </td>
+                                        @foreach($weekDates as $date)
+                                            <td class="px-2 py-2 text-center align-middle">
+                                                @include('attendance.partials.day-buttons', ['date' => $date, 'variant' => 'table'])
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {{-- Phone layout: one card per child, one row per day. --}}
+                    <div class="divide-y divide-slate-100 md:hidden dark:divide-white/10">
+                        <div class="flex items-center justify-between px-3 py-2">
+                            <button type="button" @click="toggleSort" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                <span>Student</span>
+                                <span class="text-[10px] leading-none text-slate-400" x-text="sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A'"></span>
+                            </button>
+                            <span class="text-[11px] text-slate-400">{{ $weekDates->first()->format('M d') }} – {{ $weekDates->last()->format('M d') }}</span>
+                        </div>
+                        <template x-for="(child, index) in filteredChildren" :key="'card-' + child.id">
+                            <article class="px-3 py-3">
+                                <div class="flex items-center gap-3">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-100 to-violet-100 text-xs font-bold text-indigo-700" x-text="(child.first_name.charAt(0) + child.last_name.charAt(0)).toUpperCase()"></span>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></p>
+                                        <p class="truncate text-xs text-slate-500" x-text="child.classroom"></p>
+                                    </div>
+                                    <span class="text-xs text-slate-400" x-text="'#' + (index + 1)"></span>
+                                </div>
+                                <div class="mt-2 space-y-1 rounded-xl bg-slate-50 p-1.5 dark:bg-slate-800/50">
+                                    @foreach($weekDates as $date)
+                                        <div class="flex items-center justify-between gap-2 rounded-lg px-2 py-1">
+                                            <span class="text-xs font-medium text-slate-600 dark:text-slate-300">{{ $date->format('D') }} <span class="text-slate-400">{{ $date->format('M d') }}</span></span>
+                                            <div class="flex shrink-0 items-center gap-1.5">
+                                                @include('attendance.partials.day-buttons', ['date' => $date, 'variant' => 'card'])
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>
                             </article>
                         </template>
                     </div>
-                    <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm text-slate-500 dark:border-white/10">
-                        <p x-show="filteredCount > 0" class="font-medium text-slate-700 dark:text-slate-200">Showing <span x-text="Math.min(filteredCount, page * pageSize)"></span> of <span x-text="filteredCount"></span> children</p>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <button @click="prevPage" :disabled="page === 1" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200">Previous</button>
-                            <template x-for="pageNumber in pageNumbers()" :key="pageNumber">
-                                <button @click="page = pageNumber" :class="page === pageNumber ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200'" class="rounded-lg px-3 py-2 text-sm font-semibold transition" x-text="pageNumber"></button>
-                            </template>
-                            <button @click="nextPage" :disabled="page === pageCount" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-slate-900 dark:text-slate-200">Next</button>
-                        </div>
+
+                    <p x-show="filteredCount === 0" class="p-8 text-center text-sm text-slate-500">No children match this search.</p>
+                    <div x-show="filteredCount > 0" class="border-t border-slate-200 px-4 py-2.5 text-sm text-slate-500 dark:border-white/10">
+                        Showing all <span class="font-medium text-slate-700 dark:text-slate-200" x-text="filteredCount"></span> children
                     </div>
                 </div>
             </div>
         </section>
-        <section class="glass-card rounded-2xl p-5 mt-4">
-            <div class="border-b border-slate-200 pb-4 dark:border-white/10">
-                <p class="text-sm font-semibold text-indigo-600 dark:text-indigo-400">LIVE UPDATES</p>
-                <h2 class="mt-1 text-lg font-bold">Recent sign-ins</h2>
+        <section class="glass-card mt-4 rounded-2xl p-4 sm:p-5">
+            <div class="border-b border-slate-200 pb-3 dark:border-white/10">
+                <p class="text-xs font-semibold text-indigo-600 dark:text-indigo-400">LIVE UPDATES</p>
+                <h2 class="mt-0.5 text-base font-bold sm:text-lg">Recent sign-ins</h2>
             </div>
             <div class="divide-y divide-slate-100 dark:divide-white/10">
                 <template x-for="signIn in recent" :key="signIn.id">
-                    <div class="flex items-center gap-3 p-4">
+                    <div class="flex items-center gap-3 py-3">
                         <span class="grid h-9 w-9 place-items-center rounded-full bg-emerald-100 text-emerald-700">✓</span>
                         <div class="min-w-0 flex-1">
                             <p class="truncate text-sm font-semibold" x-text="signIn.name"></p>
@@ -122,8 +143,6 @@
 function attendanceApp() { return {
     search: '',
     room: '',
-    page: 1,
-    pageSize: 10,
     sortDirection: 'asc',
     presentCount: {{ $presentToday }},
     childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'classroom' => $child->classroom])->values()),
@@ -139,16 +158,6 @@ function attendanceApp() { return {
             });
     },
     get filteredCount() { return this.filteredChildren.length; },
-    get pageCount() { return Math.max(1, Math.ceil(this.filteredCount / this.pageSize)); },
-    pagedChildren() {
-        if (this.page > this.pageCount) {
-            this.page = this.pageCount;
-        }
-        return this.filteredChildren.slice((this.page - 1) * this.pageSize, this.page * this.pageSize);
-    },
-    pageNumbers() { return Array.from({ length: this.pageCount }, (_, index) => index + 1); },
-    prevPage() { if (this.page > 1) this.page--; },
-    nextPage() { if (this.page < this.pageCount) this.page++; },
     matches(name, classroom) { return name.includes(this.search.toLowerCase()) && (this.room === '' || classroom === this.room); },
     matchesChild(child) { return this.matches((child.first_name + ' ' + child.last_name).toLowerCase(), child.classroom); },
     toggleSort() { this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc'; },

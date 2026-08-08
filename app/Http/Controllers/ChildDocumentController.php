@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Child;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class ChildDocumentController extends Controller
 {
+    /** Session key holding the pending imports for this user. */
+    private const SESSION_KEY = 'child_imports';
+
     public function create() { return view('children.document-import'); }
 
     public function store(Request $request)
@@ -40,6 +46,61 @@ class ChildDocumentController extends Controller
             Log::warning('Child document import failed.', ['message' => $exception->getMessage()]);
             return back()->withErrors(['document' => 'The document could not be read. Check the Gemini API configuration and try again.']);
         }
-        return redirect()->route('children.create')->with('extracted_child', $data)->with('success', 'Review the extracted information, then save the child record.');
+        // Keep the document around so it can be shown next to the extracted fields.
+        $token = (string) Str::uuid();
+        $extension = $file->extension() ?: $file->getClientOriginalExtension();
+        $path = $file->storeAs('child-imports', $token.'.'.$extension);
+
+        session()->put(self::SESSION_KEY.'.'.$token, [
+            'fields' => $data,
+            'path' => $path,
+            'mime' => $file->getClientMimeType(),
+            'name' => $file->getClientOriginalName(),
+        ]);
+
+        return redirect()->route('children.document-import.review', $token);
+    }
+
+    /** Side-by-side check: extracted details on the left, the source document on the right. */
+    public function review(string $token)
+    {
+        $import = $this->pendingImport($token);
+
+        return view('children.document-review', [
+            'token' => $token,
+            'extracted' => $import['fields'],
+            'documentName' => $import['name'],
+            'isPdf' => str_contains($import['mime'], 'pdf'),
+            'nextLan' => Child::nextLan(),
+        ]);
+    }
+
+    /** Streams the uploaded document inline so the review page can embed it. */
+    public function file(string $token)
+    {
+        $import = $this->pendingImport($token);
+
+        return Storage::response($import['path'], $import['name'], ['Content-Type' => $import['mime']]);
+    }
+
+    /** Drops a pending import and its stored file once the child record is saved. */
+    public static function discard(?string $token): void
+    {
+        if (blank($token)) return;
+
+        $import = session()->pull(self::SESSION_KEY.'.'.$token);
+
+        if (filled($import['path'] ?? null)) {
+            Storage::delete($import['path']);
+        }
+    }
+
+    private function pendingImport(string $token): array
+    {
+        $import = session(self::SESSION_KEY.'.'.$token);
+
+        abort_if(blank($import) || ! Storage::exists($import['path']), 404);
+
+        return $import;
     }
 }

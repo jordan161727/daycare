@@ -16,6 +16,10 @@ class ReportControllerTest extends TestCase
 
     public function test_teacher_report_shows_only_assigned_classroom_children(): void
     {
+        // The report covers Monday to Friday, so stamping "today" only lands inside it
+        // on a weekday. Pin the clock or this fails every Saturday and Sunday.
+        $this->travelTo('2026-07-29 09:00:00');
+
         $teacher = User::factory()->create(['role' => 'teacher', 'classroom' => 'Sunflowers']);
 
         $assignedChild = Child::create([
@@ -54,8 +58,8 @@ class ReportControllerTest extends TestCase
 
         $this->assertCount(1, $viewData['children']);
         $this->assertSame('Sunflowers', $viewData['children']->first()->classroom);
-        $this->assertArrayHasKey($assignedChild->id, $viewData['attendanceMap']->toArray());
-        $this->assertArrayNotHasKey($otherChild->id, $viewData['attendanceMap']->toArray());
+        $this->assertArrayHasKey($assignedChild->id, $viewData['presence']);
+        $this->assertArrayNotHasKey($otherChild->id, $viewData['presence']);
     }
 
     public function test_admin_report_returns_all_active_children(): void

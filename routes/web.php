@@ -48,6 +48,8 @@ Route::get('/children', [ChildController::class, 'index'])->name('children.index
 Route::middleware('role:admin')->group(function () {
 Route::get('/children/import-document', [ChildDocumentController::class, 'create'])->name('children.document-import.create');
 Route::post('/children/import-document', [ChildDocumentController::class, 'store'])->name('children.document-import.store');
+Route::get('/children/import-document/{token}/review', [ChildDocumentController::class, 'review'])->name('children.document-import.review');
+Route::get('/children/import-document/{token}/file', [ChildDocumentController::class, 'file'])->name('children.document-import.file');
 Route::resource('teachers', TeacherController::class)->except('show')->parameters(['teachers' => 'teacher']);
 Route::get('/children/create', [ChildController::class, 'create'])->name('children.create');
 Route::post('/children', [ChildController::class, 'store'])->name('children.store');

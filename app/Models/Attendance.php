@@ -15,7 +15,10 @@ class Attendance extends Model
     ];
 
     protected $casts = [
-        'attendance_date' => 'date',
+        // Pin the format: without it the value is written as a full timestamp, which
+        // only matches on MySQL because a DATE column truncates it. firstOrCreate()
+        // lookups miss on any driver that stores what it is given.
+        'attendance_date' => 'date:Y-m-d',
         'signed_in_at' => 'datetime',
     ];
 
