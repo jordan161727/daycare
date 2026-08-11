@@ -282,6 +282,43 @@ class ClassroomAssignmentTest extends TestCase
         $this->assertMatchesRegularExpression('/name="birth_date"[^>]*value="2025-02-11"/', $html);
     }
 
+    public function test_the_record_shows_a_date_of_birth_held_in_the_older_column(): void
+    {
+        // Every record predating the enrolment form keeps its date in `dob`.
+        // The field reads `birth_date`, so those records opened blank — and a
+        // blank date field saved is a date thrown away.
+        $child = Child::create([
+            'lan' => '2001',
+            'status' => 'Active',
+            'first_name' => 'Katherine',
+            'last_name' => 'Johnson',
+            'dob' => '2025-02-11',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('children.edit', $child))
+            ->assertOk()
+            ->assertSee('value="2025-02-11"', false);
+
+        // Saving fills both columns, so whichever one a reader looks at now
+        // agrees with the other.
+        $this->actingAs($this->admin)
+            ->put(route('children.update', $child), [
+                'lan' => $child->lan,
+                'first_name' => $child->first_name,
+                'last_name' => $child->last_name,
+                'status' => $child->status,
+                'birth_date' => '2025-03-11',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $child->refresh();
+
+        $this->assertSame('2025-03-11', $child->birth_date->toDateString());
+        $this->assertSame('2025-03-11', $child->dob->toDateString());
+        $this->assertSame('Infant', $child->classroom);
+    }
+
     public function test_saving_an_unchanged_record_keeps_the_room(): void
     {
         $child = $this->makeChild('Johnson', 'Katherine', '2025-02-11');

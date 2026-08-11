@@ -5,6 +5,7 @@
         <span><kbd class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold dark:border-white/10 dark:bg-slate-800">Drag</kbd> to fill several at once</span>
         <span><kbd class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold dark:border-white/10 dark:bg-slate-800">Space</kbd> toggles the focused day</span>
         <span>Tap a day name for the whole column.</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded ring-1 ring-sky-400"></span> ringed — the projection disagrees with the tick</span>
     </div>
 
     <div class="overflow-x-auto" style="touch-action: none;">
@@ -33,6 +34,9 @@
                         </th>
                     @endforeach
                     <th scope="col" class="px-2 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">Days</th>
+                    {{-- What the week is forecast to be, beside what has been
+                         ticked for it, so the two can be read against each other. --}}
+                    <th scope="col" class="px-2 py-2 text-center text-xs font-semibold uppercase tracking-wide text-sky-500" title="Projected from last week's attendance, the enrolment dates and the expected hours">Projected</th>
                     <th scope="col" class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">Quick set</th>
                 </tr>
             </thead>
@@ -105,9 +109,13 @@
                                                 @pointerdown.prevent="startPaint(child.id, '{{ $iso }}', session)"
                                                 @keydown.space.prevent="toggleOne(child.id, '{{ $iso }}', session)"
                                                 @keydown.enter.prevent="toggleOne(child.id, '{{ $iso }}', session)"
-                                                :class="isScheduled(child.id, '{{ $iso }}', session)
-                                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
-                                                    : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-indigo-400 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-500'"
+                                                :title="projectionNote(child.id, '{{ $iso }}', session)"
+                                                :class="[
+                                                    isScheduled(child.id, '{{ $iso }}', session)
+                                                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
+                                                        : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-indigo-400 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-500',
+                                                    projectionDiffers(child.id, '{{ $iso }}', session) ? 'ring-1 ring-sky-400 dark:ring-sky-500' : '',
+                                                ]"
                                                 class="flex min-h-[38px] flex-1 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg border-[1.5px] px-2 text-xs font-semibold transition"
                                             >
                                                 <span
@@ -125,6 +133,7 @@
                         @endforeach
 
                         <td class="whitespace-nowrap px-2 py-2 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400" x-text="rowSummary(child)"></td>
+                        <td class="whitespace-nowrap px-2 py-2 text-center text-xs tabular-nums" :class="projectionSummaryClass(child.id)" :title="projectionSummaryTitle(child.id)" x-text="projectionSummary(child.id)"></td>
                         <td class="px-3 py-2">
                             <div class="flex justify-end gap-1">
                                 <button type="button" @click="applyPreset(child, 'all')" class="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-slate-800">Full week</button>

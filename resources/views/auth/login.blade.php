@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Sign in | Daycare Management</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
@@ -15,6 +16,10 @@
             </div>
             <h1 class="mt-2 text-3xl font-bold text-slate-900">Welcome back</h1>
             <p class="mt-2 text-slate-500">Sign in to access your workspace.</p>
+
+            @if(session('error'))
+                <p class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">{{ session('error') }}</p>
+            @endif
 
             <form method="POST" action="{{ route('login.store') }}" class="mt-8 space-y-5">
                 @csrf

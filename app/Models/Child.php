@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\ClassroomAssignment;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use App\Models\User;
@@ -18,6 +19,9 @@ class Child extends Model
         'enrolled_on' => 'date:Y-m-d',
         'withdrawn_on' => 'date:Y-m-d',
         'classroom_override_from' => 'date:Y-m-d',
+        // Float rather than decimal: the projection does arithmetic with this on
+        // every read, and a decimal cast hands back a string.
+        'expected_hours_per_week' => 'float',
         'mother_ssn' => 'encrypted',
         'father_ssn' => 'encrypted',
     ];
@@ -27,6 +31,7 @@ class Child extends Model
         'status',
         'enrolled_on',
         'withdrawn_on',
+        'expected_hours_per_week',
         'first_name',
         'last_name',
         'dob',
@@ -78,6 +83,52 @@ class Child extends Model
     public function birthDate(): ?Carbon
     {
         return $this->birth_date ?? $this->dob;
+    }
+
+    /**
+     * How old a child born on a date is, worded the way the roster reads it:
+     * "1 year and 3 months". Worked out on every read rather than stored, so it
+     * cannot drift out of step with the date it comes from.
+     */
+    public static function ageLabelFor(?CarbonInterface $birthDate, ?CarbonInterface $asOf = null): ?string
+    {
+        if (! $birthDate) {
+            return null;
+        }
+
+        $birthDate = $birthDate->copy()->startOfDay();
+        $asOf = ($asOf ? $asOf->copy() : Carbon::today())->startOfDay();
+
+        // A date of birth in the future is a typo, not an age. diff() reports
+        // the gap whichever way round it is, so it has to be ruled out here
+        // instead of coming back as a plausible-looking number of months.
+        if ($birthDate->gt($asOf)) {
+            return null;
+        }
+
+        $difference = $birthDate->diff($asOf);
+        $plural = fn (int $count, string $word) => $count.' '.($count === 1 ? $word : $word.'s');
+
+        if ($difference->y > 0) {
+            return $difference->m > 0
+                ? $plural($difference->y, 'year').' and '.$plural($difference->m, 'month')
+                : $plural($difference->y, 'year');
+        }
+
+        if ($difference->m > 0) {
+            return $plural($difference->m, 'month');
+        }
+
+        // Infants arrive at six weeks, so their first months are read in weeks.
+        return $difference->days >= 7
+            ? $plural(intdiv($difference->days, 7), 'week')
+            : $plural($difference->days, 'day');
+    }
+
+    /** This child's age today, or null when no date of birth is on file. */
+    public function ageLabel(?Carbon $asOf = null): ?string
+    {
+        return static::ageLabelFor($this->birthDate(), $asOf);
     }
 
     /** The room the age bands put this child in, ignoring any override. */

@@ -78,6 +78,45 @@
                         @endif
                     </div>
                 @endif
+                {{-- The forecast, beside the plan and never on top of it: what last
+                     week's attendance, the enrolment dates and the contracted
+                     hours say this week should look like. Recomputed on every
+                     load, so a profile edited this morning shows here now. --}}
+                @php($projectedShortfall = ($projectionTotals['contract_hours'] ?? 0) > 0
+                    ? round($projectionTotals['projected_hours'] - $projectionTotals['contract_hours'], 2)
+                    : null)
+                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-sky-50/70 px-2.5 py-1.5 text-[11px] text-sky-900 dark:bg-sky-500/10 dark:text-sky-200">
+                    <span class="font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Projected</span>
+                    @if($projectionTotals['sessions'] === 0)
+                        <span>Nothing to go on yet — no attendance in the week of {{ \Illuminate\Support\Carbon::parse($projectionSource)->format('M j') }} and no days ticked here.</span>
+                    @else
+                        <span class="inline-flex flex-wrap items-center gap-1.5">
+                            @foreach($weekDates as $date)
+                                <span class="rounded-md bg-white/70 px-1.5 py-0.5 tabular-nums dark:bg-white/10" title="{{ $date->format('l j F') }} — {{ $projectionDayTotals[$date->toDateString()] ?? 0 }} expected">
+                                    {{ $date->format('D') }} <b>{{ $projectionDayTotals[$date->toDateString()] ?? 0 }}</b>
+                                </span>
+                            @endforeach
+                        </span>
+                        <span><b>{{ number_format($projectionTotals['projected_hours'], 1) }} h</b> from the week of {{ \Illuminate\Support\Carbon::parse($projectionSource)->format('M j') }}</span>
+                        @if($projectedShortfall !== null)
+                            <span class="{{ abs($projectedShortfall) >= 0.01 ? 'font-semibold text-amber-700 dark:text-amber-300' : '' }}">
+                                against {{ number_format($projectionTotals['contract_hours'], 1) }} h expected
+                                @if(abs($projectedShortfall) >= 0.01)
+                                    ({{ $projectedShortfall > 0 ? '+' : '−' }}{{ number_format(abs($projectedShortfall), 1) }} h)
+                                @endif
+                            </span>
+                        @endif
+                    @endif
+                    @if($projectionTotals['without_pattern'] > 0)
+                        <span class="font-semibold text-amber-700 dark:text-amber-300" title="Their hours are on file but there is no attendance and nothing ticked to say which days">
+                            {{ $projectionTotals['without_pattern'] }} with hours but no pattern
+                        </span>
+                    @endif
+                    <span x-show="mismatchCount > 0" x-cloak class="ml-auto rounded-md bg-white/70 px-1.5 py-0.5 font-semibold dark:bg-white/10">
+                        <span x-text="mismatchCount"></span> day(s) differ from the schedule
+                    </span>
+                </div>
+
                 {{-- Search and room filters on the second line. Hidden while setting
                      the schedule, which always covers the whole centre — a filter
                      sitting there would imply it applies. --}}
@@ -266,9 +305,27 @@
                             </span>
                         </label>
                     @endif
+
+                    {{-- The other way to fill the week: take the forecast rather
+                         than a week's ticks. It obeys the Add/Replace choice
+                         above, and it only ever happens because this button was
+                         pressed — the projection never writes on its own. --}}
+                    <div class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+                        <b>Or fill it from the projection.</b>
+                        Ticks the days last week's <em>actual attendance</em> expects, inside each child's enrolment dates and skipping closed days —
+                        @if($projectionTotals['sessions'] > 0)
+                            {{ $projectionTotals['sessions'] }} day(s) across {{ $projectionTotals['children'] }} child(ren), {{ number_format($projectionTotals['projected_hours'], 1) }} h.
+                        @else
+                            nothing to project yet from the week of {{ \Illuminate\Support\Carbon::parse($projectionSource)->format('M j') }}.
+                        @endif
+                        @if($projectionTotals['without_pattern'] > 0)
+                            <span class="font-semibold text-amber-700 dark:text-amber-300">{{ $projectionTotals['without_pattern'] }} child(ren) have expected hours but no pattern, and are left untouched.</span>
+                        @endif
+                    </div>
                 </div>
-                <div class="flex justify-end gap-2 border-t border-slate-200/70 px-5 py-3 dark:border-white/10">
+                <div class="flex flex-wrap justify-end gap-2 border-t border-slate-200/70 px-5 py-3 dark:border-white/10">
                     <button type="button" @click="$refs.copyWeek.close()" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
+                    <button formaction="{{ route('attendance.schedule.project') }}" class="mr-auto rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-50 dark:border-sky-500/40 dark:bg-transparent dark:text-sky-200">Fill from projection</button>
                     <button class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-700">Copy schedule</button>
                 </div>
             </form>
@@ -320,6 +377,10 @@ function attendanceApp() { return {
     today: @js(today()->toDateString()),
     attendance: @js($attendanceMap),
     schedule: @js($scheduleMap),
+    // The forecast, kept in its own map so it can never be mistaken for a tick.
+    projection: @js((object) $projectionMap),
+    projectionChildren: @js((object) $projectionChildren),
+    basisLabels: @js($projectionBasisLabels),
     closed: @js($closedDays),
     recent: @js($recentAttendance->map(fn($attendance) => ['id' => $attendance->id, 'name' => $attendance->child->first_name.' '.$attendance->child->last_name, 'classroom' => $attendance->child->classroom, 'time' => $attendance->signed_in_at->timezone(config('app.timezone'))->format('g:i A')])->values()),
     get filteredChildren() {
@@ -352,6 +413,55 @@ function attendanceApp() { return {
     /* ---- the schedule: a missing slot means the child is not enrolled that day ---- */
     hasSlot(childId, date) { return !!this.schedule?.[childId]?.[date]; },
     isScheduled(childId, date, session) { return this.schedule?.[childId]?.[date]?.[session] === true; },
+
+    /* ---- the projection: what last week's attendance, the enrolment dates and
+            the contracted hours expect of this week. Read-only here — the only
+            way it reaches the ticks is the director asking for it in the dialog ---- */
+    isProjected(childId, date, session) { return this.projection?.[childId]?.[date]?.[session] === true; },
+    // The two disagreeing is the whole point of showing it: a day expected but
+    // not ticked is one to add, a day ticked but not expected is one to check.
+    projectionDiffers(childId, date, session) {
+        return this.hasSlot(childId, date)
+            && !this.isClosed(date)
+            && this.isProjected(childId, date, session) !== this.isScheduled(childId, date, session);
+    },
+    projectionNote(childId, date, session) {
+        if (!this.projectionDiffers(childId, date, session)) return '';
+        return this.isProjected(childId, date, session)
+            ? 'Projected to attend, but not scheduled — ' + this.basisFor(childId).toLowerCase() + '.'
+            : 'Scheduled, but not projected to attend.';
+    },
+    basisFor(childId) {
+        const basis = this.projectionChildren?.[childId]?.basis || 'none';
+        return this.basisLabels[basis] || '';
+    },
+    get mismatchCount() {
+        return this.eachSlot().filter(s => this.projectionDiffers(s.child_id, s.slot_date, s.session)).length;
+    },
+    // "3 days · 27.0 h" against the contract, for the checklist row.
+    projectionSummary(childId) {
+        const row = this.projectionChildren?.[childId];
+        if (!row) return '—';
+        const hours = row.projected_hours.toFixed(1) + ' h';
+        if (row.contract_hours === null) return row.days + 'd · ' + hours;
+        return row.days + 'd · ' + hours + ' / ' + row.contract_hours.toFixed(1) + ' h';
+    },
+    projectionSummaryClass(childId) {
+        const row = this.projectionChildren?.[childId];
+        if (!row) return 'text-slate-400';
+        if (row.basis === 'contract') return 'font-semibold text-amber-700 dark:text-amber-300';
+        if (row.variance !== null && Math.abs(row.variance) >= 0.01) return 'font-semibold text-amber-700 dark:text-amber-300';
+        return 'text-sky-700 dark:text-sky-300';
+    },
+    projectionSummaryTitle(childId) {
+        const row = this.projectionChildren?.[childId];
+        if (!row) return '';
+        const basis = this.basisFor(childId);
+        if (row.contract_hours === null) return basis + '. No expected hours on file.';
+        if (row.basis === 'contract') return row.contract_hours.toFixed(1) + ' h expected, but nothing says which days — set them by hand.';
+        const gap = row.variance > 0 ? row.variance.toFixed(1) + ' h over' : (-row.variance).toFixed(1) + ' h short';
+        return basis + '. ' + (Math.abs(row.variance) < 0.01 ? 'Matches the expected hours.' : gap + ' of the ' + row.contract_hours.toFixed(1) + ' h expected.');
+    },
 
     /* ---- which room a child is in. Worked out from their age, unless the
             director has moved them by hand — an override is coloured so the
@@ -397,14 +507,10 @@ function attendanceApp() { return {
         this.saveError = '';
 
         try {
-            const response = await fetch("{{ route('attendance.schedule.classroom') }}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}'},
-                body: JSON.stringify({
-                    child_id: child.id,
-                    classroom: room || null,
-                    effective_from: room ? (from || this.today) : null,
-                }),
+            const response = await window.postJson("{{ route('attendance.schedule.classroom') }}", {
+                child_id: child.id,
+                classroom: room || null,
+                effective_from: room ? (from || this.today) : null,
             });
 
             const data = await response.json().catch(() => ({}));
@@ -440,11 +546,7 @@ function attendanceApp() { return {
         const reason = closing ? (prompt('Why is the centre closed? (holiday, snow day…)', 'Holiday') || 'Centre closed') : null;
 
         try {
-            const response = await fetch("{{ route('attendance.schedule.closure') }}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}'},
-                body: JSON.stringify({date, closed: closing, reason}),
-            });
+            const response = await window.postJson("{{ route('attendance.schedule.closure') }}", {date, closed: closing, reason});
             if (!response.ok) throw new Error('Could not change that day.');
 
             if (closing) {
@@ -472,9 +574,13 @@ function attendanceApp() { return {
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
                 : 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200';
         }
-        return this.isScheduled(childId, date, session)
+        const base = this.isScheduled(childId, date, session)
             ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:text-indigo-200'
             : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400';
+
+        // Sky ring: the forecast disagrees with the plan. A ring rather than a
+        // fill, so it never competes with the four states the box already has.
+        return this.projectionDiffers(childId, date, session) ? base + ' ring-1 ring-sky-400 dark:ring-sky-500' : base;
     },
     boxLabel(childId, date, session) {
         if (this.isPresent(childId, date, session)) return session === 'FULL' ? '✓' : session + ' ✓';
@@ -486,7 +592,10 @@ function attendanceApp() { return {
                 ? 'Signed in ' + this.sessionTime(childId, date, session)
                 : 'Signed in ' + this.sessionTime(childId, date, session) + ' — not scheduled, still billable';
         }
-        return this.isScheduled(childId, date, session) ? 'Scheduled. Click to sign in.' : 'Not scheduled. Click to sign in anyway.';
+        const base = this.isScheduled(childId, date, session) ? 'Scheduled. Click to sign in.' : 'Not scheduled. Click to sign in anyway.';
+        const note = this.projectionNote(childId, date, session);
+
+        return note ? base + ' ' + note : base;
     },
 
     /* ---- counts shown under the checklist ---- */
@@ -593,10 +702,10 @@ function attendanceApp() { return {
         this.saving = true;
         this.saveError = '';
         try {
-            const response = await fetch("{{ route('attendance.schedule.update') }}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}'},
-                body: JSON.stringify({week_start: this.weekStart, is_scheduled: value, slots}),
+            const response = await window.postJson("{{ route('attendance.schedule.update') }}", {
+                week_start: this.weekStart,
+                is_scheduled: value,
+                slots,
             });
             if (!response.ok) throw new Error('save failed');
         } catch (error) {
@@ -613,14 +722,10 @@ function attendanceApp() { return {
         const alreadyPresent = this.hasAnyAttendanceForDate(childId, date);
 
         try {
-            const response = await fetch("{{ route('attendance.signin') }}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                },
-                body: JSON.stringify({child_id: childId, attendance_date: date, session})
+            const response = await window.postJson("{{ route('attendance.signin') }}", {
+                child_id: childId,
+                attendance_date: date,
+                session,
             });
 
             if (!response.ok) {

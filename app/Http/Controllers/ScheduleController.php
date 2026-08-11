@@ -6,6 +6,7 @@ use App\Models\Child;
 use App\Models\ClosureDay;
 use App\Models\ScheduleSlot;
 use App\Models\ScheduleWeek;
+use App\Services\AttendanceProjection;
 use App\Services\ClassroomAssignment;
 use App\Services\WeekSchedule;
 use Illuminate\Http\Request;
@@ -14,7 +15,7 @@ use Illuminate\Validation\Rule;
 
 class ScheduleController extends Controller
 {
-    public function __construct(private WeekSchedule $weeks) {}
+    public function __construct(private WeekSchedule $weeks, private AttendanceProjection $projection) {}
 
     /**
      * Tick or untick days. One request covers a single box, a drag across a row,
@@ -140,6 +141,65 @@ class ScheduleController extends Controller
             'override_stale' => $child->classroomOverrideIsStale(),
             'sessions' => $child->sessions(),
         ]);
+    }
+
+    /**
+     * Tick this week from the projection.
+     *
+     * The forecast is on the page whether or not anyone acts on it. This is the
+     * director accepting it into the plan — one deliberate click, never a thing
+     * that happens on its own, because a schedule that rewrote itself from last
+     * week's absences is the failure mode the whole design avoids.
+     */
+    public function project(Request $request)
+    {
+        $data = $request->validate([
+            'week_start' => ['required', 'date_format:Y-m-d'],
+            'mode' => ['nullable', Rule::in(['replace', 'add'])],
+        ]);
+
+        $weekStart = ScheduleWeek::startOf($data['week_start']);
+
+        abort_unless(ScheduleWeek::where('week_start', $weekStart)->exists(), 404, 'That week has not been opened yet.');
+
+        if ($this->weeks->isFrozen($weekStart)) {
+            return redirect()
+                ->route('attendance.index', ['date' => $weekStart])
+                ->with('warning', 'That week has ended and can no longer be edited.');
+        }
+
+        $mode = $data['mode'] ?? 'replace';
+        $projection = $this->projection->forWeek($weekStart);
+
+        $this->weeks->applyProjection($weekStart, $mode);
+
+        $source = Carbon::parse($projection['source_week_start']);
+        $label = $source->format('M j').' – '.$source->copy()->addDays(4)->format('M j');
+
+        // A fill that moved nothing looks exactly like one that failed. Say which
+        // it was, and why there was nothing to do.
+        if ($this->weeks->tickChange === 0) {
+            $warning = $projection['totals']['sessions'] === 0
+                ? 'Nothing to project — no attendance in the week of '.$label.', and no days ticked here to fall back on.'
+                : 'Nothing changed — this week already matches the projection.';
+
+            if ($mode === 'add' && $this->weeks->tickedDays > $projection['totals']['sessions']) {
+                $warning .= ' It also has days the projection does not — choose "Replace this week" to match it exactly.';
+            }
+
+            return redirect()->route('attendance.index', ['date' => $weekStart])->with('warning', $warning);
+        }
+
+        $message = 'Projected from the week of '.$label.'. '
+            .abs($this->weeks->tickChange).' day(s) '.($this->weeks->tickChange > 0 ? 'added' : 'cleared')
+            .' — '.$this->weeks->tickedDays.' now ticked this week.';
+
+        if ($projection['totals']['without_pattern'] > 0) {
+            $message .= ' '.$projection['totals']['without_pattern']
+                .' child(ren) have expected hours but no pattern to project from — set their days by hand.';
+        }
+
+        return redirect()->route('attendance.index', ['date' => $weekStart])->with('success', $message);
     }
 
     /** Rebuild this week's pattern from another week, keeping every sign-in. */

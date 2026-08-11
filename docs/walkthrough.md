@@ -19,21 +19,21 @@ password. They see only their own room, which matters for story 9.
 
 13 children, chosen so that every state on the sheet appears somewhere:
 
-| Child | Room | Usual days | Why they are here |
-|---|---|---|---|
-| Mia Alvarez | Infant | Mon–Fri | plain full-week child |
-| Noah Bennett | Infant | Mon Wed Fri | part-week child |
-| Ava Cruz | Toddler | Mon–Fri | |
-| Liam Diaz | Toddler | Tue Thu | |
-| Ella Foster | Transition | Mon–Fri | |
-| Owen Grant | PreK | Mon Wed Fri | |
-| Sofia Hayes | PreK | Mon–Fri | |
-| Jack Ibarra | UPK-4 | Tue Thu | |
-| **Ruby Kim** | School Age | Mon–Fri | splits into **AM and PM** boxes |
-| **Ethan Lopez** | School Age | Mon Wed Fri | AM/PM, part week |
-| **Nora Patel** | Toddler | — | **starts Wednesday** — Mon/Tue are blank |
-| **Caleb Reyes** | PreK | Mon–Fri | **leaves next Tuesday** |
-| **Iris Tan** | Toddler | — | **inactive** — should never appear at all |
+| Child | Room | Usual days | Hours | Why they are here |
+|---|---|---|---|---|
+| Mia Alvarez | Infant | Mon–Fri | 45 | plain full-week child |
+| **Noah Bennett** | Infant | Mon Wed Fri | **36** | contracted for four days, comes three — **9 h short** every week |
+| Ava Cruz | Toddler | Mon–Fri | 45 | |
+| Liam Diaz | Toddler | Tue Thu | 18 | |
+| Ella Foster | Transition | Mon–Fri | 45 | |
+| Owen Grant | PreK | Mon Wed Fri | 27 | |
+| Sofia Hayes | PreK | Mon–Fri | 45 | |
+| **Jack Ibarra** | UPK-4 | Tue Thu | **—** | no hours agreed: days reported, no target claimed |
+| **Ruby Kim** | School Age | Mon–Fri | 45 | splits into **AM and PM** boxes |
+| **Ethan Lopez** | School Age | Mon Wed Fri | 27 | AM/PM, part week |
+| **Nora Patel** | Toddler | — | 45 | **starts Wednesday** — Mon/Tue are blank, and **hours with no pattern** behind them |
+| **Caleb Reyes** | PreK | Mon–Fri | 45 | **leaves next Tuesday** |
+| **Iris Tan** | Toddler | — | — | **inactive** — should never appear at all |
 
 Three weeks are staged:
 
@@ -193,6 +193,47 @@ Two things worth trying while you are here:
   changes when that date arrives.
 - Try to date one **inside last week**. It is refused — that week is finished,
   and its room counts are the record of the ratio that had to be staffed.
+
+### 12. What next week is going to look like
+
+Every child on the demo roster carries **expected hours a week** — what the
+family contracted for. Most match their pattern; two deliberately do not.
+
+- As the admin, step to **next week** with **Next ›**.
+
+**Expect:** a sky-blue **Projected** strip under the week header: a head count
+per day, the projected hours, and *"against … h expected"* with the gap in amber
+if the two disagree. The forecast is built from **last week's actual sign-ins**,
+not from the ticks.
+
+- Switch to **Set schedule** and read the **Projected** column beside **Days**.
+
+**Expect:** Noah Bennett reads `3d · 27.0 h / 36.0 h` in amber — contracted for
+four days, only ever here three. Ruby Kim reads `5d · 40.5 h / 45.0 h`: she is
+School Age, so her days are half-day sessions and one of the ten is missing.
+Jack Ibarra has no hours agreed, so his row shows days and hours and no target.
+Nora Patel is amber for a different reason: hours on file and nothing behind them
+yet, so the projection names her rather than guessing which days she will come.
+
+Days of this week that **have not happened yet** are not counted as absences —
+they fall back to what is ticked. Otherwise planning next week on a Tuesday would
+forecast an empty Thursday for the whole centre.
+
+- Look for boxes with a **sky ring**.
+
+**Expect:** those are the days the forecast and the schedule disagree about —
+expected but not ticked, or ticked but not expected. Hovering says which.
+
+- Open **Copy from another week** and press **Fill from projection**.
+
+**Expect:** the week is ticked from the forecast — Add keeps what was already
+there, Replace makes it an exact match — and the banner says how many days moved.
+Children with hours but no pattern are untouched and counted in the message.
+
+- Now open a child's record and change **Expected hours a week**, then come back.
+
+**Expect:** the strip and the column have followed it. Nothing is stored and
+nothing is rebuilt; the forecast is worked out again on every load.
 
 ---
 

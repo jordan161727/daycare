@@ -19,11 +19,19 @@
         <label class="block sm:col-span-2"><span class="mb-2 block text-sm font-semibold">Child Name{!! $fromDocument('child_name') ? $documentBadge : '' !!}</span><input name="child_name" value="{{ old('child_name', $child?->child_name ?? ($extracted['child_name'] ?? '')) }}" class="{{ $fieldClass('child_name') }}"><x-input-error :messages="$errors->get('child_name')" /></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">First name <span class="text-rose-500">*</span>{!! $fromDocument('first_name') ? $documentBadge : '' !!}</span><input name="first_name" value="{{ old('first_name', $child?->first_name ?? ($extracted['first_name'] ?? '')) }}" class="{{ $fieldClass('first_name') }}" required><x-input-error :messages="$errors->get('first_name')" /></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Last name <span class="text-rose-500">*</span>{!! $fromDocument('last_name') ? $documentBadge : '' !!}</span><input name="last_name" value="{{ old('last_name', $child?->last_name ?? ($extracted['last_name'] ?? '')) }}" class="{{ $fieldClass('last_name') }}" required><x-input-error :messages="$errors->get('last_name')" /></label>
-        <label class="block"><span class="mb-2 block text-sm font-semibold">Age</span><input id="age" type="text" name="age" value="{{ old('age', $child?->age) }}" placeholder="e.g. 1 year and 3 months" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('age')" /></label>
         {{-- Read the date of birth the form is actually showing, not the one on
              the record: on a document import there is no record yet, and the
-             date came out of the PDF. --}}
-        @php($formBirthDate = old('birth_date', $fieldValue('birth_date')) ?: null)
+             date came out of the PDF.
+
+             Where there is a record, read it the way the model does — the date
+             sits in `dob` on everything that predates the enrolment form and in
+             `birth_date` after it. Reading only the newer column opened those
+             records with the field blank, which then saved the date away. --}}
+        @php($formBirthDate = old('birth_date', $child?->birthDate()?->toDateString() ?? ($extracted['birth_date'] ?? null)) ?: null)
+        {{-- The date of birth is the fact that gets typed in; the age is read
+             off it wherever it is shown, so there is no second field to keep in
+             step and no age left behind when the date is corrected. --}}
+        <label class="block"><span class="mb-2 block text-sm font-semibold">Date of birth{!! $fromDocument('birth_date') ? $documentBadge : '' !!}</span><input id="birth_date" type="date" name="birth_date" value="{{ $formBirthDate }}" class="{{ $fieldClass('birth_date') }}"><x-input-error :messages="$errors->get('birth_date')" /><span id="age-preview" class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">@php($previewAge = $formBirthDate ? \App\Models\Child::ageLabelFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null){{ $previewAge ? 'Currently '.$previewAge.' old.' : 'The age on the roster follows this date.' }}</span></label>
         @php($automaticRoom = $formBirthDate ? \App\Services\ClassroomAssignment::automaticFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null)
         @php($chosenRoom = old('classroom_override', $child?->classroom_override))
         <div class="block">
@@ -46,9 +54,14 @@
         <label class="block"><span class="mb-2 block text-sm font-semibold">Status <span class="text-rose-500">*</span></span><select name="status" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">@foreach(['Active', 'Inactive'] as $status)<option value="{{ $status }}" @selected(old('status', $child?->status ?? 'Active') === $status)>{{ $status }}</option>@endforeach</select><x-input-error :messages="$errors->get('status')" /></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Enrolled on</span><input type="date" name="enrolled_on" value="{{ old('enrolled_on', $child?->enrolled_on?->toDateString()) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('enrolled_on')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">Attendance boxes start on this day. Leave blank if they have always been here.</span></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Withdrawn on</span><input type="date" name="withdrawn_on" value="{{ old('withdrawn_on', $child?->withdrawn_on?->toDateString()) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('withdrawn_on')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">Last day they attend. Leave blank while they are still enrolled.</span></label>
+        {{-- Hours are what the parent contracted for, against which the week's
+             projection is measured. They do not decide which days a child comes
+             — the attendance does that — so a wrong number here never puts a
+             child in a room nobody staffed for. --}}
+        <label class="block sm:col-span-2"><span class="mb-2 block text-sm font-semibold">Expected hours a week</span><input type="number" name="expected_hours_per_week" step="0.25" min="0" max="168" value="{{ old('expected_hours_per_week', $child?->expected_hours_per_week) }}" placeholder="e.g. {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS * 5, 1) }} for a full week" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('expected_hours_per_week')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">A full day counts as {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS, 1) }} h, a morning or afternoon as {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS / 2, 1) }} h. Leave blank if it has not been agreed — the week's projection then reports the days without a target to hit. Zero means they are not expected at all.</span></label>
     </div>
     @php($sections = [
-        'Child details' => ['Nickname' => 'nickname', 'Address' => 'address', 'City' => 'city', 'Zip' => 'zip', 'Telephone' => 'telephone', 'Birth Date' => 'birth_date', 'Parents Status' => 'parents_status', 'Responsible for Payment' => 'responsible_for_payment'],
+        'Child details' => ['Nickname' => 'nickname', 'Address' => 'address', 'City' => 'city', 'Zip' => 'zip', 'Telephone' => 'telephone', 'Parents Status' => 'parents_status', 'Responsible for Payment' => 'responsible_for_payment'],
         'Mother / Legal Guardian' => ['Mother Name' => 'mother_name', 'Mother Address' => 'mother_address', 'Mother Home Phone' => 'mother_home_phone', 'Mother Employer' => 'mother_employer', 'Mother Work Phone' => 'mother_work_phone', 'Mother Fax' => 'mother_fax', 'Mother Cell' => 'mother_cell', 'Mother Email' => 'mother_email', 'Mother Title' => 'mother_title', 'Mother SSN' => 'mother_ssn'],
         'Father / Legal Guardian' => ['Father Name' => 'father_name', 'Father Address' => 'father_address', 'Father Home Phone' => 'father_home_phone', 'Father Employer' => 'father_employer', 'Father Work Phone' => 'father_work_phone', 'Father Fax' => 'father_fax', 'Father Cell' => 'father_cell', 'Father Email' => 'father_email', 'Father Title' => 'father_title', 'Father SSN' => 'father_ssn'],
         'Emergency contacts' => ['Emergency Contact' => 'emergency_contact', 'Secondary Emergency Contact' => 'secondary_emergency_contact', 'Emergency Telephone' => 'emergency_telephone', 'Emergency Relationship' => 'emergency_relationship', 'Emergency License #' => 'emergency_license_number'],
@@ -61,7 +74,31 @@
     @endforeach
     <section class="mt-8 border-t border-slate-200 pt-7 dark:border-white/10"><h2 class="mb-5 text-lg font-bold">Notes</h2><div class="grid gap-5"><label><span class="mb-2 block text-sm font-semibold">Other Notes{!! $fromDocument('other_notes') ? $documentBadge : '' !!}</span><textarea name="other_notes" rows="3" class="{{ $fieldClass('other_notes') }}">{{ old('other_notes', $child?->other_notes ?? ($extracted['other_notes'] ?? '')) }}</textarea></label><label><span class="mb-2 block text-sm font-semibold">Important Notes{!! $fromDocument('important_notes') ? $documentBadge : '' !!}</span><textarea name="important_notes" rows="3" class="{{ $fieldClass('important_notes') }}">{{ old('important_notes', $child?->important_notes ?? ($extracted['important_notes'] ?? '')) }}</textarea></label></div></section>
     <script>
-        (() => { const birth = document.getElementById('birth_date'), age = document.getElementById('age'); if (!birth || !age) return; const updateAge = () => { if (!birth.value || age.value) return; const today = new Date(), date = new Date(`${birth.value}T00:00:00`); let years = today.getFullYear() - date.getFullYear(), months = today.getMonth() - date.getMonth(); if (today.getDate() < date.getDate()) months--; if (months < 0) { years--; months += 12; } if (years < 0) return; age.value = years ? `${years} ${years === 1 ? 'year' : 'years'}${months ? ` and ${months} ${months === 1 ? 'month' : 'months'}` : ''}` : `${months} ${months === 1 ? 'month' : 'months'}`; }; birth.addEventListener('change', updateAge); updateAge(); })();
+        /* The age under the field says what the roster will say, so a mistyped
+           year shows up here rather than three screens later. */
+        (() => {
+            const birth = document.getElementById('birth_date'), preview = document.getElementById('age-preview');
+            if (!birth || !preview) return;
+            const plural = (count, word) => `${count} ${count === 1 ? word : word + 's'}`;
+            const label = () => {
+                if (!birth.value) return 'The age on the roster follows this date.';
+                const dob = new Date(`${birth.value}T00:00:00`);
+                if (isNaN(dob)) return 'The age on the roster follows this date.';
+                const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                if (dob > today) return 'That date is in the future — check the year.';
+                let years = today.getFullYear() - dob.getFullYear(), months = today.getMonth() - dob.getMonth();
+                if (today.getDate() < dob.getDate()) months--;
+                if (months < 0) { years--; months += 12; }
+                if (years > 0) return `Currently ${plural(years, 'year')}${months ? ` and ${plural(months, 'month')}` : ''} old.`;
+                if (months > 0) return `Currently ${plural(months, 'month')} old.`;
+                const days = Math.round((today - dob) / 86400000);
+                return `Currently ${days >= 7 ? plural(Math.floor(days / 7), 'week') : plural(days, 'day')} old.`;
+            };
+            const refresh = () => { preview.textContent = label(); };
+            birth.addEventListener('change', refresh);
+            birth.addEventListener('input', refresh);
+            refresh();
+        })();
     </script>
     <script>
         /* The room follows the date of birth, so it has to follow the field too —

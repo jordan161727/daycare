@@ -9,13 +9,14 @@ use App\Models\Child;
 use App\Models\ClosureDay;
 use App\Models\ScheduleSlot;
 use App\Models\ScheduleWeek;
+use App\Services\AttendanceProjection;
 use App\Services\ClassroomAssignment;
 use App\Services\WeekSchedule;
 use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
-    public function index(WeekSchedule $weeks)
+    public function index(WeekSchedule $weeks, AttendanceProjection $projector)
     {
             $user = request()->user();
             // A cleared date field arrives as null, not '', so fall back to today.
@@ -97,6 +98,20 @@ class AttendanceController extends Controller
 
             $canEditSchedule = ($user->isAdmin() || $user->role === 'teacher') && ! $weekIsFrozen;
 
+            // What the week is expected to look like: last week's actual
+            // attendance, bounded by the enrolment dates and closures, measured
+            // against the contracted hours. Worked out on every read from the
+            // records as they stand, so a profile edited this morning is in the
+            // forecast this afternoon. The ticks are untouched — see
+            // AttendanceProjection for why the two are kept apart.
+            $projection = $projector->forWeek($weekStartDate, $children);
+            $projectionMap = $projection['expected'];
+            $projectionChildren = $projection['children'];
+            $projectionTotals = $projection['totals'];
+            $projectionDayTotals = $projection['day_totals'];
+            $projectionSource = $projection['source_week_start'];
+            $projectionBasisLabels = AttendanceProjection::BASIS_LABELS;
+
             // "Copy" almost always means "same as last week", so the week just
             // gone is offered on its own button and leads the picker.
             $previousWeekStart = $canEditSchedule ? $weeks->sourceFor($weekStartDate) : null;
@@ -147,7 +162,13 @@ class AttendanceController extends Controller
                 'previousWeekStart',
                 'weekIsFrozen',
                 'closedDays',
-                'weekStartDate'
+                'weekStartDate',
+                'projectionMap',
+                'projectionChildren',
+                'projectionTotals',
+                'projectionDayTotals',
+                'projectionSource',
+                'projectionBasisLabels'
             ));
     }
 

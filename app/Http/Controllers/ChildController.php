@@ -25,7 +25,12 @@ class ChildController extends Controller
 
         $children = Child::query()
             ->visibleTo($requestUser = request()->user())
-            ->orderBy($sort, $direction)
+            // Age is shown, not stored, so it sorts by the date it is worked out
+            // from — the other way round, since the youngest child is the one
+            // with the latest date of birth.
+            ->when($sort === 'age', fn ($query) => $query->orderByRaw(
+                'COALESCE(birth_date, dob) '.($direction === 'asc' ? 'desc' : 'asc')
+            ), fn ($query) => $query->orderBy($sort, $direction))
             ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
             ->paginate(10)
             ->withQueryString();
@@ -100,7 +105,6 @@ class ChildController extends Controller
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'dob' => ['nullable', 'date'],
-            'age' => ['nullable', 'string', 'max:50'],
             // The room is worked out from the date of birth. What the director
             // sets here is the departure from it, not the room itself.
             'classroom_override' => ['nullable', 'string', Rule::in(ClassroomAssignment::rooms())],
@@ -110,6 +114,10 @@ class ChildController extends Controller
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
             'enrolled_on' => ['nullable', 'date'],
             'withdrawn_on' => ['nullable', 'date', 'after_or_equal:enrolled_on'],
+            // What the parent contracted for. Blank means nobody has said, and
+            // the projection then reports the days without claiming a target;
+            // zero is the deliberate "not coming" and suppresses it.
+            'expected_hours_per_week' => ['nullable', 'numeric', 'min:0', 'max:168'],
             'birth_date' => ['nullable', 'date'],
             'other_notes' => ['nullable', 'string'],
             'important_notes' => ['nullable', 'string'],
@@ -121,8 +129,19 @@ class ChildController extends Controller
 
         $data = $request->validate($rules);
 
-        if (blank($data['age'] ?? null) && filled($data['birth_date'] ?? null)) {
-            $data['age'] = $this->ageLabel(Carbon::parse($data['birth_date']));
+        // One date, two columns behind it: `dob` from the original roster and
+        // `birth_date` from the enrolment form. The form edits one field, so
+        // both are written from it — otherwise the reader that happens to look
+        // at the other column keeps showing the date that was corrected.
+        //
+        // Nobody types an age any more either; every screen reads it off the
+        // date. The column is still written so the spreadsheet import and the
+        // records that came in through it agree with what is displayed.
+        if (array_key_exists('birth_date', $data)) {
+            $data['dob'] = $data['birth_date'];
+            $data['age'] = Child::ageLabelFor(
+                filled($data['birth_date']) ? Carbon::parse($data['birth_date']) : null
+            );
         }
 
         // Clearing the room hands the child back to the age rule, so the date it
@@ -133,18 +152,6 @@ class ChildController extends Controller
             : ($data['classroom_override_from'] ?? today()->toDateString());
 
         return $data;
-    }
-
-    private function ageLabel(Carbon $birthDate): string
-    {
-        $difference = $birthDate->startOfDay()->diff(today()->startOfDay());
-        $years = $difference->y;
-        $months = $difference->m;
-
-        if ($years === 0) return $months.' '.($months === 1 ? 'month' : 'months');
-        if ($months === 0) return $years.' '.($years === 1 ? 'year' : 'years');
-
-        return $years.' '.($years === 1 ? 'year' : 'years').' and '.$months.' '.($months === 1 ? 'month' : 'months');
     }
 
     private function normalizeDate(?string $value): ?string

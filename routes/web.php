@@ -16,6 +16,11 @@ use App\Models\Child;
 
 Route::redirect('/', '/dashboard');
 
+// Screens that stay open all day (the attendance board, the import form) top up
+// their CSRF token from here so a submit hours later is not met with "Page
+// Expired". Reachable while signed out too, so the login form can do the same.
+Route::get('/csrf-token', fn () => response()->json(['token' => csrf_token()]))->name('csrf.token');
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
     Route::post('/login', [AuthController::class, 'store'])->name('login.store');
@@ -75,6 +80,7 @@ Route::post('/attendance/sign-in', [AttendanceController::class, 'signIn'])
 Route::middleware('role:admin,teacher')->group(function () {
     Route::post('/attendance/schedule', [ScheduleController::class, 'update'])->name('attendance.schedule.update');
     Route::post('/attendance/schedule/copy', [ScheduleController::class, 'copy'])->name('attendance.schedule.copy');
+    Route::post('/attendance/schedule/project', [ScheduleController::class, 'project'])->name('attendance.schedule.project');
     Route::post('/attendance/schedule/closure', [ScheduleController::class, 'closure'])->name('attendance.schedule.closure');
 });
 

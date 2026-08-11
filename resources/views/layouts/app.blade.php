@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>
         @yield('title', 'Daycare Dashboard')
@@ -30,6 +31,13 @@
 
         {{-- Content --}}
         <main class="px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+
+            @if(session('error'))
+                <div class="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+                    <span class="text-lg" aria-hidden="true">!</span>
+                    <p class="font-medium">{{ session('error') }}</p>
+                </div>
+            @endif
 
             @yield('content')
 

@@ -420,6 +420,134 @@ Ratios themselves do not exist yet — this story is head counts being right. Se
 
 ---
 
+## H. Projecting the week ahead
+
+The schedule is what the director *planned*. The projection is what the records
+say is *going to happen* — worked out fresh on every read from last week's actual
+attendance, the enrolment dates and the hours each child is contracted for.
+
+The two are deliberately separate. A forecast that wrote itself into the ticks
+would turn one sick day into a child's new schedule, which is precisely what A2
+exists to prevent. So the projection sits beside the plan and disagrees with it
+out loud, and the only thing that moves it into the plan is H4.
+
+### H1 — Last week's attendance says what this week will be
+
+> **As** the director
+> **I want** next week forecast from who actually turned up this week
+> **so that** I can see what is coming rather than what was once agreed.
+
+- The projection is by **weekday**: a child here last Monday, Wednesday and
+  Friday is expected Monday, Wednesday and Friday.
+- A half-day room projects **AM and PM separately** — an afternoon child stays an
+  afternoon child. Any attendance at all covers a full day, so a child who moved
+  in or out of School Age between the two weeks still projects sensibly.
+- Two kinds of day carry **no evidence either way**, and fall back to whatever
+  this week has ticked rather than being read as absence:
+  - a day the centre was **shut**, or one snow day would erase every Thursday
+    after it;
+  - a day that **has not happened yet** — planning next week on a Wednesday would
+    otherwise count this Thursday and Friday as everybody staying home. Today
+    counts as not yet happened, because children arrive through the morning.
+- A child with **no attendance last week** — newly enrolled, or away for all of
+  it — falls back to the days ticked for them this week.
+
+**Built** — `AttendanceProjectionTest::last_weeks_attendance_becomes_this_weeks_expectation`,
+`::school_age_sessions_project_independently`,
+`::a_full_day_last_week_covers_both_sessions_after_a_move_into_school_age`,
+`::a_day_the_centre_was_shut_last_week_falls_back_to_the_tick`,
+`::a_day_that_has_not_happened_yet_falls_back_to_the_tick`,
+`::a_child_with_no_attendance_last_week_falls_back_to_this_weeks_ticks`
+
+### H2 — Enrolment dates and closures bound the forecast
+
+> **As** the director
+> **I want** the forecast to respect the dates on the record
+> **so that** nobody is expected on a day they cannot be here.
+
+- Nothing is projected before a child's start date or after their leaving date,
+  whatever last week says. Both dates stay inclusive, as in D3.
+- Nothing is projected onto a **closed day**, and that day's expected head count
+  is zero.
+- Inactive children are not projected at all.
+
+**Built** — `AttendanceProjectionTest::a_day_outside_the_enrolment_dates_is_never_projected`,
+`::a_closed_day_is_never_projected`,
+`::an_inactive_child_drops_out_of_the_projection`
+
+### H3 — Expected hours say how much, never which days
+
+> **As** the director
+> **I want** the forecast measured against what each family contracted for
+> **so that** a child drifting away from their hours is a thing I can see.
+
+- Each child's record carries **expected hours a week**. A full day counts 9 h, a
+  morning or afternoon 4.5 h.
+- Hours **do not add or remove days**. A child contracted for 45 h who came three
+  days is projected for three days and reported **18 h short** — the gap is the
+  exception to chase, and inventing a Tuesday would put a child in a room nobody
+  staffed for them. A projection over the contract reads as a surplus the same way.
+- **Blank** hours mean nobody has agreed any: the days are reported and no target
+  is claimed. **Zero** is the deliberate "not expected at all", and suppresses the
+  projection even if the child attended last week.
+- Hours on file with **no pattern behind them** — no attendance, nothing ticked —
+  name the child on the sheet instead of guessing a pattern for them.
+
+**Built** — `AttendanceProjectionTest::expected_hours_measure_the_projection_rather_than_shape_it`,
+`::a_projection_over_the_contracted_hours_reads_as_a_surplus`,
+`::blank_hours_leave_the_projection_without_a_target`,
+`::a_child_contracted_for_nothing_is_not_projected_at_all`,
+`::hours_with_no_pattern_name_the_child_instead_of_guessing_days`,
+`::the_expected_hours_are_set_on_the_childs_record`
+
+### H4 — The forecast never becomes the plan on its own
+
+> **As** the director
+> **I want** the projection to stay a second opinion until I accept it
+> **so that** last week's absences never quietly rewrite next week's schedule.
+
+- Opening, reloading or filtering the sheet **never changes a tick**.
+- The week header shows the projected head count per day, the projected hours
+  against the contracted hours, and how many days disagree with the schedule.
+  Boxes the two disagree about carry a **sky ring** — expected but not ticked, or
+  ticked but not expected.
+- **Fill from projection**, in the copy dialog, is the one way it reaches the
+  ticks. It obeys the same Add / Replace choice as a copy, refuses a finished
+  week, and reports a fill that changed nothing rather than claiming success.
+- A child with hours but no pattern is **left exactly as they are** by a fill —
+  there is nothing to write, and clearing their days would read as a decision
+  nobody made.
+
+**Built** — `AttendanceProjectionTest::the_projection_never_ticks_a_day_by_itself`,
+`::filling_the_week_from_the_projection_ticks_the_projected_days`,
+`::adding_from_the_projection_keeps_the_days_already_ticked`,
+`::replacing_from_the_projection_clears_the_days_it_does_not_expect`,
+`::a_child_with_no_pattern_is_left_alone_by_a_fill`,
+`::a_fill_that_changes_nothing_says_so_instead_of_claiming_success`,
+`::a_finished_week_cannot_be_filled_from_the_projection`,
+`::a_teacher_may_fill_the_week_and_a_parent_may_not`
+
+### H5 — It keeps up by itself
+
+> **As** the director
+> **I want** the forecast to follow the records without being rebuilt
+> **so that** editing a child at nine o'clock is in the numbers at ten.
+
+- Nothing is stored. Every read recomputes from the children, the enrolment
+  dates, the closures and last week's sign-ins.
+- A new leaving date, new hours, a new room, a child enrolled after the week was
+  built, a child made inactive — all of them show in the next page load with
+  nothing to run.
+- A teacher's forecast covers **their own rooms only**, so the totals on their
+  screen add up to their roster rather than the centre's.
+
+**Built** — `AttendanceProjectionTest::the_projection_follows_a_profile_edit_with_nothing_rebuilt`,
+`::a_child_added_today_is_projected_from_their_own_start_date`,
+`::a_teacher_sees_the_forecast_for_their_own_rooms_only`,
+`::the_week_view_shows_the_forecast_and_the_way_to_accept_it`
+
+---
+
 ## Still open
 
 | # | Story | Note |

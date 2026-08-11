@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\ScheduleSlot;
 use App\Models\ScheduleWeek;
+use App\Services\ClassroomAssignment;
 use App\Services\WeekSchedule;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -30,24 +31,35 @@ class DemoScenarioSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /** [last, first, room, pattern, enrolled_on, withdrawn_on, status] */
+    /**
+     * [last, first, room, pattern, enrolled_on, withdrawn_on, status, expected hours]
+     *
+     * Hours are what the parent contracted for: 45 a full week, 27 three days,
+     * 18 two. Most match the pattern, and the ones that do not are the point —
+     * they are what the week's projection is there to show up.
+     */
     private const ROSTER = [
-        ['Alvarez', 'Mia', 'Infant', 'full', null, null, 'Active'],
-        ['Bennett', 'Noah', 'Infant', 'mwf', null, null, 'Active'],
-        ['Cruz', 'Ava', 'Toddler', 'full', null, null, 'Active'],
-        ['Diaz', 'Liam', 'Toddler', 'tth', null, null, 'Active'],
-        ['Foster', 'Ella', 'Transition', 'full', null, null, 'Active'],
-        ['Grant', 'Owen', 'PreK', 'mwf', null, null, 'Active'],
-        ['Hayes', 'Sofia', 'PreK', 'full', null, null, 'Active'],
-        ['Ibarra', 'Jack', 'UPK-4', 'tth', null, null, 'Active'],
-        ['Kim', 'Ruby', 'School Age', 'full', null, null, 'Active'],
-        ['Lopez', 'Ethan', 'School Age', 'mwf', null, null, 'Active'],
+        ['Alvarez', 'Mia', 'Infant', 'full', null, null, 'Active', 45],
+        // Contracted for four days but only ever comes three: the projection
+        // reads 9 h short every week.
+        ['Bennett', 'Noah', 'Infant', 'mwf', null, null, 'Active', 36],
+        ['Cruz', 'Ava', 'Toddler', 'full', null, null, 'Active', 45],
+        ['Diaz', 'Liam', 'Toddler', 'tth', null, null, 'Active', 18],
+        ['Foster', 'Ella', 'Transition', 'full', null, null, 'Active', 45],
+        ['Grant', 'Owen', 'PreK', 'mwf', null, null, 'Active', 27],
+        ['Hayes', 'Sofia', 'PreK', 'full', null, null, 'Active', 45],
+        // Nobody has agreed hours for Jack: the projection reports his days and
+        // claims no target.
+        ['Ibarra', 'Jack', 'UPK-4', 'tth', null, null, 'Active', null],
+        ['Kim', 'Ruby', 'School Age', 'full', null, null, 'Active', 45],
+        ['Lopez', 'Ethan', 'School Age', 'mwf', null, null, 'Active', 27],
         // Starts on the Wednesday of this week: Mon and Tue show nothing at all.
-        ['Patel', 'Nora', 'Toddler', 'full', '+2 days', null, 'Active'],
+        // Hours on file, no attendance behind her — hours but no pattern.
+        ['Patel', 'Nora', 'Toddler', 'full', '+2 days', null, 'Active', 45],
         // Leaves next Tuesday: the rest of that week shows nothing.
-        ['Reyes', 'Caleb', 'PreK', 'full', null, '+8 days', 'Active'],
+        ['Reyes', 'Caleb', 'PreK', 'full', null, '+8 days', 'Active', 45],
         // Inactive: never on the sheet, in any week.
-        ['Tan', 'Iris', 'Toddler', 'full', null, null, 'Inactive'],
+        ['Tan', 'Iris', 'Toddler', 'full', null, null, 'Inactive', null],
     ];
 
     private const PATTERNS = [
@@ -84,7 +96,7 @@ class DemoScenarioSeeder extends Seeder
         $monday = Carbon::parse($thisWeek);
         $lan = 1001;
 
-        foreach (self::ROSTER as [$last, $first, $room, , $enrolled, $withdrawn, $status]) {
+        foreach (self::ROSTER as [$last, $first, $room, , $enrolled, $withdrawn, $status, $hours]) {
             // Enrolment dates are relative to this Monday so the demo lands on
             // the right days whenever it is run.
             Child::updateOrCreate(
@@ -98,9 +110,17 @@ class DemoScenarioSeeder extends Seeder
                     'dob' => $this->dobForRoom($room, $monday),
                     'enrolled_on' => $enrolled ? $monday->copy()->modify($enrolled)->toDateString() : null,
                     'withdrawn_on' => $withdrawn ? $monday->copy()->modify($withdrawn)->toDateString() : null,
+                    'expected_hours_per_week' => $hours,
                 ],
             );
         }
+
+        // The seeder runs without model events, so nothing has worked the rooms
+        // out from the dates of birth yet. Do it before any week is opened: a
+        // School Age child whose room is still blank is filled in with one FULL
+        // box a day instead of AM and PM, and every week built after that has a
+        // pattern the next one cannot match.
+        ClassroomAssignment::syncAll();
     }
 
     /** An age that sits well inside the room's band, clear of both boundaries. */
