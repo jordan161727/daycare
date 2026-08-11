@@ -6,11 +6,12 @@ use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\PlacesChildrenInRooms;
 use Tests\TestCase;
 
 class AttendanceSheetTest extends TestCase
 {
-    use RefreshDatabase;
+    use PlacesChildrenInRooms, RefreshDatabase;
 
     private User $admin;
 
@@ -92,8 +93,8 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('hidden overflow-x-auto md:block', $html);
         $this->assertStringContainsString('md:hidden', $html);
 
-        // Both layouts loop the same children and can both sort.
-        $this->assertSame(2, substr_count($html, 'in filteredChildren"'));
+        // Both sign-in layouts loop the same children and can both sort.
+        $this->assertSame(2, substr_count($html, '(child, index) in filteredChildren"'));
         $this->assertSame(2, substr_count($html, '@click="toggleSort"'));
     }
 
@@ -107,12 +108,11 @@ class AttendanceSheetTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // Both the half-day and full-day templates ship for every weekday (Alpine picks
-        // one at runtime): 3 handlers x 5 days x 2 layouts.
-        $this->assertSame(30, substr_count($html, "signIn(child.id, '"));
-        $this->assertStringContainsString("signIn(child.id, '".$date."', 'AM')", $html);
-        $this->assertStringContainsString("signIn(child.id, '".$date."', 'PM')", $html);
-        $this->assertStringContainsString("signIn(child.id, '".$date."', 'FULL')", $html);
+        // One handler per weekday per layout; the session comes from the child's own
+        // list at runtime rather than being hardcoded per room.
+        $this->assertSame(10, substr_count($html, "signIn(child.id, '"));
+        $this->assertSame(2, substr_count($html, "signIn(child.id, '".$date."', session)"));
+        $this->assertStringContainsString('x-for="session in child.sessions"', $html);
     }
 
     public function test_the_toolbar_stacks_on_narrow_screens(): void
@@ -132,17 +132,21 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('relative w-full shrink-0 sm:w-56', $html);
     }
 
-    public function test_school_age_children_get_am_and_pm_buttons(): void
+    public function test_each_child_carries_the_sessions_their_room_uses(): void
     {
         $this->makeChild('Turing', 'Alan', 'School Age');
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
-        $this->actingAs($this->admin)
+        $html = $this->actingAs($this->admin)
             ->get(route('attendance.index'))
             ->assertOk()
-            ->assertSee("child.classroom === 'School Age'", false)
-            ->assertSee("'AM')", false)
-            ->assertSee("'PM')", false)
-            ->assertSee("'FULL')", false);
+            ->getContent();
+
+        // School Age splits into halves, everyone else is one full-day stamp.
+        // Blade's @js() ships the roster as JSON.parse('...') with " for quotes.
+        $q = chr(92)."u0022";
+        $this->assertStringContainsString("School Age{$q},{$q}sessions{$q}:[{$q}AM{$q},{$q}PM{$q}]", $html);
+        $this->assertStringContainsString("Toddler{$q},{$q}sessions{$q}:[{$q}FULL{$q}]", $html);
     }
 
     /** A cleared date box arrives as null, which used to fail "required" validation. */
@@ -194,6 +198,27 @@ class AttendanceSheetTest extends TestCase
         $this->assertSame(2, Attendance::where('child_id', $child->id)->count());
     }
 
+    public function test_another_day_is_refused_with_a_reason_the_sheet_can_show(): void
+    {
+        $child = $this->makeChild('Turing', 'Alan', 'Toddler');
+
+        $response = $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin'), [
+                'child_id' => $child->id,
+                'attendance_date' => today()->subDay()->toDateString(),
+                'session' => 'FULL',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('attendance_date');
+
+        // The pop-up shows this text verbatim, so it has to name both days.
+        $message = $response->json('errors.attendance_date.0');
+        $this->assertStringContainsString(today()->format('l, M j'), $message);
+        $this->assertStringContainsString(today()->subDay()->format('l, M j'), $message);
+
+        $this->assertSame(0, Attendance::count());
+    }
+
     private function makeChild(string $last, string $first, string $room): Child
     {
         return Child::create([
@@ -201,8 +226,7 @@ class AttendanceSheetTest extends TestCase
             'status' => 'Active',
             'first_name' => $first,
             'last_name' => $last,
-            'classroom' => $room,
-            'dob' => '2024-01-15',
+            'dob' => $this->dobForRoom($room),
         ]);
     }
 }

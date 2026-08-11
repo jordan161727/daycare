@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Imports\ChildrenImport;
 use App\Models\Child;
+use App\Services\ClassroomAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Carbon\Carbon;
@@ -100,8 +101,15 @@ class ChildController extends Controller
             'last_name' => ['required', 'string', 'max:255'],
             'dob' => ['nullable', 'date'],
             'age' => ['nullable', 'string', 'max:50'],
-            'classroom' => ['required', 'string', 'max:255'],
+            // The room is worked out from the date of birth. What the director
+            // sets here is the departure from it, not the room itself.
+            'classroom_override' => ['nullable', 'string', Rule::in(ClassroomAssignment::rooms())],
+            // Blank means today, the same as it does on the schedule page. It is
+            // not a second thing to fill in before a room can be picked.
+            'classroom_override_from' => ['nullable', 'date_format:Y-m-d'],
             'status' => ['required', Rule::in(['Active', 'Inactive'])],
+            'enrolled_on' => ['nullable', 'date'],
+            'withdrawn_on' => ['nullable', 'date', 'after_or_equal:enrolled_on'],
             'birth_date' => ['nullable', 'date'],
             'other_notes' => ['nullable', 'string'],
             'important_notes' => ['nullable', 'string'],
@@ -116,6 +124,13 @@ class ChildController extends Controller
         if (blank($data['age'] ?? null) && filled($data['birth_date'] ?? null)) {
             $data['age'] = $this->ageLabel(Carbon::parse($data['birth_date']));
         }
+
+        // Clearing the room hands the child back to the age rule, so the date it
+        // started from goes with it.
+        $data['classroom_override'] = $data['classroom_override'] ?? null;
+        $data['classroom_override_from'] = blank($data['classroom_override'])
+            ? null
+            : ($data['classroom_override_from'] ?? today()->toDateString());
 
         return $data;
     }

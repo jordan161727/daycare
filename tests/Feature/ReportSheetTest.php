@@ -6,11 +6,12 @@ use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\PlacesChildrenInRooms;
 use Tests\TestCase;
 
 class ReportSheetTest extends TestCase
 {
-    use RefreshDatabase;
+    use PlacesChildrenInRooms, RefreshDatabase;
 
     private User $admin;
 
@@ -214,15 +215,14 @@ class ReportSheetTest extends TestCase
             ->assertDontSee('Babbage, Charles');
     }
 
-    private function makeChild(string $last, string $first, string $room, string $dob = '2024-01-15', string $status = 'Active'): Child
+    private function makeChild(string $last, string $first, string $room, ?string $dob = null, string $status = 'Active'): Child
     {
         return Child::create([
             'lan' => (string) (1000 + Child::count() + 1),
             'status' => $status,
             'first_name' => $first,
             'last_name' => $last,
-            'classroom' => $room,
-            'dob' => $dob,
+            'dob' => $dob ?? $this->dobForRoom($room),
         ]);
     }
 

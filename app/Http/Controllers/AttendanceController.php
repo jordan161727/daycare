@@ -6,16 +6,26 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use App\Models\Attendance;
 use App\Models\Child;
+use App\Models\ClosureDay;
+use App\Models\ScheduleSlot;
+use App\Models\ScheduleWeek;
+use App\Services\ClassroomAssignment;
+use App\Services\WeekSchedule;
 use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
-    public function index()
+    public function index(WeekSchedule $weeks)
     {
             $user = request()->user();
             // A cleared date field arrives as null, not '', so fall back to today.
             $selectedDate = trim((string) request('date')) ?: today()->toDateString();
             validator(['date' => $selectedDate], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+            // Rooms are worked out from an age, so a birthday moves a child
+            // without anyone touching the record. Catch up before reading the
+            // roster, in case the nightly sweep is not running.
+            ClassroomAssignment::syncAll();
 
             // Active children
             $children = Child::visibleTo($user)->where('status', 'Active')
@@ -68,6 +78,57 @@ class AttendanceController extends Controller
                 ->take(10)
                 ->get();
 
+            // Opening a week for the first time snapshots it from the week before.
+            $weekStartDate = $weekStart->toDateString();
+            $scheduleWeek = $weeks->open($weekStartDate, $user);
+
+            $scheduleMap = [];
+            foreach (ScheduleSlot::where('week_start', $weekStartDate)->get() as $slot) {
+                $scheduleMap[$slot->child_id][$slot->slot_date->toDateString()][$slot->session] = (bool) $slot->is_scheduled;
+            }
+
+            // Once a week has ended its pattern is a record, so the checklist and
+            // every copy control drop away rather than sitting there inert.
+            $weekIsFrozen = $weeks->isFrozen($weekStartDate);
+            $closedDays = ClosureDay::whereBetween('closed_on', [$weekDates->first(), $weekDates->last()])
+                ->get()
+                ->keyBy(fn ($day) => $day->closed_on->toDateString())
+                ->map(fn ($day) => $day->reason ?: 'Centre closed');
+
+            $canEditSchedule = ($user->isAdmin() || $user->role === 'teacher') && ! $weekIsFrozen;
+
+            // "Copy" almost always means "same as last week", so the week just
+            // gone is offered on its own button and leads the picker.
+            $previousWeekStart = $canEditSchedule ? $weeks->sourceFor($weekStartDate) : null;
+            $available = $canEditSchedule ? $weeks->availableSources($weekStartDate) : collect();
+
+            $sourceList = $available->filter(fn ($week) => $week < $weekStartDate)
+                // Earlier weeks newest first; later weeks after them, nearest
+                // first, for the occasional copy backwards.
+                ->concat($available->filter(fn ($week) => $week > $weekStartDate)->reverse())
+                ->take(12)
+                ->values();
+
+            // Rebuilding from "a normal week" means being able to spot one. A
+            // week thinned out by holidays reads as a low count and a closure
+            // flag, so the choice is made from the list rather than by opening
+            // each week in turn.
+            $sourceTicks = ScheduleSlot::whereIn('week_start', $sourceList)
+                ->where('is_scheduled', true)
+                ->selectRaw('week_start, count(*) as total')
+                ->groupBy('week_start')
+                ->pluck('total', 'week_start');
+
+            $sourceClosures = $sourceList->mapWithKeys(fn ($week) => [$week => count(ClosureDay::inWeek($week))]);
+
+            $sourceWeeks = $sourceList->map(fn ($week) => [
+                'value' => $week,
+                'label' => Carbon::parse($week)->format('M j').' – '.Carbon::parse($week)->addDays(4)->format('M j, Y'),
+                'is_previous' => $week === $previousWeekStart,
+                'ticked' => (int) ($sourceTicks[$week] ?? $sourceTicks[$week.' 00:00:00'] ?? 0),
+                'closures' => $sourceClosures[$week],
+            ]);
+
             return view('attendance.index', compact(
                 'children',
                 'classrooms',
@@ -78,7 +139,15 @@ class AttendanceController extends Controller
                 'absentToday',
                 'totalRooms',
                 'recentAttendance',
-                'selectedDate'
+                'selectedDate',
+                'scheduleWeek',
+                'scheduleMap',
+                'canEditSchedule',
+                'sourceWeeks',
+                'previousWeekStart',
+                'weekIsFrozen',
+                'closedDays',
+                'weekStartDate'
             ));
     }
 
@@ -128,7 +197,10 @@ class AttendanceController extends Controller
             'date_format:Y-m-d',
             function ($attribute, $value, $fail) {
                 if ($value !== now()->toDateString()) {
-                    $fail('Attendance can only be signed in for today.');
+                    // Named dates, because the sheet shows a whole week at once
+                    // and "today" alone does not say which column to use.
+                    $fail('Only '.now()->format('l, M j').' can be signed in. '
+                        .Carbon::parse($value)->format('l, M j').' is closed — use "Copy from another week" to fill a past week.');
                 }
             },
         ],

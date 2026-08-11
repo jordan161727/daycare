@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\Child;
+use App\Services\ClassroomAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -31,6 +32,10 @@ class ReportController extends Controller
         $selectedDate = trim((string) $request->input('date')) ?: today()->toDateString();
 
         validator(['date' => $selectedDate], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+        // Room decides which block a child is printed under and which total they
+        // land in, so it has to be current before anything is grouped.
+        ClassroomAssignment::syncAll();
 
         $startOfWeek = Carbon::parse($selectedDate)->startOfWeek(Carbon::MONDAY);
         $dates = collect(range(0, 4))->map(fn ($offset) => $startOfWeek->copy()->addDays($offset));
@@ -62,7 +67,10 @@ class ReportController extends Controller
             ->values();
 
         $blocks = $rooms->map(fn ($room) => [
-            'room' => $room,
+            // A date of birth outside every band leaves a child with no room.
+            // They still get printed — an unassigned child is one to chase, not
+            // one to drop off the sheet.
+            'room' => $room === '' ? 'Unassigned' : $room,
             'splitsSessions' => in_array($room, self::SESSION_ROOMS, true),
             'children' => $byRoom[$room],
             'totals' => $this->dailyTotals($byRoom[$room], $dates, $presence),

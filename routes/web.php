@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
+use App\Http\Controllers\ScheduleController;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -70,6 +71,18 @@ Route::get('/attendance', [AttendanceController::class, 'index'])
 
 Route::post('/attendance/sign-in', [AttendanceController::class, 'signIn'])
     ->name('attendance.signin');
+
+Route::middleware('role:admin,teacher')->group(function () {
+    Route::post('/attendance/schedule', [ScheduleController::class, 'update'])->name('attendance.schedule.update');
+    Route::post('/attendance/schedule/copy', [ScheduleController::class, 'copy'])->name('attendance.schedule.copy');
+    Route::post('/attendance/schedule/closure', [ScheduleController::class, 'closure'])->name('attendance.schedule.closure');
+});
+
+// Moving a child between rooms changes who can see them, so it is the director's
+// call — a teacher cannot hand a child to another room, or take one from it.
+Route::middleware('role:admin')->group(function () {
+    Route::post('/attendance/schedule/classroom', [ScheduleController::class, 'classroom'])->name('attendance.schedule.classroom');
+});
 
 Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });
