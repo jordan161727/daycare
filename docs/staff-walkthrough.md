@@ -1,8 +1,9 @@
 # Walkthrough — the staff room, the roster and payday
 
-A hand-testable script for the three staff-facing screens: **Teachers & Rules**,
-**Week Schedule** and **Payroll**. Every step says what to do and what you should
-see, so a wrong result is obvious rather than a matter of taste.
+A hand-testable script for the four staff-facing screens: **Teachers & Rules**,
+**Week Schedule**, **Payroll Prep** and **Payroll**. Every step says what to do
+and what you should see, so a wrong result is obvious rather than a matter of
+taste.
 
 The companion to [walkthrough.md](walkthrough.md), which covers the children's
 attendance sheet. That one is about who is *in*; this one is about who is *on*.
@@ -13,6 +14,7 @@ attendance sheet. That one is about who is *in*; this one is about who is *on*.
 php artisan migrate:fresh --seed              # users, rooms, six placeholder logins
 php artisan db:seed --class=DemoScenarioSeeder  # 13 children, three weeks booked
 php artisan db:seed --class=StaffSeeder         # 8 staff with employment details and rules
+php artisan db:seed --class=TimesheetDemoSeeder  # two pay periods of hours
 php artisan payroll:demo                        # a fake combined payroll PDF to upload
 ```
 
@@ -301,8 +303,199 @@ worth writing code to prevent.
 
 ---
 
+## Part four — Payroll Prep
+
+The hours that go *to* payroll, as opposed to the payslips that come back from
+it. Open **Payroll Prep** in the sidebar. Full detail in
+[payroll-prep.md](payroll-prep.md).
+
+`TimesheetDemoSeeder` builds two periods, both anchored to today: **the one just
+gone**, finished and approved, and **the one running now**, half worked. The
+exact hours move with the roster, so read the shapes rather than the totals.
+
+### 21. The finished period is a record
+
+Step back with **‹ Previous** to the period just gone.
+
+**Expect:** an **Approved** badge, and the editing controls gone — no *Fill from
+the roster*, no *Approve*, only **Reopen** and the CSV. Every day is bold, never
+amber. Click a name: the form is there, every input disabled, with a line saying
+the hours have gone to payroll.
+
+### 22. The CSV is the deliverable
+
+Press **Download CSV for payroll** on that finished period.
+
+**Expect:** one row per employee who has hours, with **Regular**, **Overtime**,
+**Paid leave** and **Unpaid leave** as four separate columns — they are paid at
+three different rates and one of them is not paid at all. Somebody has 8 paid
+leave hours from a PTO day. Staff with no hours in the period are absent from the
+file entirely rather than present as zeroes.
+
+### 23. Amber is the roster's word, bold is somebody's
+
+Come forward to the period running now.
+
+**Expect:** one person — the last on the roster — is entirely **amber**. Nobody
+has confirmed a single one of their days; they are exactly as *Fill from the
+roster* left them. Everybody else is bold. The strip under the buttons counts
+them: *"10 day(s) still as the roster left them."*
+
+### 24. Approving is refused, twice, for different reasons
+
+Press **Approve period**.
+
+**Expect:** refused — *"The period of … has not finished yet. Approve it once the
+last day is done."* The period is still running, and that check comes first.
+
+Now step back to the finished period and imagine it were still draft: the second
+refusal names the amber days instead. Both are in
+`TimesheetTest::approving_is_refused_before_the_period_has_finished` and
+`::approving_is_refused_while_days_are_still_the_rosters_word`.
+
+### 25. Confirming a person clears their amber
+
+Click the all-amber name. Change nothing. Press **Confirm these days**.
+
+**Expect:** *"n day(s) confirmed."* Back on the grid their row is bold and the
+counter has dropped by their days. Nothing about the hours changed — only who is
+standing behind them, which is the entire distinction.
+
+### 26. A half-entered day is refused rather than guessed
+
+On anybody's form, put an **in** time on an empty day and leave **out** blank.
+Save.
+
+**Expect:** an amber banner naming that day — *"Thu 6 Aug has only an in time."*
+The rest of the form saves normally. Try an out time earlier than the in time on
+another day: *"… ends before it starts."*
+
+### 27. Leave is three different facts, not one
+
+Look along the rows for the coloured day cells.
+
+**Expect:** `SICK` and `PTO` on **sky**, `UNPA` on **gray**. The sky ones add to
+the **Leave** and **Paid** columns; the gray one adds to neither — it appears
+only in the export's own *Unpaid leave hours* column. An unpaid absence is a
+recorded decision, not a blank.
+
+### 28. Overtime is worked out per week, not per period
+
+Look at the **OT** column.
+
+**Expect:** several people carry 10–14 hours. Open one and count their week: the
+hours all sit inside a single Monday-to-Sunday, not spread across the fortnight.
+Forty is a weekly threshold, so a fortnight of two 40-hour weeks is 80 regular
+hours and no overtime at all — while 45 and 35 is five hours of overtime despite
+totalling the same 80.
+
+Paid leave never counts towards that forty. One person here has both a sick day
+and overtime; the sick day contributed nothing to pushing them over, and eight
+hours of PTO followed by a 40-hour week is 48 paid hours with **zero** overtime
+(`TimesheetTest::paid_leave_does_not_create_overtime`).
+
+### 29. Hours without a rate say so
+
+Look at the **Gross** column.
+
+**Expect:** any employee with no **Pay rate** on their record reads **no rate**
+in amber, not `$0.00`. Their hours are still right; only the money is missing,
+and zero would be a different and much worse claim. A note above the table counts
+how many.
+
+---
+
+## Part five — the time clock
+
+Punching in, and putting a punch right. Full detail in
+[payroll-prep.md](payroll-prep.md#the-time-clock).
+
+`TimesheetDemoSeeder` gives one rostered person four days on the clock in the
+period running now: one clean, one with a clock-out that had to be corrected, one
+they walked out of without pressing anything, and one clean again.
+
+### 30. Punched days are underlined, not amber
+
+On the period running now, find the person with **underlined** day cells.
+
+**Expect:** their hours are neither bold nor amber. A punched day is the
+employee's own account of it, so it never needed confirming — and it is not
+somebody else's word either, so it is not bold. Click one: it opens the punches
+behind it.
+
+### 31. A break is paid and lunch is not
+
+On that day screen, read the four tiles.
+
+**Expect:** **Paid break** 15 min and **Unpaid break** 30 min, and **Punched
+hours** is the whole span less the lunch only. That is the only reason lunch and
+break are separate buttons — the FLSA counts a short rest break as hours worked
+and a meal period as not.
+
+### 32. A correction is a void plus a replacement
+
+Scroll the punch list on that same person's corrected day.
+
+**Expect:** two clock-outs, well over an hour apart. The later one is **struck
+through**, marked **voided**, with *"Clocked out for the closing room by
+mistake"* and the director's name under it. The earlier one is marked **replaces
+{that time}** and carries its own reason. Nothing was edited and nothing was
+deleted; both are permanent, and only one counts.
+
+### 33. A forgotten punch is worth nothing, not a guess
+
+Find the red **!** on the grid and click it.
+
+**Expect:** *"This day does not add up: never clocked out."* The **Punched
+hours** tile reads `—` and the day pays nothing. It was not closed at midnight
+and not closed at their rostered end — inventing hours out of a button nobody
+pressed is worse than reporting a gap.
+
+### 34. It refuses to be approved for a second, different reason
+
+Press **Approve period** with that `!` still standing.
+
+**Expect:** *"n day(s) have punches that do not add up."* A different refusal
+from the amber one: that is *nobody has said yet*, this is *what was said cannot
+be true*.
+
+### 35. Fixing it takes a reason
+
+On the day screen, add a punch: **Clock out**, a time, and leave **Reason**
+blank.
+
+**Expect:** refused. Fill the reason in and add it.
+
+**Expect:** the day rebuilds from its punches, the `!` on the grid becomes hours,
+and the approval refusal drops away. The reason is required rather than
+encouraged because the question it answers is asked months later by somebody who
+was not in the building.
+
+### 36. The teacher sees their own clock, and only that
+
+Sign in as a teacher and open **Time Clock**.
+
+**Expect:** the buttons legal from where they stand and no others — **Clock in**
+alone at first; **Start lunch**, **Start break** and **Clock out** once in; only
+**End lunch** while at lunch. Their last fortnight underneath, with any corrected
+punch saying *moved from … by Director* and why. No pay rate, no colleague,
+and no way to change anything already recorded — including their own.
+
+---
+
 ## Things this deliberately does not do
 
+- **No rounding on the clock.** Not to the quarter hour, not the seven-minute
+  rule. A punch is a fact about a minute, and rounding it is a decision about
+  somebody's pay dressed up as tidiness.
+- **No auto clock-out, and no self-correction.** A forgotten punch is reported,
+  never closed at midnight; and an employee cannot amend their own punches. A
+  record its subject can revise is not one.
+- **No kiosk, PIN, geofence or photo.** Punching is done signed in as yourself,
+  and the IP is the whole of what else is recorded.
+- **No "confirm all" button.** Confirming is somebody reading a fortnight of one
+  person's days and saying yes. Doing it for everybody at once would turn the one
+  safeguard in payroll prep into a formality.
 - **No "send all" button.** One misclick would mail an entire payroll run built
   on a split nobody reviewed.
 - **No guessing on an ambiguous page.** Two people equally well matched, or the

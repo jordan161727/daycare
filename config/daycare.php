@@ -114,4 +114,93 @@ return [
             TXT,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Timesheets
+    |--------------------------------------------------------------------------
+    |
+    | What the centre hands to payroll: hours per person per pay period, built
+    | from the schedule and then corrected to what actually happened.
+    |
+    */
+
+    'timesheet' => [
+        /**
+         * Semi-monthly: the 1st to the 15th, and the 16th to the end of the
+         * month. Twenty-four periods a year, and none of them line up with a
+         * week — which is why overtime is worked out per week and the period
+         * only ever collects the days that fall inside it.
+         */
+        'period' => 'semi-monthly',
+
+        /**
+         * Hours in a workweek before overtime starts, per the FLSA. The
+         * workweek is Monday to Sunday here, matching the centre's schedule.
+         *
+         * Paid leave is not hours worked and never counts towards this — an
+         * employee on PTO Monday who then works 40 hours is not owed overtime.
+         */
+        'overtime_after' => 40,
+
+        /**
+         * Why a day was paid but not worked. UNPAID is here so an absence can
+         * be recorded as a decision rather than left as a blank nobody can
+         * tell apart from a day nobody has filled in yet.
+         */
+        'leave_codes' => [
+            'PTO' => 'Paid time off',
+            'SICK' => 'Sick leave',
+            'HOLIDAY' => 'Centre holiday',
+            'UNPAID' => 'Unpaid absence',
+        ],
+
+        /** Leave codes that are paid. UNPAID is the one that is not. */
+        'paid_leave_codes' => ['PTO', 'SICK', 'HOLIDAY'],
+
+        /** A leave day with no length of its own is worth this many hours. */
+        'default_leave_hours' => 8,
+
+        /*
+        |----------------------------------------------------------------------
+        | The time clock
+        |----------------------------------------------------------------------
+        |
+        | Teachers punch in, out, and either side of lunch and breaks. Each
+        | day rolls up into the timesheet entry above, which is where it meets
+        | the roster, the corrections and the overtime split.
+        |
+        */
+
+        'clock' => [
+            /**
+             * Turn the clock off and the centre is back to correcting the
+             * roster by hand, which is how this worked before the clock
+             * existed and is still a reasonable way to run a small site. The
+             * punches already recorded are kept and still shown.
+             */
+            'enabled' => true,
+
+            /**
+             * Minutes of a rest break that are paid, per break.
+             *
+             * The FLSA treats short rest breaks as hours worked and a genuine
+             * meal period as not, which is the only reason lunch and break are
+             * separate punches at all. A break that runs past this is paid to
+             * the cap and unpaid beyond it — at forty minutes it has stopped
+             * being a rest break.
+             *
+             * Lunch is never paid, however short it is.
+             */
+            'paid_break_cap' => 20,
+
+            /**
+             * A worked day longer than this is flagged rather than paid
+             * quietly. It is not a limit on what somebody may work — it is the
+             * length at which a day is more likely to be a missed punch than a
+             * shift, and worth a supervisor's eyes either way.
+             */
+            'max_day_hours' => 14,
+        ],
+    ],
+
 ];

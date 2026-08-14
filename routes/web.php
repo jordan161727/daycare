@@ -8,6 +8,9 @@ use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\TimeClockController;
+use App\Http\Controllers\TimePunchController;
+use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\StaffRuleController;
 use App\Http\Controllers\StaffScheduleController;
@@ -67,6 +70,22 @@ Route::post('/teachers/{teacher}/rules', [StaffRuleController::class, 'store'])-
 Route::put('/teachers/{teacher}/rules/{rule}', [StaffRuleController::class, 'update'])->name('teachers.rules.update');
 Route::delete('/teachers/{teacher}/rules/{rule}', [StaffRuleController::class, 'destroy'])->name('teachers.rules.destroy');
 
+// Payroll preparation: everybody's hours before they become everybody's pay.
+// Director only, for the same reason payroll itself is.
+Route::get('/timesheets', [TimesheetController::class, 'index'])->name('timesheets.index');
+Route::post('/timesheets/{period}/seed', [TimesheetController::class, 'seed'])->name('timesheets.seed');
+Route::get('/timesheets/{period}/staff/{user}', [TimesheetController::class, 'edit'])->name('timesheets.edit');
+Route::put('/timesheets/{period}/staff/{user}', [TimesheetController::class, 'update'])->name('timesheets.update');
+Route::post('/timesheets/{period}/approve', [TimesheetController::class, 'approve'])->name('timesheets.approve');
+Route::post('/timesheets/{period}/reopen', [TimesheetController::class, 'reopen'])->name('timesheets.reopen');
+Route::get('/timesheets/{period}/export', [TimesheetController::class, 'export'])->name('timesheets.export');
+
+// Correcting the clock. A supervisor's act, never the employee's own — a
+// punch somebody can quietly amend is not a record of anything.
+Route::get('/timesheets/{period}/staff/{user}/day/{date}', [TimePunchController::class, 'show'])->name('timesheets.day')->where('date', '\d{4}-\d{2}-\d{2}');
+Route::post('/timesheets/{period}/staff/{user}/day/{date}', [TimePunchController::class, 'store'])->name('timesheets.day.punch')->where('date', '\d{4}-\d{2}-\d{2}');
+Route::post('/timesheets/{period}/staff/{user}/punches/{punch}', [TimePunchController::class, 'amend'])->name('timesheets.punch.amend');
+
 // Payroll is every employee's pay in one file. Director only, and never on the
 // teacher-visible side of the app.
 Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
@@ -97,6 +116,11 @@ Route::middleware('role:admin,teacher')->group(function () {
     // Read-only for teachers: knowing who else is on the floor at 3pm is the
     // reason the roster exists, and hiding it would send them back to asking.
     Route::get('/staff-schedule', [StaffScheduleController::class, 'index'])->name('staff-schedule.index');
+
+    // The time clock, punched as yourself. A teacher sees their own punches and
+    // their own hours and nothing else — no rate, no colleague, no correction.
+    Route::get('/time-clock', [TimeClockController::class, 'index'])->name('clock.index');
+    Route::post('/time-clock', [TimeClockController::class, 'punch'])->name('clock.punch');
 });
 
 Route::get('/attendance', [AttendanceController::class, 'index'])
