@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Child;
 use App\Models\Classroom;
+use App\Models\StaffRule;
 use App\Models\User;
+use App\Services\ClassroomAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -23,6 +25,27 @@ class TeacherController extends Controller
         });
 
         return view('teachers.index', compact('teachers'));
+    }
+
+    /**
+     * The staff record: employment details and every scheduling rule on it.
+     *
+     * Rules live here rather than on their own screen because they are only
+     * ever read in the context of one person — "why is Grace never on Friday
+     * afternoons" is a question about Grace, not about the rule table.
+     */
+    public function show(User $teacher)
+    {
+        abort_unless($teacher->role === 'teacher', 404);
+
+        $teacher->load('staffRules');
+
+        return view('teachers.show', [
+            'teacher' => $teacher,
+            'rules' => $teacher->staffRules->sortByDesc(fn ($rule) => $rule->isHard())->values(),
+            'colleagues' => User::teachers()->whereKeyNot($teacher->getKey())->pluck('name'),
+            'rooms' => ClassroomAssignment::rooms(),
+        ]);
     }
 
     public function create()
@@ -83,7 +106,27 @@ class TeacherController extends Controller
             'classrooms' => ['nullable', 'array'],
             'classrooms.*' => ['string', 'max:255'],
             'password' => $passwordRules,
+
+            // Employment side. All optional — a teacher account is useful the
+            // moment it can log in, and the scheduler falls back to sensible
+            // defaults for anything left blank.
+            'employment' => ['nullable', Rule::in(StaffRule::EMPLOYMENT)],
+            'title' => ['nullable', Rule::in(ClassroomAssignment::rooms())],
+            'legal_name' => ['nullable', 'string', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'emergency_contact' => ['nullable', 'string', 'max:255'],
+            'emergency_phone' => ['nullable', 'string', 'max:40'],
+            'start_date' => ['nullable', 'date'],
+            'dob' => ['nullable', 'date', 'before:today'],
+            'transport' => ['nullable', 'string', 'max:255'],
+            'aspire_id' => ['nullable', 'string', 'max:40'],
+            'direct_deposit' => ['nullable', 'boolean'],
+            'pay_rate' => ['nullable', 'numeric', 'min:0', 'max:999999'],
+            'evaluation_score' => ['nullable', 'numeric', 'min:0', 'max:5'],
+            'staff_notes' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $data['direct_deposit'] = $request->boolean('direct_deposit');
 
         if (blank($data['password'] ?? null)) {
             unset($data['password']);

@@ -500,32 +500,25 @@ out loud, and the only thing that moves it into the plan is H4.
 `::hours_with_no_pattern_name_the_child_instead_of_guessing_days`,
 `::the_expected_hours_are_set_on_the_childs_record`
 
-### H4 — The forecast never becomes the plan on its own
+### H4 — The forecast never becomes the plan
 
 > **As** the director
-> **I want** the projection to stay a second opinion until I accept it
-> **so that** last week's absences never quietly rewrite next week's schedule.
+> **I want** the projection to stay a second opinion I read, not a button I press
+> **so that** last week's absences can never rewrite next week's schedule.
 
 - Opening, reloading or filtering the sheet **never changes a tick**.
 - The week header shows the projected head count per day, the projected hours
   against the contracted hours, and how many days disagree with the schedule.
   Boxes the two disagree about carry a **sky ring** — expected but not ticked, or
   ticked but not expected.
-- **Fill from projection**, in the copy dialog, is the one way it reaches the
-  ticks. It obeys the same Add / Replace choice as a copy, refuses a finished
-  week, and reports a fill that changed nothing rather than claiming success.
-- A child with hours but no pattern is **left exactly as they are** by a fill —
-  there is nothing to write, and clearing their days would read as a decision
-  nobody made.
+- There is **no way to apply it**. The forecast has no path into the ticks at
+  all: a week is set by hand, or copied from a week that actually happened. What
+  the centre plans and what a formula predicts stay separate records, and a sick
+  day can never become somebody's schedule by any route.
+- The projection is recomputed on every load and **stored nowhere**.
 
 **Built** — `AttendanceProjectionTest::the_projection_never_ticks_a_day_by_itself`,
-`::filling_the_week_from_the_projection_ticks_the_projected_days`,
-`::adding_from_the_projection_keeps_the_days_already_ticked`,
-`::replacing_from_the_projection_clears_the_days_it_does_not_expect`,
-`::a_child_with_no_pattern_is_left_alone_by_a_fill`,
-`::a_fill_that_changes_nothing_says_so_instead_of_claiming_success`,
-`::a_finished_week_cannot_be_filled_from_the_projection`,
-`::a_teacher_may_fill_the_week_and_a_parent_may_not`
+`::the_week_view_shows_the_forecast_but_offers_no_way_to_apply_it`
 
 ### H5 — It keeps up by itself
 

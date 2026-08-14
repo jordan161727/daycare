@@ -41,6 +41,59 @@ class ScheduleEditingTest extends TestCase
         $this->assertSame(5, ScheduleSlot::count());
     }
 
+    /**
+     * Only the week we are standing in builds itself. Looking ahead must not
+     * plan the centre's next week on its behalf — a sheet covered in ticks
+     * nobody asked for reads as a schedule that has been agreed.
+     */
+    public function test_looking_at_a_later_week_does_not_build_it(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        $nextWeek = '2026-08-03';
+
+        $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => $nextWeek]))
+            ->assertOk()
+            ->assertSee('has not been set up')
+            ->assertSee('Open this week');
+
+        $this->assertDatabaseMissing('schedule_weeks', ['week_start' => $nextWeek]);
+        $this->assertSame(0, ScheduleSlot::where('week_start', $nextWeek)->count());
+    }
+
+    public function test_opening_a_later_week_copies_the_week_before_it_forward(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        app(WeekSchedule::class)->open(self::MONDAY);
+        ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => true]);
+
+        $nextWeek = '2026-08-03';
+
+        $this->actingAs($this->admin)
+            ->post(route('attendance.week.open'), ['week_start' => $nextWeek])
+            ->assertRedirect(route('attendance.index', ['date' => $nextWeek]))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('schedule_weeks', ['week_start' => $nextWeek]);
+        $this->assertSame(5, ScheduleSlot::where('week_start', $nextWeek)->where('is_scheduled', true)->count());
+    }
+
+    /** A finished week is a record. There is nothing left to plan in it. */
+    public function test_a_finished_week_cannot_be_opened(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $past = '2026-07-20';
+
+        $this->actingAs($this->admin)
+            ->post(route('attendance.week.open'), ['week_start' => $past])
+            ->assertSessionHas('warning');
+
+        $this->assertDatabaseMissing('schedule_weeks', ['week_start' => $past]);
+    }
+
     public function test_the_page_offers_both_views_and_the_copy_control(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');

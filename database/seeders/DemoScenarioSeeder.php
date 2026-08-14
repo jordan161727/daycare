@@ -20,9 +20,9 @@ use Illuminate\Support\Carbon;
  * that splits into AM/PM, a child who starts mid-week, one who leaves mid-month,
  * and one who is inactive and should never appear at all.
  *
- * Two weeks are built:
- *   last week  — finished, signed in, and therefore locked
- *   this week  — live, Monday signed in, the rest still to come
+ * One week is built — the current one (Monday to Friday). Nothing exists before
+ * it and nothing after it, so the client opens the app on a single clean week of
+ * real-looking attendance instead of a history they have to scroll through.
  *
  * Next week is deliberately left unopened. Opening it is the first thing the
  * walkthrough asks you to do, because that is where the copy-forward shows.
@@ -56,7 +56,8 @@ class DemoScenarioSeeder extends Seeder
         // Starts on the Wednesday of this week: Mon and Tue show nothing at all.
         // Hours on file, no attendance behind her — hours but no pattern.
         ['Patel', 'Nora', 'Toddler', 'full', '+2 days', null, 'Active', 45],
-        // Leaves next Tuesday: the rest of that week shows nothing.
+        // Leaves next Tuesday: he is here all of this week, and once next week is
+        // opened the rest of it shows nothing.
         ['Reyes', 'Caleb', 'PreK', 'full', null, '+8 days', 'Active', 45],
         // Inactive: never on the sheet, in any week.
         ['Tan', 'Iris', 'Toddler', 'full', null, null, 'Inactive', null],
@@ -71,24 +72,42 @@ class DemoScenarioSeeder extends Seeder
     public function run(WeekSchedule $weeks): void
     {
         $thisWeek = ScheduleWeek::startOf(today()->toDateString());
-        $lastWeek = Carbon::parse($thisWeek)->subWeek()->toDateString();
+        $dates = ScheduleWeek::datesOf($thisWeek);
 
         $this->makeRoster($thisWeek);
 
-        // Last week first, so this week can be born as a copy of it — the same
-        // order the centre would have lived through.
-        $weeks->open($lastWeek);
-        $this->applyPatterns($lastWeek);
-        $this->signInWeek($lastWeek);
+        // Only this week exists. Anything a previous run left behind is cleared
+        // first, or last week's sheet would still be sitting there in the demo.
+        $this->keepOnly($thisWeek);
 
         $weeks->open($thisWeek);
+        $this->applyPatterns($thisWeek);
         $this->signInWeek($thisWeek);
 
         $this->command?->info('Demo centre ready.');
         $this->command?->line('  roster     : '.Child::where('status', 'Active')->count().' active, 1 inactive');
-        $this->command?->line('  last week  : '.$lastWeek.'  (finished — locked)');
-        $this->command?->line('  this week  : '.$thisWeek.'  (live — copied forward from last week)');
-        $this->command?->line('  next week  : '.Carbon::parse($thisWeek)->addWeek()->toDateString().'  (not opened yet — open it to watch the copy happen)');
+        $this->command?->line('  this week  : '.$dates[0]->toDateString().' to '.$dates[4]->toDateString().'  (the only week with data)');
+        $this->command?->line('  next week  : '.Carbon::parse($thisWeek)->addWeek()->toDateString().'  (blank — not opened yet)');
+    }
+
+    /**
+     * Wipe every week except the demo one.
+     *
+     * The seeder is meant to be re-runnable and still leave exactly one week on
+     * the screen, so old weeks and the attendance recorded in them go — this is
+     * sample data, not a centre's record.
+     */
+    private function keepOnly(string $weekStart): void
+    {
+        $dates = ScheduleWeek::datesOf($weekStart);
+
+        ScheduleSlot::where('week_start', '!=', $weekStart)->delete();
+        ScheduleWeek::where('week_start', '!=', $weekStart)->delete();
+
+        Attendance::whereNotBetween('attendance_date', [
+            $dates[0]->toDateString(),
+            $dates[4]->toDateString(),
+        ])->delete();
     }
 
     private function makeRoster(string $thisWeek): void

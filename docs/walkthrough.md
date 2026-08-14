@@ -224,11 +224,12 @@ forecast an empty Thursday for the whole centre.
 **Expect:** those are the days the forecast and the schedule disagree about —
 expected but not ticked, or ticked but not expected. Hovering says which.
 
-- Open **Copy from another week** and press **Fill from projection**.
+- Open **Copy from another week**.
 
-**Expect:** the week is ticked from the forecast — Add keeps what was already
-there, Replace makes it an exact match — and the banner says how many days moved.
-Children with hours but no pattern are untouched and counted in the message.
+**Expect:** a list of weeks and an Add / Replace choice — and *nothing* that
+applies the forecast. There is no such button. The forecast is read beside the
+plan and never written into it; a week is filled from another week or by hand.
+See [copy-week.md](copy-week.md) for what the dialog does.
 
 - Now open a child's record and change **Expected hours a week**, then come back.
 
