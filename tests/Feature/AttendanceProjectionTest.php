@@ -308,117 +308,14 @@ class AttendanceProjectionTest extends TestCase
         $this->assertArrayNotHasKey($child->id, $this->project()['children']);
     }
 
-    // ---------------- filling the week from it ----------------
-
-    public function test_filling_the_week_from_the_projection_ticks_the_projected_days(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $this->attended($child, ['2026-07-27', '2026-07-29']);
-        $this->openWeek();
-
-        $this->actingAs($this->admin)
-            ->post(route('attendance.schedule.project'), ['week_start' => self::WEEK, 'mode' => 'replace'])
-            ->assertRedirect(route('attendance.index', ['date' => self::WEEK]))
-            ->assertSessionHas('success');
-
-        $this->assertTrue($this->ticked($child, self::MON));
-        $this->assertFalse($this->ticked($child, self::TUE));
-        $this->assertTrue($this->ticked($child, self::WED));
-    }
-
-    public function test_adding_from_the_projection_keeps_the_days_already_ticked(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $this->attended($child, ['2026-07-27']);
-        $this->openWeek();
-        $this->tick($child, [self::FRI]);
-
-        $this->actingAs($this->admin)->post(route('attendance.schedule.project'), [
-            'week_start' => self::WEEK,
-            'mode' => 'add',
-        ])->assertSessionHas('success');
-
-        $this->assertTrue($this->ticked($child, self::MON), 'the projected day arrives');
-        $this->assertTrue($this->ticked($child, self::FRI), 'the hand-set day survives');
-    }
-
-    public function test_replacing_from_the_projection_clears_the_days_it_does_not_expect(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $this->attended($child, ['2026-07-27']);
-        $this->openWeek();
-        $this->tick($child, [self::MON, self::FRI]);
-
-        $this->actingAs($this->admin)->post(route('attendance.schedule.project'), [
-            'week_start' => self::WEEK,
-            'mode' => 'replace',
-        ])->assertSessionHas('success');
-
-        $this->assertTrue($this->ticked($child, self::MON));
-        $this->assertFalse($this->ticked($child, self::FRI), 'replace makes the week an exact match of the forecast');
-    }
-
-    public function test_a_child_with_no_pattern_is_left_alone_by_a_fill(): void
-    {
-        $child = $this->makeChild('Reyes', 'Cara', 'Toddler', ['expected_hours_per_week' => 27]);
-        $this->openWeek();
-        $this->tick($child, [self::TUE]);
-
-        $this->actingAs($this->admin)->post(route('attendance.schedule.project'), [
-            'week_start' => self::WEEK,
-            'mode' => 'add',
-        ])->assertSessionHas('warning');
-
-        // Their hours are known and their days are not. Clearing the one day
-        // somebody did set would read as a decision nobody made.
-        $this->assertTrue($this->ticked($child, self::TUE));
-    }
-
-    public function test_a_fill_that_changes_nothing_says_so_instead_of_claiming_success(): void
-    {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $this->openWeek();
-
-        $this->actingAs($this->admin)
-            ->post(route('attendance.schedule.project'), ['week_start' => self::WEEK, 'mode' => 'replace'])
-            ->assertSessionHas('warning');
-    }
-
-    public function test_a_finished_week_cannot_be_filled_from_the_projection(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        app(WeekSchedule::class)->open(self::PRIOR);
-
-        $this->actingAs($this->admin)
-            ->post(route('attendance.schedule.project'), ['week_start' => self::PRIOR, 'mode' => 'replace'])
-            ->assertSessionHas('warning');
-
-        $this->assertSame(0, ScheduleSlot::where('week_start', self::PRIOR)->where('is_scheduled', true)->count());
-        $this->assertFalse($this->ticked($child, '2026-07-27'));
-    }
-
-    public function test_a_teacher_may_fill_the_week_and_a_parent_may_not(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $this->attended($child, ['2026-07-27']);
-        $this->openWeek();
-
-        $this->actingAs(User::factory()->create(['role' => 'parent']))
-            ->post(route('attendance.schedule.project'), ['week_start' => self::WEEK])
-            ->assertForbidden();
-
-        $this->assertFalse($this->ticked($child, self::MON));
-
-        $this->actingAs(User::factory()->create(['role' => 'teacher', 'classroom' => 'Toddler']))
-            ->post(route('attendance.schedule.project'), ['week_start' => self::WEEK])
-            ->assertSessionHas('success');
-
-        $this->assertTrue($this->ticked($child, self::MON));
-    }
-
     // ---------------- on the page ----------------
 
-    public function test_the_week_view_shows_the_forecast_and_the_way_to_accept_it(): void
+    /**
+     * The forecast is read, never applied. It sits beside the plan as a second
+     * opinion and there is no button that turns it into ticks — the schedule is
+     * set by hand or copied from a week that actually happened.
+     */
+    public function test_the_week_view_shows_the_forecast_but_offers_no_way_to_apply_it(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler', ['expected_hours_per_week' => 45]);
         $this->attended($child, ['2026-07-27', '2026-07-29']);
@@ -431,7 +328,7 @@ class AttendanceProjectionTest extends TestCase
         $response->assertSee('Projected');
         $response->assertSee('18.0 h');                       // two full days
         $response->assertSee('against 45.0 h expected');
-        $response->assertSee('Fill from projection');
+        $response->assertDontSee('Fill from projection');
     }
 
     public function test_a_teacher_sees_the_forecast_for_their_own_rooms_only(): void
@@ -517,14 +414,6 @@ class AttendanceProjectionTest extends TestCase
             ->whereIn('slot_date', $dates)
             ->where('session', $session)
             ->update(['is_scheduled' => true]);
-    }
-
-    private function ticked(Child $child, string $date, string $session = 'FULL'): bool
-    {
-        return (bool) ScheduleSlot::where('child_id', $child->id)
-            ->where('slot_date', $date)
-            ->where('session', $session)
-            ->value('is_scheduled');
     }
 
     private function makeChild(string $last, string $first, string $room, array $extra = []): Child

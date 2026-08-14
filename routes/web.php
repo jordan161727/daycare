@@ -7,7 +7,10 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
+use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\StaffRuleController;
+use App\Http\Controllers\StaffScheduleController;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -56,7 +59,28 @@ Route::get('/children/import-document', [ChildDocumentController::class, 'create
 Route::post('/children/import-document', [ChildDocumentController::class, 'store'])->name('children.document-import.store');
 Route::get('/children/import-document/{token}/review', [ChildDocumentController::class, 'review'])->name('children.document-import.review');
 Route::get('/children/import-document/{token}/file', [ChildDocumentController::class, 'file'])->name('children.document-import.file');
-Route::resource('teachers', TeacherController::class)->except('show')->parameters(['teachers' => 'teacher']);
+Route::resource('teachers', TeacherController::class)->parameters(['teachers' => 'teacher']);
+
+// Scheduling rules only ever make sense against the person they constrain, so
+// they are nested rather than given a table of their own.
+Route::post('/teachers/{teacher}/rules', [StaffRuleController::class, 'store'])->name('teachers.rules.store');
+Route::put('/teachers/{teacher}/rules/{rule}', [StaffRuleController::class, 'update'])->name('teachers.rules.update');
+Route::delete('/teachers/{teacher}/rules/{rule}', [StaffRuleController::class, 'destroy'])->name('teachers.rules.destroy');
+
+// Payroll is every employee's pay in one file. Director only, and never on the
+// teacher-visible side of the app.
+Route::get('/payroll', [PayrollController::class, 'index'])->name('payroll.index');
+Route::post('/payroll', [PayrollController::class, 'store'])->name('payroll.store');
+Route::get('/payroll/{batch}', [PayrollController::class, 'show'])->name('payroll.show');
+Route::delete('/payroll/{batch}', [PayrollController::class, 'destroy'])->name('payroll.destroy');
+Route::get('/payroll/{batch}/slips/{slip}/preview', [PayrollController::class, 'preview'])->name('payroll.preview');
+Route::put('/payroll/{batch}/slips/{slip}', [PayrollController::class, 'reassign'])->name('payroll.reassign');
+Route::post('/payroll/{batch}/slips/{slip}/send', [PayrollController::class, 'send'])->name('payroll.send');
+
+// The staff roster is built from pay-affecting rules, so it stays director-only
+// too — but every teacher can read the generated week, which is the point of
+// generating it.
+Route::post('/staff-schedule/generate', [StaffScheduleController::class, 'generate'])->name('staff-schedule.generate');
 Route::get('/children/create', [ChildController::class, 'create'])->name('children.create');
 Route::post('/children', [ChildController::class, 'store'])->name('children.store');
 Route::get('/children/{child}/edit', [ChildController::class, 'edit'])->name('children.edit');
@@ -69,6 +93,10 @@ Route::post('/children/import',[ChildrenController::class,'import'])->name('chil
 
 Route::middleware('role:admin,teacher')->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+
+    // Read-only for teachers: knowing who else is on the floor at 3pm is the
+    // reason the roster exists, and hiding it would send them back to asking.
+    Route::get('/staff-schedule', [StaffScheduleController::class, 'index'])->name('staff-schedule.index');
 });
 
 Route::get('/attendance', [AttendanceController::class, 'index'])
@@ -78,9 +106,11 @@ Route::post('/attendance/sign-in', [AttendanceController::class, 'signIn'])
     ->name('attendance.signin');
 
 Route::middleware('role:admin,teacher')->group(function () {
+    // Building a week is a decision, so it has its own door. Merely viewing one
+    // never creates it.
+    Route::post('/attendance/week/open', [AttendanceController::class, 'openWeek'])->name('attendance.week.open');
     Route::post('/attendance/schedule', [ScheduleController::class, 'update'])->name('attendance.schedule.update');
     Route::post('/attendance/schedule/copy', [ScheduleController::class, 'copy'])->name('attendance.schedule.copy');
-    Route::post('/attendance/schedule/project', [ScheduleController::class, 'project'])->name('attendance.schedule.project');
     Route::post('/attendance/schedule/closure', [ScheduleController::class, 'closure'])->name('attendance.schedule.closure');
 });
 

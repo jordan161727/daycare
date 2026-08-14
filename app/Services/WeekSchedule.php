@@ -28,8 +28,6 @@ class WeekSchedule
 
     public int $tickChange = 0;
 
-    public function __construct(private AttendanceProjection $projection) {}
-
     /**
      * Return the week, building it from the previous one the first time it is opened.
      * Center-wide by design: it must not matter which teacher happened to open it.
@@ -150,68 +148,14 @@ class WeekSchedule
     }
 
     /**
-     * Tick this week's days from the projection — the pattern last week's actual
-     * attendance, the enrolment dates and the contracted hours add up to.
+     * Has this week been built yet?
      *
-     * This is the one place the forecast is allowed to touch the plan, and only
-     * because the director asked for it in as many words. Left to itself the
-     * projection stays a second opinion: see AttendanceProjection for why a sick
-     * day must never become a schedule on its own.
-     *
-     * 'add' only ever turns days on, so nothing set up by hand is lost. 'replace'
-     * makes the week an exact match of the forecast. A child the projection has
-     * no pattern for — hours on file but no history and no ticks — is left
-     * exactly as they are either way: there is nothing to write, and clearing
-     * their days would read as a decision nobody made.
+     * Asked before open(), so a screen can show a week as it really is —
+     * untouched — instead of creating it just by being looked at.
      */
-    public function applyProjection(string $weekStart, string $mode = 'replace'): int
+    public function isOpen(string $weekStart): bool
     {
-        if ($this->isFrozen($weekStart)) {
-            $this->tickedDays = $this->tickedIn($weekStart);
-            $this->tickChange = 0;
-
-            return 0;
-        }
-
-        return DB::transaction(function () use ($weekStart, $mode) {
-            $before = $this->tickedIn($weekStart);
-            $expected = $this->projection->forWeek($weekStart)['expected'];
-
-            $on = [];
-            $off = [];
-
-            foreach (ScheduleSlot::where('week_start', $weekStart)->get() as $slot) {
-                $wanted = ($expected[$slot->child_id][$slot->slot_date->toDateString()][$slot->session] ?? false) === true;
-
-                // "Add" never clears, and neither mode rewrites a box that
-                // already says what the projection says.
-                if ((! $wanted && $mode === 'add') || (bool) $slot->is_scheduled === $wanted) {
-                    continue;
-                }
-
-                $wanted ? $on[] = $slot->id : $off[] = $slot->id;
-            }
-
-            $changed = $this->setScheduled($on, true) + $this->setScheduled($off, false);
-
-            $this->tickedDays = $this->tickedIn($weekStart);
-            $this->tickChange = $this->tickedDays - $before;
-            $this->copiedSignIns = 0;
-
-            return $changed;
-        });
-    }
-
-    /** @param  array<int>  $ids */
-    private function setScheduled(array $ids, bool $value): int
-    {
-        $changed = 0;
-
-        foreach (array_chunk($ids, 500) as $chunk) {
-            $changed += ScheduleSlot::whereIn('id', $chunk)->update(['is_scheduled' => $value]);
-        }
-
-        return $changed;
+        return ScheduleWeek::where('week_start', $weekStart)->exists();
     }
 
     /** The newest week already built before this one, or null for the very first week. */

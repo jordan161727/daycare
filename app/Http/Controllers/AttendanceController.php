@@ -79,9 +79,22 @@ class AttendanceController extends Controller
                 ->take(10)
                 ->get();
 
-            // Opening a week for the first time snapshots it from the week before.
+            // Opening a week for the first time snapshots it from the week before,
+            // so it must be asked for rather than happen by itself: browsing ahead
+            // to look at next week would otherwise fill it in, and a week nobody
+            // has planned would come back covered in ticks copied from this one.
+            //
+            // The week we are standing in is the exception. The centre always has
+            // today's sheet, and making a teacher press a button before they can
+            // sign a child in would be a door where there was none.
             $weekStartDate = $weekStart->toDateString();
-            $scheduleWeek = $weeks->open($weekStartDate, $user);
+            $isCurrentWeek = $weekStartDate === ScheduleWeek::startOf(today()->toDateString());
+
+            $scheduleWeek = $weeks->isOpen($weekStartDate) || $isCurrentWeek
+                ? $weeks->open($weekStartDate, $user)
+                : null;
+
+            $weekIsOpen = $scheduleWeek !== null;
 
             $scheduleMap = [];
             foreach (ScheduleSlot::where('week_start', $weekStartDate)->get() as $slot) {
@@ -96,7 +109,13 @@ class AttendanceController extends Controller
                 ->keyBy(fn ($day) => $day->closed_on->toDateString())
                 ->map(fn ($day) => $day->reason ?: 'Centre closed');
 
-            $canEditSchedule = ($user->isAdmin() || $user->role === 'teacher') && ! $weekIsFrozen;
+            // Nothing to tick in a week that has not been built, so the schedule
+            // view and every copy control wait until it has.
+            $canEditSchedule = ($user->isAdmin() || $user->role === 'teacher') && ! $weekIsFrozen && $weekIsOpen;
+
+            // A finished week is a record of what did not happen. Offering to
+            // build one now would write a plan into a week that is already over.
+            $canOpenWeek = ($user->isAdmin() || $user->role === 'teacher') && ! $weekIsOpen && ! $weekIsFrozen;
 
             // What the week is expected to look like: last week's actual
             // attendance, bounded by the enrolment dates and closures, measured
@@ -114,7 +133,9 @@ class AttendanceController extends Controller
 
             // "Copy" almost always means "same as last week", so the week just
             // gone is offered on its own button and leads the picker.
-            $previousWeekStart = $canEditSchedule ? $weeks->sourceFor($weekStartDate) : null;
+            // Also what the "open this week" prompt names, so the offer says which
+            // week it is about to copy forward before it is accepted.
+            $previousWeekStart = $canEditSchedule || $canOpenWeek ? $weeks->sourceFor($weekStartDate) : null;
             $available = $canEditSchedule ? $weeks->availableSources($weekStartDate) : collect();
 
             $sourceList = $available->filter(fn ($week) => $week < $weekStartDate)
@@ -158,6 +179,8 @@ class AttendanceController extends Controller
                 'scheduleWeek',
                 'scheduleMap',
                 'canEditSchedule',
+                'canOpenWeek',
+                'weekIsOpen',
                 'sourceWeeks',
                 'previousWeekStart',
                 'weekIsFrozen',
@@ -170,6 +193,40 @@ class AttendanceController extends Controller
                 'projectionSource',
                 'projectionBasisLabels'
             ));
+    }
+
+    /**
+     * Build a week, because somebody said so.
+     *
+     * The only way a week that is not the current one comes into being. It is a
+     * button rather than a side effect of looking, so "next week is empty" stays
+     * true until the centre has actually planned it — and so the copy forward
+     * happens at a moment someone chose.
+     */
+    public function openWeek(Request $request, WeekSchedule $weeks)
+    {
+        $validated = $request->validate([
+            'week_start' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $weekStart = ScheduleWeek::startOf($validated['week_start']);
+
+        if ($weeks->isFrozen($weekStart)) {
+            return back()->with('warning', 'That week has already ended — a finished week cannot be planned.');
+        }
+
+        if ($weeks->isOpen($weekStart)) {
+            return redirect()->route('attendance.index', ['date' => $weekStart]);
+        }
+
+        $week = $weeks->open($weekStart, $request->user());
+        $source = $week->copied_from_week_start;
+
+        return redirect()
+            ->route('attendance.index', ['date' => $weekStart])
+            ->with('success', $source
+                ? 'Week of '.Carbon::parse($weekStart)->format('M j').' opened — '.$weeks->tickedIn($weekStart).' day(s) copied forward from the week of '.$source->format('M j').'.'
+                : 'Week of '.Carbon::parse($weekStart)->format('M j').' opened. Nothing came before it, so the days start empty.');
     }
 
     // public function signIn(Request $request)

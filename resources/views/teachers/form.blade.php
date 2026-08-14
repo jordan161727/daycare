@@ -8,5 +8,86 @@
         <label class="block"><span class="mb-2 block text-sm font-semibold">{{ $teacher->exists ? 'New password' : 'Password' }} <span class="text-rose-500">{{ $teacher->exists ? '' : '*' }}</span></span><input type="password" name="password" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" {{ $teacher->exists ? '' : 'required' }}><x-input-error :messages="$errors->get('password')" /></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password <span class="text-rose-500">{{ $teacher->exists ? '' : '*' }}</span></span><input type="password" name="password_confirmation" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" {{ $teacher->exists ? '' : 'required' }}><x-input-error :messages="$errors->get('password_confirmation')" /></label>
     </div>
+    {{-- Employment details. Optional to a one — an account is useful the moment
+         it can log in, and the scheduler falls back to config defaults for
+         anything left blank. Only the payroll name has to be exact, because a
+         payslip page is matched on it. --}}
+    <fieldset class="mt-8 border-t border-slate-100 pt-6 dark:border-white/10">
+        <legend class="sr-only">Employment details</legend>
+        <h2 class="text-sm font-semibold">Employment details</h2>
+        <p class="mt-1 text-sm text-slate-500">Used by the staff scheduler and the payslip mailer. Everything here is optional.</p>
+
+        <div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Employment type</span>
+                <select name="employment" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                    <option value="">Not set</option>
+                    @foreach(\App\Models\StaffRule::EMPLOYMENT as $type)
+                        <option value="{{ $type }}" @selected(old('employment', $teacher->employment) === $type)>{{ str_replace('_', ' ', $type) }}</option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-slate-500">Sets default weekly hours. Substitutes are only scheduled to cover a ratio gap.</p>
+                <x-input-error :messages="$errors->get('employment')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Room they lead</span>
+                <select name="title" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                    <option value="">Not set</option>
+                    @foreach(\App\Services\ClassroomAssignment::rooms() as $room)
+                        <option value="{{ $room }}" @selected(old('title', $teacher->title) === $room)>{{ $room }}</option>
+                    @endforeach
+                </select>
+                <x-input-error :messages="$errors->get('title')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Legal name (payroll)</span>
+                <input name="legal_name" value="{{ old('legal_name', $teacher->legal_name) }}" placeholder="{{ $teacher->name ?: 'Maria G. Santos' }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <p class="mt-1 text-xs text-slate-500">The name printed on their payslip. Payslips are matched to people by this.</p>
+                <x-input-error :messages="$errors->get('legal_name')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Phone</span>
+                <input name="phone" value="{{ old('phone', $teacher->phone) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('phone')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Emergency contact</span>
+                <input name="emergency_contact" value="{{ old('emergency_contact', $teacher->emergency_contact) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('emergency_contact')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Emergency phone</span>
+                <input name="emergency_phone" value="{{ old('emergency_phone', $teacher->emergency_phone) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('emergency_phone')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Start date</span>
+                <input type="date" name="start_date" value="{{ old('start_date', $teacher->start_date?->toDateString()) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('start_date')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Date of birth</span>
+                <input type="date" name="dob" value="{{ old('dob', $teacher->dob?->toDateString()) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('dob')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Transport</span>
+                <input name="transport" value="{{ old('transport', $teacher->transport) }}" placeholder="Own car, bus, walks…" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('transport')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">ASPIRE ID</span>
+                <input name="aspire_id" value="{{ old('aspire_id', $teacher->aspire_id) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('aspire_id')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Pay rate ($ / hour)</span>
+                <input type="number" step="0.01" min="0" name="pay_rate" value="{{ old('pay_rate', $teacher->pay_rate) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('pay_rate')" /></label>
+
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Latest evaluation (0–5)</span>
+                <input type="number" step="0.1" min="0" max="5" name="evaluation_score" value="{{ old('evaluation_score', $teacher->evaluation_score) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                <x-input-error :messages="$errors->get('evaluation_score')" /></label>
+
+            <label class="flex items-center gap-3 sm:col-span-2 lg:col-span-3">
+                <input type="hidden" name="direct_deposit" value="0">
+                <input type="checkbox" name="direct_deposit" value="1" @checked(old('direct_deposit', $teacher->direct_deposit)) class="h-4 w-4 rounded border-slate-300">
+                <span class="text-sm font-semibold">On direct deposit</span></label>
+
+            <label class="block sm:col-span-2 lg:col-span-3"><span class="mb-2 block text-sm font-semibold">Notes</span>
+                <textarea name="staff_notes" rows="3" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">{{ old('staff_notes', $teacher->staff_notes) }}</textarea>
+                <x-input-error :messages="$errors->get('staff_notes')" /></label>
+        </div>
+    </fieldset>
+
     <div class="mt-8 flex flex-wrap justify-end gap-3"><a href="{{ route('teachers.index') }}" class="rounded-xl px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</a><button class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700">{{ $submit }}</button></div>
 </form>

@@ -81,7 +81,11 @@
                 {{-- The forecast, beside the plan and never on top of it: what last
                      week's attendance, the enrolment dates and the contracted
                      hours say this week should look like. Recomputed on every
-                     load, so a profile edited this morning shows here now. --}}
+                     load, so a profile edited this morning shows here now.
+
+                     A week nobody has opened has no plan to sit beside, so the
+                     forecast waits with everything else. --}}
+                @if($weekIsOpen)
                 @php($projectedShortfall = ($projectionTotals['contract_hours'] ?? 0) > 0
                     ? round($projectionTotals['projected_hours'] - $projectionTotals['contract_hours'], 2)
                     : null)
@@ -116,6 +120,7 @@
                         <span x-text="mismatchCount"></span> day(s) differ from the schedule
                     </span>
                 </div>
+                @endif
 
                 {{-- Search and room filters on the second line. Hidden while setting
                      the schedule, which always covers the whole centre — a filter
@@ -132,6 +137,7 @@
                     </div>
                 </div>
             </div>
+            @if($weekIsOpen)
             {{-- Schedule setup: ticks, not colours. --}}
             @if($canEditSchedule)
                 <div class="mt-3" x-show="view === 'schedule'" x-cloak>
@@ -230,6 +236,45 @@
                     </div>
                 </div>
             </div>
+            @else
+                {{-- A week nobody has built yet. It shows as it is — no children,
+                     no boxes, nothing to colour in — because the alternative is a
+                     sheet that appears to be planned purely because somebody
+                     looked at it. Opening is the deliberate act, and it is the
+                     moment the previous week is copied forward. --}}
+                <div class="glass-card mt-3 rounded-2xl px-6 py-12 text-center">
+                    <span class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-slate-100 text-2xl dark:bg-slate-800">🗓</span>
+                    <h2 class="mt-3 text-base font-bold">
+                        {{ $weekDates->first()->format('M j') }} – {{ $weekDates->last()->format('M j, Y') }} has not been set up
+                    </h2>
+                    @if($canOpenWeek)
+                        <p class="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400">
+                            @if($previousWeekStart)
+                                Opening it copies the schedule from the week of
+                                <b>{{ \Illuminate\Support\Carbon::parse($previousWeekStart)->format('M j') }}</b>
+                                forward. Nothing is copied until you do.
+                            @else
+                                Opening it starts a blank week — there is nothing before it to copy from.
+                            @endif
+                        </p>
+                        <form method="POST" action="{{ route('attendance.week.open') }}" class="mt-4">
+                            @csrf
+                            <input type="hidden" name="week_start" value="{{ $weekStartDate }}">
+                            <button class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700">
+                                Open this week
+                            </button>
+                        </form>
+                    @elseif($weekIsFrozen)
+                        <p class="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400">
+                            This week has ended and was never set up. A finished week is a record, so it cannot be planned now.
+                        </p>
+                    @else
+                        <p class="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400">
+                            A teacher or the director opens the week before it can be used.
+                        </p>
+                    @endif
+                </div>
+            @endif
         </section>
         <section class="glass-card mt-4 rounded-2xl p-4 sm:p-5" x-show="view === 'signin'">
             <div class="border-b border-slate-200 pb-3 dark:border-white/10">
@@ -306,26 +351,9 @@
                         </label>
                     @endif
 
-                    {{-- The other way to fill the week: take the forecast rather
-                         than a week's ticks. It obeys the Add/Replace choice
-                         above, and it only ever happens because this button was
-                         pressed — the projection never writes on its own. --}}
-                    <div class="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
-                        <b>Or fill it from the projection.</b>
-                        Ticks the days last week's <em>actual attendance</em> expects, inside each child's enrolment dates and skipping closed days —
-                        @if($projectionTotals['sessions'] > 0)
-                            {{ $projectionTotals['sessions'] }} day(s) across {{ $projectionTotals['children'] }} child(ren), {{ number_format($projectionTotals['projected_hours'], 1) }} h.
-                        @else
-                            nothing to project yet from the week of {{ \Illuminate\Support\Carbon::parse($projectionSource)->format('M j') }}.
-                        @endif
-                        @if($projectionTotals['without_pattern'] > 0)
-                            <span class="font-semibold text-amber-700 dark:text-amber-300">{{ $projectionTotals['without_pattern'] }} child(ren) have expected hours but no pattern, and are left untouched.</span>
-                        @endif
-                    </div>
                 </div>
                 <div class="flex flex-wrap justify-end gap-2 border-t border-slate-200/70 px-5 py-3 dark:border-white/10">
                     <button type="button" @click="$refs.copyWeek.close()" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
-                    <button formaction="{{ route('attendance.schedule.project') }}" class="mr-auto rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-50 dark:border-sky-500/40 dark:bg-transparent dark:text-sky-200">Fill from projection</button>
                     <button class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-700">Copy schedule</button>
                 </div>
             </form>
