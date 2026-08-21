@@ -4,9 +4,13 @@ use App\Http\Controllers\ChildrenController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\ChildController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
+use App\Http\Controllers\LeaveBalanceController;
+use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\TimeClockController;
 use App\Http\Controllers\TimePunchController;
@@ -32,7 +36,13 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'store'])->name('login.store');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'password.change'])->group(function () {
+
+// Choosing your own password. Exempt from the middleware above (see its
+// allow-list), because it is the one screen a brand-new account can reach.
+Route::get('/password/change', [PasswordController::class, 'edit'])->name('password.change');
+Route::put('/password/change', [PasswordController::class, 'update'])->name('password.change.update');
+
 Route::get('/dashboard', function () {
     if (! Schema::hasTable('children') || ! Schema::hasTable('attendances')) {
         return view('dashboard.index', [
@@ -69,6 +79,18 @@ Route::resource('teachers', TeacherController::class)->parameters(['teachers' =>
 Route::post('/teachers/{teacher}/rules', [StaffRuleController::class, 'store'])->name('teachers.rules.store');
 Route::put('/teachers/{teacher}/rules/{rule}', [StaffRuleController::class, 'update'])->name('teachers.rules.update');
 Route::delete('/teachers/{teacher}/rules/{rule}', [StaffRuleController::class, 'destroy'])->name('teachers.rules.destroy');
+
+// Deciding on leave, and the balances behind the decision. A teacher asks for
+// time off (see the group below); only a director grants it, and only a
+// director can move a balance by hand.
+Route::get('/leave/requests', [LeaveRequestController::class, 'index'])->name('leave.requests');
+Route::post('/leave/requests/{leave}/approve', [LeaveRequestController::class, 'approve'])->name('leave.approve');
+Route::post('/leave/requests/{leave}/deny', [LeaveRequestController::class, 'deny'])->name('leave.deny');
+Route::post('/leave/requests/{leave}/revoke', [LeaveRequestController::class, 'revoke'])->name('leave.revoke');
+
+Route::get('/leave/balances', [LeaveBalanceController::class, 'index'])->name('leave.balances');
+Route::post('/leave/balances/{user}/adjust', [LeaveBalanceController::class, 'adjust'])->name('leave.adjust');
+Route::post('/leave/accrue', [LeaveBalanceController::class, 'accrue'])->name('leave.accrue');
 
 // Payroll preparation: everybody's hours before they become everybody's pay.
 // Director only, for the same reason payroll itself is.
@@ -117,10 +139,22 @@ Route::middleware('role:admin,teacher')->group(function () {
     // reason the roster exists, and hiding it would send them back to asking.
     Route::get('/staff-schedule', [StaffScheduleController::class, 'index'])->name('staff-schedule.index');
 
+    // The same week, narrowed to the person asking. Their own row is the one
+    // they came for, and a phone in a corridor is no place to find it in a
+    // fourteen-hundred-pixel chart.
+    Route::get('/my-schedule', [StaffScheduleController::class, 'mine'])->name('staff-schedule.mine');
+
     // The time clock, punched as yourself. A teacher sees their own punches and
     // their own hours and nothing else — no rate, no colleague, no correction.
     Route::get('/time-clock', [TimeClockController::class, 'index'])->name('clock.index');
     Route::post('/time-clock', [TimeClockController::class, 'punch'])->name('clock.punch');
+
+    // Your own leave: what you have earned, what you have asked for, and what
+    // was decided. Directors get this too — they hold balances like anybody
+    // else, they just cannot sign off their own.
+    Route::get('/leave', [LeaveController::class, 'index'])->name('leave.index');
+    Route::post('/leave', [LeaveController::class, 'store'])->name('leave.store');
+    Route::delete('/leave/{leave}', [LeaveController::class, 'destroy'])->name('leave.destroy');
 });
 
 Route::get('/attendance', [AttendanceController::class, 'index'])

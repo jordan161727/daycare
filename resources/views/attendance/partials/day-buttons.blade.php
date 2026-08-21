@@ -23,7 +23,13 @@
                 :title="boxTitle(child.id, '{{ $iso }}', session)"
                 class="rounded-lg border font-semibold leading-tight transition {{ $size }} {{ $variant === 'table' && '' }}"
             >
-                <span x-text="boxLabel(child.id, '{{ $iso }}', session)"></span>
+                <span class="inline-flex items-center justify-center gap-1">
+                    <span x-text="boxLabel(child.id, '{{ $iso }}', session)"></span>
+                    {{-- The mark the legend calls "not scheduled". Colour alone
+                         would leave green and amber the same box to anyone who
+                         cannot tell the two apart. --}}
+                    <span x-show="isUnplanned(child.id, '{{ $iso }}', session)" x-cloak class="rounded-sm bg-amber-500/25 px-1 text-[10px] font-bold leading-none">!</span>
+                </span>
                 <span x-show="isPresent(child.id, '{{ $iso }}', session)" class="block text-[10px] font-medium opacity-90" x-text="sessionTime(child.id, '{{ $iso }}', session)"></span>
             </button>
         </template>

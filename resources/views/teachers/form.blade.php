@@ -5,8 +5,30 @@
         <label class="block"><span class="mb-2 block text-sm font-semibold">Name <span class="text-rose-500">*</span></span><input name="name" value="{{ old('name', $teacher->name) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" required><x-input-error :messages="$errors->get('name')" /></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Email <span class="text-rose-500">*</span></span><input type="email" name="email" value="{{ old('email', $teacher->email) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" required><x-input-error :messages="$errors->get('email')" /></label>
         <label class="block sm:col-span-2"><span class="mb-2 block text-sm font-semibold">Assigned classrooms</span><select name="classrooms[]" multiple class="h-40 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><option value="">No classroom assigned</option>@foreach($classrooms as $classroom)<option value="{{ $classroom }}" @selected(in_array($classroom, old('classrooms', $teacher->assignedClassrooms()), true))>{{ $classroom }}</option>@endforeach</select><p class="mt-2 text-xs text-slate-500">Select one or more classrooms for this teacher.</p><x-input-error :messages="$errors->get('classrooms')" /></label>
-        <label class="block"><span class="mb-2 block text-sm font-semibold">{{ $teacher->exists ? 'New password' : 'Password' }} <span class="text-rose-500">{{ $teacher->exists ? '' : '*' }}</span></span><input type="password" name="password" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" {{ $teacher->exists ? '' : 'required' }}><x-input-error :messages="$errors->get('password')" /></label>
-        <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password <span class="text-rose-500">{{ $teacher->exists ? '' : '*' }}</span></span><input type="password" name="password_confirmation" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" {{ $teacher->exists ? '' : 'required' }}><x-input-error :messages="$errors->get('password_confirmation')" /></label>
+        @if($teacher->exists)
+        <label class="block"><span class="mb-2 block text-sm font-semibold">New password</span><input type="password" name="password" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password')" /></label>
+        <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password</span><input type="password" name="password_confirmation" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password_confirmation')" /></label>
+        @else
+        {{-- How the first password gets set. Emailing a generated one is the
+             default because it is the only version where nobody but the teacher
+             ever knows their password; the hidden field keeps the choice in old
+             input so a failed validation does not silently flip it back. --}}
+        <div class="sm:col-span-2" x-data="{ invite: {{ old('send_invite', '1') == '1' ? 'true' : 'false' }} }">
+            <input type="hidden" name="send_invite" value="0">
+            <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/60">
+                <input type="checkbox" name="send_invite" value="1" x-model="invite" class="mt-0.5 h-4 w-4 rounded border-slate-300">
+                <span>
+                    <span class="block text-sm font-semibold">Email a temporary password</span>
+                    <span class="mt-1 block text-xs text-slate-500">We send the teacher a one-time password and make them choose their own the first time they sign in. Leave this off to set the password yourself and hand it over in person.</span>
+                </span>
+            </label>
+
+            <div class="mt-5 grid gap-5 sm:grid-cols-2" x-show="! invite" x-cloak>
+                <label class="block"><span class="mb-2 block text-sm font-semibold">Password <span class="text-rose-500">*</span></span><input type="password" name="password" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password')" /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password <span class="text-rose-500">*</span></span><input type="password" name="password_confirmation" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password_confirmation')" /></label>
+            </div>
+        </div>
+        @endif
     </div>
     {{-- Employment details. Optional to a one — an account is useful the moment
          it can log in, and the scheduler falls back to config defaults for
