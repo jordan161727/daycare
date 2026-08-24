@@ -12,6 +12,22 @@
     <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{{ session('warning') }}</div>
 @endif
 
+{{-- What approving the period earned everybody. Printed rather than done
+     silently: leave that appears on a balance with no explanation is a number
+     staff have to take on faith, and the one line saying "3.2h sick earned on
+     96h worked" is what makes it checkable. --}}
+@if(session('accrual'))
+    <div class="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-900">
+        <p class="font-semibold">Leave earned</p>
+        <ul class="mt-1 space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
+            @foreach(session('accrual') as $line)
+                <li>{{ $line }}</li>
+            @endforeach
+        </ul>
+        <a href="{{ route('leave.balances') }}" class="mt-2 inline-block text-xs font-semibold text-indigo-600 hover:underline">See every balance &rarr;</a>
+    </div>
+@endif
+
 {{-- Period navigation. Semi-monthly, so stepping is by half-month, and the
      date box is for jumping somewhere far off. --}}
 <section class="glass-card mt-7 rounded-2xl p-5">

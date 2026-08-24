@@ -5,8 +5,10 @@
         <span><kbd class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold dark:border-white/10 dark:bg-slate-800">Drag</kbd> to fill several at once</span>
         <span><kbd class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold dark:border-white/10 dark:bg-slate-800">Space</kbd> toggles the focused day</span>
         <span>Tap a day name for the whole column.</span>
-        <span class="inline-flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded ring-1 ring-sky-400"></span> ringed — the projection disagrees with the tick</span>
     </div>
+
+    {{-- The same key as the sign-in grid, for the states this view has instead. --}}
+    @include('attendance.partials.legend', ['for' => 'schedule', 'boxStates' => $boxStates])
 
     <div class="overflow-x-auto" style="touch-action: none;">
         <table class="w-full min-w-[880px] border-collapse text-left">
@@ -111,9 +113,10 @@
                                                 @keydown.enter.prevent="toggleOne(child.id, '{{ $iso }}', session)"
                                                 :title="projectionNote(child.id, '{{ $iso }}', session)"
                                                 :class="[
+                                                    {{-- Same two fills as the key above the table. --}}
                                                     isScheduled(child.id, '{{ $iso }}', session)
-                                                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200'
-                                                        : 'border-slate-200 bg-slate-50 text-slate-400 hover:border-indigo-400 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-500',
+                                                        ? 'border-indigo-500 bg-indigo-200 text-indigo-800 dark:bg-indigo-500/25 dark:text-indigo-100'
+                                                        : 'border-slate-300 bg-slate-50 text-slate-400 hover:border-indigo-400 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-500',
                                                     projectionDiffers(child.id, '{{ $iso }}', session) ? 'ring-1 ring-sky-400 dark:ring-sky-500' : '',
                                                 ]"
                                                 class="flex min-h-[38px] flex-1 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg border-[1.5px] px-2 text-xs font-semibold transition"

@@ -22,6 +22,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'must_change_password',
+        'password_changed_at',
         'role',
         'classroom',
         'classrooms',
@@ -61,6 +63,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
+            'password_changed_at' => 'datetime',
             'classrooms' => 'array',
             'start_date' => 'date:Y-m-d',
             'dob' => 'date:Y-m-d',
@@ -68,6 +72,17 @@ class User extends Authenticatable
             'pay_rate' => 'decimal:2',
             'evaluation_score' => 'float',
         ];
+    }
+
+    /**
+     * Still signing in with a password somebody else chose for them.
+     *
+     * Read by the middleware that pins such an account to the change form: the
+     * login works, but nothing else does until they have picked their own.
+     */
+    public function mustChangePassword(): bool
+    {
+        return (bool) $this->must_change_password;
     }
 
     /** Every scheduling constraint on this person. */
@@ -79,6 +94,18 @@ class User extends Authenticatable
     public function shifts()
     {
         return $this->hasMany(StaffShift::class);
+    }
+
+    /** Every time-off request they have made, decided or not. */
+    public function leaveRequests()
+    {
+        return $this->hasMany(LeaveRequest::class);
+    }
+
+    /** Every movement on their leave balances. The balance is the sum. */
+    public function leaveLedgerEntries()
+    {
+        return $this->hasMany(LeaveLedgerEntry::class);
     }
 
     /** Teachers, in the order the roster shows them. */

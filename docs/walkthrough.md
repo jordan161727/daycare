@@ -240,13 +240,22 @@ nothing is rebuilt; the forecast is worked out again on every load.
 
 ## The four box states, in one place
 
+The sheet says this for itself: a **Key** runs along the top of the grid, and a
+matching one along the top of **Set schedule**. Nobody has to come here to find
+out what a colour means.
+
 | Box | Meaning |
 |---|---|
 | **Indigo** | scheduled to attend, not yet signed in |
 | **Gray** | not scheduled — but still clickable, and still billable |
 | **—** (dashed) | not enrolled: not started yet, or no longer coming |
-| **Green** | signed in, with the arrival time |
-| **Amber** | signed in on a day they were *not* scheduled |
+| **Green ✓** | signed in, with the arrival time |
+| **Amber ✓ !** | signed in on a day they were *not* scheduled |
+| **Sky ring** | the projection disagrees with the schedule — see story 12 |
+
+The **!** on the amber box, and the **✎** beside a room that was set by hand,
+are there so the two states that differ only in colour can also be told apart
+without it.
 
 ## Starting over
 

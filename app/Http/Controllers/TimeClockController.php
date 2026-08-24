@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TimePunch;
+use App\Models\TimesheetEntry;
 use App\Models\TimesheetPeriod;
 use App\Services\PayPeriod;
 use App\Services\TimeClock;
@@ -74,7 +75,7 @@ class TimeClockController extends Controller
         $state = $this->clock->state($user, $today);
 
         if (! in_array($data['type'], TimeClock::NEXT[$state], true)) {
-            return back()->with('warning', 'That is not where you left off — the page was out of date, so nothing was recorded. It is up to date now.');
+            return back()->with('warning', self::STANDING[$state].', so '.TimePunch::action($data['type']).' was not recorded — the page had been sitting open. It is up to date now.');
         }
 
         $punch = $this->clock->punch(
@@ -84,7 +85,73 @@ class TimeClockController extends Controller
             ip: $request->ip(),
         );
 
-        return back()->with('success', $punch->label().' at '.$punch->time().'.');
+        return back()->with('success', $this->confirm($punch, $this->clock->day($user->id, $today)));
+    }
+
+    /** Where the refusal says they already stand, for the warning above. */
+    private const STANDING = [
+        TimeClock::OFF => 'You are not on the clock',
+        TimeClock::WORKING => 'You are already on the clock',
+        TimeClock::LUNCH => 'You are already at lunch',
+        TimeClock::BREAK => 'You are already on a break',
+    ];
+
+    /**
+     * What the punch that just landed says back.
+     *
+     * More than "recorded": each step names the time it went in at and what to
+     * press next, because the punch a day dies on is the one nobody realised
+     * was still owed — a lunch started and never ended is a broken day, and
+     * the moment to say so is while they are still looking at the screen.
+     */
+    private function confirm(TimePunch $punch, array $day): string
+    {
+        $cap = (int) config('daycare.timesheet.clock.paid_break_cap');
+        $said = $punch->label().' at '.$punch->time().'.';
+
+        return match ($punch->type) {
+            TimePunch::IN => $said.' Press '.TimePunch::action(TimePunch::LUNCH_START).' or '
+                .TimePunch::action(TimePunch::BREAK_START).' when you take one, and '
+                .TimePunch::action(TimePunch::OUT).' when you leave.',
+
+            TimePunch::LUNCH_START => $said.' Lunch is unpaid — press '
+                .TimePunch::action(TimePunch::LUNCH_END).' when you are back.',
+
+            TimePunch::BREAK_START => $said.' The first '.$cap.' minutes are paid — press '
+                .TimePunch::action(TimePunch::BREAK_END).' when you are back.',
+
+            TimePunch::LUNCH_END => $said.' That was '.$this->sincePrevious($day, $punch).' minutes, unpaid. Back on the clock.',
+
+            TimePunch::BREAK_END => $said.' '.$this->describeBreak($this->sincePrevious($day, $punch), $cap).' Back on the clock.',
+
+            TimePunch::OUT => $said.' '.TimesheetEntry::formatHours($day['worked']).' h worked today'
+                .($day['unpaid_break'] > 0 ? ', after '.$day['unpaid_break'].' minutes unpaid' : '').'.',
+
+            default => $said,
+        };
+    }
+
+    /** How long the stretch this punch closed ran for, in minutes. */
+    private function sincePrevious(array $day, TimePunch $punch): int
+    {
+        $punches = $day['punches']->values();
+        $index = $punches->search(fn (TimePunch $earlier) => $earlier->is($punch));
+
+        if ($index === false || $index === 0) {
+            return 0;
+        }
+
+        return max(0, $punch->minutes() - $punches[$index - 1]->minutes());
+    }
+
+    /** A rest break is paid to the cap and unpaid past it, so say which it was. */
+    private function describeBreak(int $minutes, int $cap): string
+    {
+        if ($minutes <= $cap) {
+            return $minutes.' minutes, paid.';
+        }
+
+        return $minutes.' minutes — '.$cap.' paid, '.($minutes - $cap).' unpaid.';
     }
 
     /**

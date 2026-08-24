@@ -203,4 +203,99 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Leave
+    |--------------------------------------------------------------------------
+    |
+    | Sick and vacation time: what it is earned at, what it is capped at, and
+    | how a day of it is counted. A balance is kept as a ledger rather than as a
+    | number, so every hour on somebody's card can be traced to the period that
+    | earned it or the request that spent it.
+    |
+    */
+
+    'leave' => [
+
+        /** The kinds of leave the centre keeps a balance for. */
+        'types' => [
+            'VACATION' => 'Vacation',
+            'SICK' => 'Sick leave',
+        ],
+
+        /**
+         * How each type reaches payroll.
+         *
+         * Leave is requested and approved in this vocabulary and paid in the
+         * timesheet's one — see daycare.timesheet.leave_codes. Keeping the map
+         * here is what stops an approved vacation day arriving at payroll as a
+         * code nobody recognises.
+         */
+        'timesheet_codes' => [
+            'VACATION' => 'PTO',
+            'SICK' => 'SICK',
+        ],
+
+        'accrual' => [
+
+            /**
+             * One hour of leave earned per this many hours actually worked.
+             *
+             * Worked, not paid: leave does not earn leave, and neither does a
+             * centre holiday. The sick figure follows the common statutory
+             * "one hour in thirty" — check it against your own state's paid
+             * sick leave law before going live, because that one is not a
+             * house rule.
+             *
+             * A type left out here is not accrued by the hour at all, and can
+             * only arrive by the flat rate below or a director's adjustment.
+             */
+            'per_hours_worked' => [
+                'VACATION' => 40,
+                'SICK' => 30,
+            ],
+
+            /**
+             * Flat hours per pay period, by employment type.
+             *
+             * For staff whose hours do not vary, where accruing off the clock
+             * would hand a salaried lead a different balance every fortnight
+             * for no reason anybody could explain to them. Takes precedence
+             * over the hourly rate above for the types listed.
+             */
+            'per_period' => [
+                'FT_SALARY' => ['VACATION' => 3.33, 'SICK' => 1.34],
+            ],
+        ],
+
+        /**
+         * The most of each type anybody may hold at once, in hours.
+         *
+         * Accrual stops at the cap rather than quietly overshooting it, and the
+         * run reports whose balance was capped — somebody sitting on three
+         * weeks of unused vacation is a fact the director should see, not one
+         * the ledger absorbs.
+         */
+        'cap' => [
+            'VACATION' => 120,
+            'SICK' => 56,
+        ],
+
+        /** A day of leave, in hours, when the request does not say otherwise. */
+        'day_hours' => 8,
+
+        /**
+         * How far back a request may reach, in days.
+         *
+         * Vacation is asked for before it is taken, so it may not start in the
+         * past. Sickness is not planned, so a sick day is routinely filed the
+         * morning after — but not six months after, which is a payroll
+         * correction rather than a leave request.
+         */
+        'backdate_days' => [
+            'VACATION' => 0,
+            'SICK' => 30,
+        ],
+    ],
+
 ];

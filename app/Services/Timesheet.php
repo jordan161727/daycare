@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\LeaveRequest;
 use App\Models\StaffShift;
 use App\Models\TimesheetEntry;
 use App\Models\TimesheetPeriod;
@@ -55,10 +56,16 @@ class Timesheet
             $range->end->toDateString(),
         ])->get();
 
+        // Approved leave comes in the same pass. It is not on the roster — the
+        // whole point of approving it was to take those shifts off — so a
+        // period seeded from shifts alone would show somebody's vacation week
+        // as five blank days and pay them nothing for it.
+        $leaveDays = $this->seedLeave($period);
+
         if ($shifts->isEmpty()) {
             $period->forceFill(['seeded_at' => now()])->save();
 
-            return 0;
+            return $leaveDays;
         }
 
         // A day already in the table is somebody's answer — theirs or an
@@ -110,7 +117,139 @@ class Timesheet
             $period->forceFill(['seeded_at' => now()])->save();
         });
 
-        return count($rows);
+        return count($rows) + $leaveDays;
+    }
+
+    /**
+     * Bring every approved absence inside a period onto the sheet.
+     *
+     * @return int Days written.
+     */
+    private function seedLeave(TimesheetPeriod $period): int
+    {
+        $range = $period->range();
+
+        $requests = LeaveRequest::with('user')
+            ->approved()
+            ->overlapping($range->start->toDateString(), $range->end->toDateString())
+            ->get();
+
+        $written = 0;
+
+        foreach ($requests as $request) {
+            $written += $this->recordLeave($request)['written'];
+        }
+
+        return $written;
+    }
+
+    /**
+     * Write one approved request onto the days it covers.
+     *
+     * Called when the leave is approved as well as when a period is seeded,
+     * because leave is granted at both ends of the calendar: for a fortnight
+     * that has not started, and for the Tuesday somebody was off sick last
+     * week. Either way the day has to reach payroll under the right code, and
+     * the day the balance did not stretch to has to reach it as unpaid rather
+     * than as nothing.
+     *
+     * A day somebody has already spoken for is never overwritten. If a teacher
+     * punched in on a day later granted as sick leave, that punch is a fact and
+     * the approval is a decision about a different day — so the day is left
+     * alone and named in the return, for a human to reconcile.
+     *
+     * @return array{written: int, skipped: list<string>}
+     */
+    public function recordLeave(LeaveRequest $request): array
+    {
+        if (! $request->isApproved()) {
+            return ['written' => 0, 'skipped' => []];
+        }
+
+        $written = 0;
+        $skipped = [];
+
+        foreach ($request->workingDates() as $date) {
+            $period = TimesheetPeriod::forDate($date);
+
+            if ($period->isApproved()) {
+                $skipped[] = Carbon::parse($date)->format('D j M').' falls in a pay period that has already been approved.';
+
+                continue;
+            }
+
+            $entry = TimesheetEntry::firstOrNew([
+                'user_id' => $request->user_id,
+                'work_date' => $date,
+            ]);
+
+            // Somebody's own account of the day beats a decision made about it
+            // afterwards. Only a day still carrying the roster's word — or no
+            // word at all — is written over.
+            if ($entry->exists && $entry->source !== TimesheetEntry::SOURCE_SCHEDULE) {
+                if ($entry->leave_code !== $request->codeFor($date)) {
+                    $skipped[] = Carbon::parse($date)->format('D j M').' already has hours on the timesheet; the leave was not written over them.';
+                }
+
+                continue;
+            }
+
+            $entry->fill([
+                'timesheet_period_id' => $period->id,
+                'starts_at' => null,
+                'ends_at' => null,
+                'break_minutes' => 0,
+                'leave_code' => $request->codeFor($date),
+                'leave_minutes' => $request->minutesPerDay(),
+                'note' => $request->label().' — approved leave',
+                // Confirmed, not draft. A director approving the request is a
+                // person saying this is what happened, which is exactly what
+                // confirming a day means — making them retype it on the
+                // timesheet as well would be the rubber stamp that step exists
+                // to avoid.
+                'source' => TimesheetEntry::SOURCE_MANUAL,
+                'confirmed_by' => $request->reviewed_by,
+                'confirmed_at' => $request->reviewed_at ?? now(),
+            ])->save();
+
+            $written++;
+        }
+
+        return ['written' => $written, 'skipped' => $skipped];
+    }
+
+    /**
+     * Take a revoked absence back off the sheet.
+     *
+     * Only the days this request itself wrote, and only in periods still open.
+     * A day that has since been corrected by a person belongs to them.
+     *
+     * @return int Days cleared.
+     */
+    public function clearLeave(LeaveRequest $request): int
+    {
+        $cleared = 0;
+
+        foreach ($request->workingDates() as $date) {
+            $period = TimesheetPeriod::forDate($date);
+
+            if ($period->isApproved()) {
+                continue;
+            }
+
+            $entry = TimesheetEntry::where('user_id', $request->user_id)
+                ->where('work_date', $date)
+                ->first();
+
+            if (! $entry || $entry->leave_code === null || $entry->workedMinutes() > 0) {
+                continue;
+            }
+
+            $entry->delete();
+            $cleared++;
+        }
+
+        return $cleared;
     }
 
     /**

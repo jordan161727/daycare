@@ -104,6 +104,11 @@
             @endforeach
         </div>
 
+        @if(! auth()->user()->isAdmin())
+            <a href="{{ route('staff-schedule.mine', ['week' => $weekStart]) }}"
+               class="rounded-xl px-4 py-2.5 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-500/10">My schedule</a>
+        @endif
+
         @if(auth()->user()->isAdmin())
             <form method="POST" action="{{ route('staff-schedule.generate') }}"
                   onsubmit="return confirm('Regenerate this week from the current rules? Any shift already on it is replaced.')">
@@ -143,6 +148,7 @@
 </div>
 <p class="mt-1.5 text-xs text-slate-400">
     Dotted border = floating between rooms &middot; dashed = coverage patch
+    &middot; <span class="font-semibold text-emerald-600 dark:text-emerald-300">green</span> = approved leave, so that person is not available at all
 </p>
 
 @if($mode === 'teacher')
@@ -184,6 +190,7 @@
 
                             @foreach($dates as $dayCode => $date)
                                 @php
+                                    $away = $leave[$person->id][$date->toDateString()] ?? null;
                                     $today = $mine->where('day', $dayCode)->sortBy('starts_at');
                                     // Spell the day out underneath as soon as any one bar is too
                                     // narrow to hold its own times. Whatever the chart cannot
@@ -191,6 +198,17 @@
                                     $needsCaption = $today->contains(fn ($s) => blank($barLabel($s->starts_at, $s->ends_at)) || $barLabel($s->starts_at, $s->ends_at) === $compact($s->starts_at));
                                 @endphp
                                 <td class="border-l border-slate-100 px-3 py-2 align-top dark:border-white/10">
+                                    {{-- Leave is drawn across the whole lane, not as a bar with
+                                         times: it is the absence of a shift rather than a short
+                                         one, and a chart that leaves the cell blank cannot tell
+                                         "booked off" apart from "nobody got round to them". --}}
+                                    @if($away)
+                                        <div class="mb-1 flex h-7 items-center justify-center rounded-lg border border-dashed border-emerald-500 bg-emerald-500/10 px-1 text-[10px] font-bold leading-none text-emerald-700 dark:text-emerald-300"
+                                             title="{{ $away->label() }} · approved leave · {{ $away->hours_per_day }}h">
+                                            {{ strtoupper($away->leave_type) }}
+                                        </div>
+                                    @endif
+
                                     <div class="space-y-1">
                                         @foreach($packLanes($today) as $lane)
                                             <div class="relative h-7 rounded" style="{{ $gridlines }}">

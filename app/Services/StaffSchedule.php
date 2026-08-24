@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\ClosureDay;
+use App\Models\LeaveRequest;
 use App\Models\StaffRule;
 use App\Models\StaffScheduleWeek;
 use App\Models\StaffShift;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -45,6 +47,18 @@ class StaffSchedule
     /** @var array<string, array<string, list<string>>> Soft rules broken, by user then rule type. */
     private array $broken = [];
 
+    /**
+     * @var array<int, array<string, int>> Approved leave this week, as minutes
+     *                                     per person per date.
+     */
+    private array $leave = [];
+
+    /** @var array<int, int> The same, narrowed to the day being solved. */
+    private array $leaveToday = [];
+
+    /** @var array<int, int> Operating days each person loses to leave this week. */
+    private array $awayDays = [];
+
     /** @var list<string> */
     private array $warnings = [];
 
@@ -68,6 +82,7 @@ class StaffSchedule
         $this->cover = [];
         $this->broken = [];
         $this->warnings = [];
+        $this->leaveToday = [];
 
         $staff = User::teachers()->with('staffRules')->get();
 
@@ -94,7 +109,26 @@ class StaffSchedule
         $closed = array_flip(ClosureDay::inWeek($weekStart));
 
         $noPair = $this->noPairIndex($staff);
-        $targets = $staff->mapWithKeys(fn (User $person) => [$person->id => $person->weeklyHours() * 60])->all();
+
+        // Approved leave is read here, once, and then bounds the whole solve.
+        // It has to arrive before the targets are set rather than after the
+        // shifts are placed: a teacher on leave Tuesday is owed thirty-two
+        // hours this week, not forty crammed into four days.
+        $this->leave = LeaveRequest::minutesByUserAndDate(
+            $weekStart,
+            end($dates)->toDateString(),
+        );
+
+        // Only ever operating days: workingDates() has already dropped the
+        // weekends and the days the centre is shut, so a closure inside
+        // somebody's holiday costs them nothing here either.
+        $this->awayDays = array_map('count', $this->leave);
+
+        $targets = $staff->mapWithKeys(fn (User $person) => [
+            $person->id => max(0, $person->weeklyHours() * 60 - array_sum($this->leave[$person->id] ?? [])),
+        ])->all();
+
+        $this->reportLeave($staff, $dates, $closed);
 
         /** @var list<array> $rows */
         $rows = [];
@@ -102,6 +136,18 @@ class StaffSchedule
         foreach ($dates as $day => $date) {
             if (isset($closed[$date->toDateString()])) {
                 continue;
+            }
+
+            // Who is out today, in the form the placement checks want it. A day
+            // of approved leave closes the day for that person exactly as an
+            // UNAVAILABLE_DAY rule would — the difference is that this one was
+            // granted rather than contracted, and costs them a balance.
+            $this->leaveToday = [];
+
+            foreach ($this->leave as $userId => $byDate) {
+                if (isset($byDate[$date->toDateString()])) {
+                    $this->leaveToday[$userId] = $byDate[$date->toDateString()];
+                }
             }
 
             $shifts = $this->shiftsForDay($staff, $day, $targets);
@@ -181,6 +227,14 @@ class StaffSchedule
                 continue;
             }
 
+            // Approved leave. Rostering over it is the one failure this whole
+            // feature exists to stop: a chart that shows somebody in a room
+            // they were granted the day off from is worse than no chart, since
+            // the room is planned around a person who will not arrive.
+            if (isset($this->leaveToday[$person->id])) {
+                continue;
+            }
+
             $window = $this->windowFor($person, $day);
 
             if (! $window) {
@@ -192,7 +246,7 @@ class StaffSchedule
             $shifts[] = [
                 'user_id' => $person->id,
                 'starts_at' => $window['start'],
-                'ends_at' => $window['start'] + $this->shiftLength($window, $targets[$person->id], $remaining),
+                'ends_at' => $window['start'] + $this->shiftLength($window, $targets[$person->id], $remaining, $this->spreadDays($person->id)),
                 'classroom' => $this->roomFor($person),
                 'role' => StaffShift::ROLE_STAFF,
             ];
@@ -205,11 +259,17 @@ class StaffSchedule
      * How long a shift should run, given the window and what they are still owed.
      *
      * A fixed shift is taken whole. Otherwise the week's target is spread
-     * evenly across the operating days, then clipped to the window and to what
-     * is left — spreading is what stops someone burning forty hours by
-     * Wednesday and being unavailable when Friday is short.
+     * evenly across the days this person can actually work, then clipped to the
+     * window and to what is left — spreading is what stops someone burning
+     * forty hours by Wednesday and being unavailable when Friday is short.
+     *
+     * The days they can work, not the days the centre opens: somebody owed
+     * thirty-two hours over the four days either side of a booked Wednesday
+     * works eight-hour days like everybody else. Dividing by five would send
+     * them home early all week and then report them six hours short of a target
+     * the roster itself had made unreachable.
      */
-    private function shiftLength(array $window, float $weekTarget, float $remaining): int
+    private function shiftLength(array $window, float $weekTarget, float $remaining, int $spreadDays): int
     {
         $available = $window['end'] - $window['start'];
 
@@ -218,7 +278,7 @@ class StaffSchedule
         }
 
         $minimum = (int) config('daycare.minimum_shift');
-        $perDay = (int) (round(($weekTarget / count(config('daycare.days'))) / 15) * 15);
+        $perDay = (int) (round(($weekTarget / max(1, $spreadDays)) / 15) * 15);
 
         $want = min($available, max($minimum, (int) $remaining));
 
@@ -292,6 +352,18 @@ class StaffSchedule
         return $end > $start
             ? ['start' => $start, 'end' => $end, 'fixed' => (bool) $fixed]
             : null;
+    }
+
+    /**
+     * How many days of this week one person's hours have to fit into.
+     *
+     * The operating week, less whatever they are away for. Never zero: a person
+     * on leave every day has a target of nothing, and dividing by their
+     * remaining days must not be the thing that says so.
+     */
+    private function spreadDays(int $userId): int
+    {
+        return max(1, count(config('daycare.days')) - ($this->awayDays[$userId] ?? 0));
     }
 
     /** The room this person works, honouring preference then title. */
@@ -426,7 +498,7 @@ class StaffSchedule
         // spare hours and picks up cover they will owe back on Friday. A day's
         // share is the same figure shiftLength() builds the base shift from,
         // so anything beyond it is overtime by definition.
-        $perDay = fn (User $person) => ($targets[$person->id] ?? 0) / max(1, count(config('daycare.days')));
+        $perDay = fn (User $person) => ($targets[$person->id] ?? 0) / $this->spreadDays($person->id);
 
         $remaining = fn (User $person) => $perDay($person) - ($booked[$person->id] ?? 0);
 
@@ -437,6 +509,12 @@ class StaffSchedule
         ]);
 
         foreach ($candidates as $person) {
+            // On approved leave, and therefore not available to be pulled into
+            // a gap either. Cover is still a shift.
+            if (isset($this->leaveToday[$person->id])) {
+                continue;
+            }
+
             $forbidden = $person->staffRules
                 ->where('rule_type', 'ROOM_FORBIDDEN')
                 ->contains(fn (StaffRule $rule) => $rule->value_text === $room);
@@ -579,6 +657,123 @@ class StaffSchedule
                 }
             }
         }
+    }
+
+    /**
+     * Say who is away, before anybody wonders why a room is short.
+     *
+     * A ratio gap on Wednesday with no explanation reads as a bug in the
+     * solver. The same gap under a line saying Maria is on approved vacation
+     * reads as a shift that needs covering, which is a thing a director can
+     * actually do something about.
+     *
+     * @param  array<string, Carbon>  $dates
+     * @param  array<string, int>  $closed
+     */
+    private function reportLeave(Collection $staff, array $dates, array $closed): void
+    {
+        foreach ($staff as $person) {
+            $theirs = $this->leave[$person->id] ?? [];
+
+            if ($theirs === []) {
+                continue;
+            }
+
+            $days = [];
+            $minutes = 0;
+
+            foreach ($dates as $day => $date) {
+                $string = $date->toDateString();
+
+                // A closed day costs nobody anything: the centre is shut, so
+                // the leave was never spent and the day is not missing cover.
+                if (isset($closed[$string]) || ! isset($theirs[$string])) {
+                    continue;
+                }
+
+                $days[] = $day;
+                $minutes += $theirs[$string];
+            }
+
+            if ($days === []) {
+                continue;
+            }
+
+            $this->warnings[] = sprintf(
+                '%s is on approved leave %s. No shift was placed on %s and their target for the week is %sh lower.',
+                $person->name,
+                count($days) === count($dates) ? 'all week' : implode(', ', $days),
+                count($days) === 1 ? 'that day' : 'those days',
+                round($minutes / 60, 1),
+            );
+        }
+    }
+
+    /**
+     * Take an approved absence out of a roster that is already published.
+     *
+     * Leave is not always requested before the week is built, and a chart that
+     * still shows somebody in the Toddler room on a day they were granted off
+     * is a plan built around a person who will not arrive. So their shifts on
+     * those dates go, and the week keeps a line saying so — because pulling a
+     * teacher out silently would turn a visible shortfall into an invisible
+     * one, which is the one thing worse than the shortfall.
+     *
+     * Their colleagues' shifts are left exactly as they are. Re-solving the
+     * whole week would rewrite everybody's published hours over one person's
+     * day off, and people have already made childcare arrangements around it.
+     * Regenerating remains the director's decision, and the warning asks for it.
+     *
+     * @return list<string> The weeks that changed, as Monday dates.
+     */
+    public function applyLeave(LeaveRequest $request): array
+    {
+        $dates = $request->workingDates();
+
+        if ($dates === []) {
+            return [];
+        }
+
+        $shifts = StaffShift::where('user_id', $request->user_id)
+            ->whereIn('shift_date', $dates)
+            ->get();
+
+        if ($shifts->isEmpty()) {
+            return [];
+        }
+
+        $name = $request->user?->name ?? 'A staff member';
+        $touched = [];
+
+        DB::transaction(function () use ($shifts, $request, $name, &$touched) {
+            StaffShift::whereKey($shifts->pluck('id'))->delete();
+
+            foreach ($shifts->groupBy(fn (StaffShift $shift) => $shift->week_start->toDateString()) as $weekStart => $ofWeek) {
+                $touched[] = $weekStart;
+
+                $week = StaffScheduleWeek::firstWhere('week_start', $weekStart);
+
+                if (! $week) {
+                    continue;
+                }
+
+                $days = $ofWeek->pluck('day')->unique()->values()->implode(', ');
+
+                $week->forceFill([
+                    'warnings' => array_values(array_unique(array_merge($week->warnings ?? [], [
+                        sprintf(
+                            '%s was granted %s on %s after this week was built. %d shift(s) were removed — regenerate the week to re-cover those rooms.',
+                            $name,
+                            strtolower($request->label()),
+                            $days,
+                            $ofWeek->count(),
+                        ),
+                    ]))),
+                ])->save();
+            }
+        });
+
+        return array_values(array_unique($touched));
     }
 
     /** Summarise the week's broken preferences, one line per person per rule. */

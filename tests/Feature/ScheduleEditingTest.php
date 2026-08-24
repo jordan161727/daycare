@@ -558,11 +558,34 @@ class ScheduleEditingTest extends TestCase
             ->getContent();
 
         // Four states are all expressible from the front end.
-        $this->assertStringContainsString('Not enrolled on this date', $html);        // nothing
-        $this->assertStringContainsString('border-indigo-200 bg-indigo-50', $html);   // scheduled
-        $this->assertStringContainsString('border-slate-200 bg-slate-100', $html);    // not scheduled
-        $this->assertStringContainsString('border-emerald-200 bg-emerald-50', $html); // signed in
-        $this->assertStringContainsString('border-amber-300 bg-amber-50', $html);     // signed in off-schedule
+        $this->assertStringContainsString('Not enrolled on this date', $html);          // nothing
+        $this->assertStringContainsString('border-indigo-500 bg-indigo-200', $html);    // scheduled
+        $this->assertStringContainsString('border-slate-300 bg-slate-100', $html);      // not scheduled
+        $this->assertStringContainsString('border-emerald-500 bg-emerald-100', $html);  // signed in
+        $this->assertStringContainsString('border-amber-500 bg-amber-100', $html);      // signed in off-schedule
+    }
+
+    public function test_the_sheet_carries_a_key_to_its_own_colours(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->getContent();
+
+        // Every state the grid can paint is named beside it, so a colour never
+        // has to be learned from the documentation.
+        $this->assertStringContainsString('Signed in, not scheduled', $html);
+        $this->assertStringContainsString('Scheduled', $html);
+        $this->assertStringContainsString('Not scheduled', $html);
+        $this->assertStringContainsString('Not enrolled', $html);
+        $this->assertStringContainsString('the projection disagrees with the schedule', $html);
+
+        // And the key for the other view, which has ticks rather than sign-ins.
+        $this->assertStringContainsString('Ticked', $html);
+        $this->assertStringContainsString('Centre closed', $html);
     }
 
     public function test_a_gray_day_still_accepts_a_sign_in(): void

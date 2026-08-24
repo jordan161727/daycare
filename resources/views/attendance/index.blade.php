@@ -1,6 +1,44 @@
 @extends('layouts.app')
 @section('title', 'Class Attendance')
 @section('content')
+@php
+    /*
+     * The four states of a sign-in box, in one place.
+     *
+     * boxClass() paints the grid from this map and the legend paints its
+     * swatches from it, so the key beside the sheet cannot drift away from the
+     * sheet itself. Every fill is strong enough to be told apart at arm's
+     * length across a room — the brand blue is a pale one, so a 50-weight tint
+     * of it read as white next to gray and the two most common states were
+     * effectively the same colour.
+     */
+    $boxStates = [
+        'present' => [
+            'label' => 'Signed in',
+            'hint' => 'with the time they arrived',
+            'swatch' => '✓',
+            'classes' => 'border-emerald-500 bg-emerald-100 text-emerald-800 dark:border-emerald-400/50 dark:bg-emerald-500/20 dark:text-emerald-200',
+        ],
+        'unplanned' => [
+            'label' => 'Signed in, not scheduled',
+            'hint' => 'unplanned, and still billable',
+            'swatch' => '✓',
+            'classes' => 'border-amber-500 bg-amber-100 text-amber-900 dark:border-amber-400/50 dark:bg-amber-500/20 dark:text-amber-100',
+        ],
+        'scheduled' => [
+            'label' => 'Scheduled',
+            'hint' => 'expected today, not signed in yet',
+            'swatch' => 'Present',
+            'classes' => 'border-indigo-500 bg-indigo-200 text-indigo-800 hover:bg-indigo-300 dark:border-indigo-400/50 dark:bg-indigo-500/20 dark:text-indigo-100',
+        ],
+        'off' => [
+            'label' => 'Not scheduled',
+            'hint' => 'click to sign them in anyway',
+            'swatch' => 'Present',
+            'classes' => 'border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400',
+        ],
+    ];
+@endphp
 <div x-data="attendanceApp()" @pointermove.window="paintAt($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()">
     {{-- What the last copy did. Without this the page redirects back looking
          untouched, and a copy that worked is indistinguishable from one that
@@ -147,6 +185,9 @@
 
             <div class="mt-3" x-show="view === 'signin'">
                 <div class="glass-card overflow-hidden rounded-2xl">
+                    {{-- What the colours mean, above the grid they describe. --}}
+                    @include('attendance.partials.legend', ['for' => 'signin', 'boxStates' => $boxStates])
+
                     {{-- Week grid: needs the width, so it only appears from md up. --}}
                     <div class="hidden overflow-x-auto md:block">
                         <table class="w-full min-w-[860px] border-collapse text-left">
@@ -181,7 +222,13 @@
                                                          enrolment dates that decide whether a box exists at all. --}}
                                                     <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100" x-text="child.first_name + ' ' + child.last_name" :title="'Open ' + child.first_name + '\'s record'"></a>
                                                     <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></p>
-                                                    <p class="truncate text-xs" :class="roomClass(child)" :title="roomTitle(child)" x-text="roomLabel(child)"></p>
+                                                    {{-- The brand blue is close enough to gray that a
+                                                         hand-set room read as an automatic one. The mark
+                                                         says which it is without relying on the colour. --}}
+                                                    <p class="flex items-center gap-1 truncate text-xs" :class="roomClass(child)" :title="roomTitle(child)">
+                                                        <span class="truncate" x-text="roomLabel(child)"></span>
+                                                        <span x-show="child.classroom_override" x-cloak class="shrink-0" x-text="child.override_stale ? '⚠' : '✎'"></span>
+                                                    </p>
                                                 </div>
                                             </div>
                                         </td>
@@ -595,16 +642,19 @@ function attendanceApp() { return {
     },
     sessionLabel(session) { return session === 'FULL' ? 'all day' : (session === 'AM' ? 'morning' : 'afternoon'); },
 
-    /* ---- the four states of a sign-in box ---- */
+    /* ---- the four states of a sign-in box, painted from the one map the
+            legend above the grid is painted from ---- */
+    boxStates: @js($boxStates),
+    // Signed in on a day nobody planned for. Amber, and marked, so it is not
+    // green's colour alone that separates the two.
+    isUnplanned(childId, date, session) {
+        return this.isPresent(childId, date, session) && ! this.isScheduled(childId, date, session);
+    },
     boxClass(childId, date, session) {
         if (this.isPresent(childId, date, session)) {
-            return this.isScheduled(childId, date, session)
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
-                : 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200';
+            return this.boxStates[this.isUnplanned(childId, date, session) ? 'unplanned' : 'present'].classes;
         }
-        const base = this.isScheduled(childId, date, session)
-            ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-500/10 dark:text-indigo-200'
-            : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400';
+        const base = this.boxStates[this.isScheduled(childId, date, session) ? 'scheduled' : 'off'].classes;
 
         // Sky ring: the forecast disagrees with the plan. A ring rather than a
         // fill, so it never competes with the four states the box already has.

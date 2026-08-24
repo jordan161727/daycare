@@ -6,6 +6,7 @@ use App\Models\TimePunch;
 use App\Models\TimesheetEntry;
 use App\Models\TimesheetPeriod;
 use App\Models\User;
+use App\Services\LeaveLedger;
 use App\Services\PayPeriod;
 use App\Services\TimeClock;
 use App\Services\Timesheet;
@@ -31,6 +32,7 @@ class TimesheetController extends Controller
     public function __construct(
         private Timesheet $timesheets,
         private TimeClock $clock,
+        private LeaveLedger $ledger,
     ) {}
 
     public function index(Request $request)
@@ -237,8 +239,17 @@ class TimesheetController extends Controller
             'approved_at' => now(),
         ])->save();
 
-        return back()->with('success', 'Approved — '.number_format($totals['paid_hours'], 2)
-            .' paid hours across '.$totals['employees'].' employee(s). The period is now frozen.');
+        // Leave is earned by hours that have been signed off, so approving is
+        // the moment it becomes real. Doing it here rather than on a schedule
+        // means a balance can never be built on hours a correction later took
+        // away — and posting is idempotent, so reopening and re-approving the
+        // same period does not pay the accrual twice.
+        $accrued = $this->ledger->accrue($period, $request->user());
+
+        return back()
+            ->with('success', 'Approved — '.number_format($totals['paid_hours'], 2)
+                .' paid hours across '.$totals['employees'].' employee(s). The period is now frozen.')
+            ->with('accrual', $accrued);
     }
 
     /** Unlock an approved period, for the correction that arrives too late. */
