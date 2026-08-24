@@ -16,12 +16,7 @@ use App\Http\Controllers\TimeClockController;
 use App\Http\Controllers\TimePunchController;
 use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\ScheduleController;
-<<<<<<< HEAD
-use App\Http\Controllers\StaffRuleController;
-use App\Http\Controllers\StaffScheduleController;
-=======
 use App\Http\Controllers\ProfileController;
->>>>>>> d7025b2 (Profile)
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;

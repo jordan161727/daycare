@@ -38,22 +38,8 @@ class User extends Authenticatable
         'employment',
         'title',
         'legal_name',
-<<<<<<< HEAD
-        'phone',
-        'emergency_contact',
-        'emergency_phone',
-        'start_date',
-        'dob',
-        'transport',
-        'aspire_id',
-        'direct_deposit',
-        'pay_rate',
-        'evaluation_score',
-        'staff_notes',
-=======
         'start_date',
         'aspire_id',
->>>>>>> d7025b2 (Profile)
     ];
 
     /**
@@ -79,16 +65,8 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'password_changed_at' => 'datetime',
             'classrooms' => 'array',
-<<<<<<< HEAD
-            'start_date' => 'date:Y-m-d',
-            'dob' => 'date:Y-m-d',
-            'direct_deposit' => 'boolean',
-            'pay_rate' => 'decimal:2',
-            'evaluation_score' => 'float',
-=======
             'dob' => 'date:Y-m-d',
             'start_date' => 'date:Y-m-d',
->>>>>>> d7025b2 (Profile)
         ];
     }
 
