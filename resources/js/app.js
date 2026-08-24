@@ -107,4 +107,25 @@ Alpine.data('appShell', () => ({
     },
 }));
 
+
+// Shows the picked photo straight away, so the profile page confirms the choice
+// before the upload happens.
+Alpine.data('avatarPicker', () => ({
+    preview: '',
+    filename: '',
+    select(event) {
+        const file = event.target.files[0];
+        if (!file) return this.clear();
+        if (this.preview) URL.revokeObjectURL(this.preview);
+        this.filename = file.name;
+        this.preview = URL.createObjectURL(file);
+    },
+    clear() {
+        if (this.preview) URL.revokeObjectURL(this.preview);
+        this.$refs.photo.value = '';
+        this.preview = '';
+        this.filename = '';
+    },
+}));
+
 Alpine.start();

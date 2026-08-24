@@ -16,8 +16,12 @@ use App\Http\Controllers\TimeClockController;
 use App\Http\Controllers\TimePunchController;
 use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\ScheduleController;
+<<<<<<< HEAD
 use App\Http\Controllers\StaffRuleController;
 use App\Http\Controllers\StaffScheduleController;
+=======
+use App\Http\Controllers\ProfileController;
+>>>>>>> d7025b2 (Profile)
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -177,6 +181,12 @@ Route::middleware('role:admin,teacher')->group(function () {
 Route::middleware('role:admin')->group(function () {
     Route::post('/attendance/schedule/classroom', [ScheduleController::class, 'classroom'])->name('attendance.schedule.classroom');
 });
+
+// Everyone gets to keep their own account details current, whatever their role.
+Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+Route::delete('/profile/photo', [ProfileController::class, 'destroyPhoto'])->name('profile.photo.destroy');
 
 Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });

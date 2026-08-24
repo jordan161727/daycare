@@ -1,6 +1,10 @@
 {
   "resources/css/app.css": {
+<<<<<<< HEAD
     "file": "assets/app-sgTLDM44.css",
+=======
+    "file": "assets/app-mVRQ1H7s.css",
+>>>>>>> d7025b2 (Profile)
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -9,7 +13,7 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-C1VFv3n5.js",
+    "file": "assets/app-BUfOfAVK.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true

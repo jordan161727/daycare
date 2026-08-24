@@ -42,7 +42,7 @@
         @endif
     </nav>
     <div class="border-t border-white/15 p-4">
-        <div class="flex items-center gap-3 rounded-xl p-2"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/55 font-semibold">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span><span x-show="!collapsed" class="min-w-0"><span class="block truncate text-sm font-semibold">{{ auth()->user()->name }}</span><span class="block text-xs text-slate-600">{{ ucfirst(auth()->user()->role) }}</span></span></div>
+        <a href="{{ route('profile.edit') }}" class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-white/55 {{ request()->routeIs('profile.*') ? 'bg-white/70' : '' }}" title="My profile"><x-user-avatar :user="auth()->user()" /><span x-show="!collapsed" class="min-w-0"><span class="block truncate text-sm font-semibold">{{ auth()->user()->name }}</span><span class="block text-xs text-slate-600">{{ ucfirst(auth()->user()->role) }}</span></span></a>
         <form method="POST" action="{{ route('logout') }}">@csrf<button class="nav-link mt-2 w-full"><svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m4 8H5a2 2 0 01-2-2V6a2 2 0 012-2h6"/></svg><span x-show="!collapsed">Logout</span></button></form>
     </div>
 </aside>

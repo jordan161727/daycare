@@ -7,6 +7,8 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
@@ -21,6 +23,12 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'phone',
+        'emergency_contact',
+        'emergency_phone',
+        'dob',
+        'transport',
+        'avatar_path',
         'password',
         'must_change_password',
         'password_changed_at',
@@ -30,6 +38,7 @@ class User extends Authenticatable
         'employment',
         'title',
         'legal_name',
+<<<<<<< HEAD
         'phone',
         'emergency_contact',
         'emergency_phone',
@@ -41,6 +50,10 @@ class User extends Authenticatable
         'pay_rate',
         'evaluation_score',
         'staff_notes',
+=======
+        'start_date',
+        'aspire_id',
+>>>>>>> d7025b2 (Profile)
     ];
 
     /**
@@ -66,11 +79,16 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'password_changed_at' => 'datetime',
             'classrooms' => 'array',
+<<<<<<< HEAD
             'start_date' => 'date:Y-m-d',
             'dob' => 'date:Y-m-d',
             'direct_deposit' => 'boolean',
             'pay_rate' => 'decimal:2',
             'evaluation_score' => 'float',
+=======
+            'dob' => 'date:Y-m-d',
+            'start_date' => 'date:Y-m-d',
+>>>>>>> d7025b2 (Profile)
         ];
     }
 
@@ -182,5 +200,36 @@ class User extends Authenticatable
     public function students()
     {
         return $this->hasMany(Child::class, 'classroom', 'classroom');
+    }
+
+    /**
+     * Where the browser can fetch this user's photo, or null when they have
+     * none and the initials badge should stand in for it.
+     *
+     * Built with asset() rather than the disk's own url(), which is pinned to
+     * APP_URL: that hands a local browser the live site's address and the photo
+     * comes back broken. asset() follows the host the page was served from.
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        if (blank($this->avatar_path) || ! Storage::disk('public')->exists($this->avatar_path)) {
+            return null;
+        }
+
+        return asset('storage/'.$this->avatar_path);
+    }
+
+    /** First letters of the first and last name, for the fallback badge. */
+    public function getInitialsAttribute(): string
+    {
+        $words = preg_split('/\s+/', trim((string) $this->name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($words === []) {
+            return '?';
+        }
+
+        $initials = Str::substr($words[0], 0, 1).(count($words) > 1 ? Str::substr(end($words), 0, 1) : '');
+
+        return Str::upper($initials);
     }
 }
