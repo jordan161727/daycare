@@ -40,6 +40,14 @@ class User extends Authenticatable
         'legal_name',
         'start_date',
         'aspire_id',
+        // The teacher form validates and posts these, so they have to be
+        // assignable or an admin's pay rate is dropped on the way in and
+        // payroll then has no rate to work an estimated gross out of. Every
+        // route that writes them is behind role:admin.
+        'direct_deposit',
+        'pay_rate',
+        'evaluation_score',
+        'staff_notes',
     ];
 
     /**
@@ -67,6 +75,14 @@ class User extends Authenticatable
             'classrooms' => 'array',
             'dob' => 'date:Y-m-d',
             'start_date' => 'date:Y-m-d',
+            'direct_deposit' => 'boolean',
+            // Decimal rather than float: MySQL hands a DECIMAL column back as
+            // '15.50' and SQLite as 15.5, and a pay rate that loses its second
+            // place on one driver and keeps it on the other is a payslip that
+            // reads differently depending on where it was printed. Readers that
+            // do arithmetic on it already cast at the point they use it.
+            'pay_rate' => 'decimal:2',
+            'evaluation_score' => 'decimal:1',
         ];
     }
 

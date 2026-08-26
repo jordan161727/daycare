@@ -7,7 +7,7 @@
     500px wide. @container asks the box it is actually in, so the same markup
     fills a 1400px page and stays two columns beside the scan.
 --}}
-<form method="POST" action="{{ $action }}" class="@container glass-card rounded-2xl p-6 sm:p-8">
+<form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="@container glass-card rounded-2xl p-6 sm:p-8">
     @csrf
     @if($method !== 'POST') @method($method) @endif
     @php($extracted = $extracted ?? [])
@@ -23,6 +23,44 @@
         return $value instanceof \Carbon\CarbonInterface ? $value->toDateString() : $value;
     })
     @isset($importToken)<input type="hidden" name="import_token" value="{{ $importToken }}">@endisset
+    {{-- The photograph, first, because it is what a relief teacher matches to a
+         face. Alpine swaps the preview as soon as a file is chosen, so the
+         wrong photo is caught here rather than on the record. --}}
+    <div x-data="{ preview: null, cleared: false }" class="mb-7 flex flex-wrap items-center gap-5 border-b border-slate-100 pb-7 dark:border-white/10">
+        {{-- Three states in one 96px square: the file just chosen, the photo on
+             file, and the initial that stands in for either. --}}
+        @php($currentPhoto = $child?->photoUrl())
+        <div class="h-24 w-24 shrink-0">
+            <img x-show="preview" x-cloak :src="preview" alt="" class="h-24 w-24 rounded-2xl object-cover ring-1 ring-slate-200 dark:ring-white/10">
+            @if($currentPhoto)
+                <img x-show="! preview && ! cleared" src="{{ $currentPhoto }}" alt="{{ $child->first_name }} {{ $child->last_name }}" class="h-24 w-24 rounded-2xl object-cover ring-1 ring-slate-200 dark:ring-white/10">
+            @endif
+            {{-- The drawn face the child would be shown with, so what happens
+                 on Remove is visible before it is saved. --}}
+            <div x-show="! preview @if($currentPhoto) && cleared @endif" @if($currentPhoto) x-cloak @endif>
+                @if($child)
+                    <x-child-avatar :child="$child" size="h-24 w-24" shape="rounded-2xl" class="ring-1 ring-slate-200 dark:ring-white/10" />
+                @else
+                    <div class="grid h-24 w-24 place-items-center rounded-2xl bg-slate-100 text-3xl text-slate-300 dark:bg-slate-800">＋</div>
+                @endif
+            </div>
+        </div>
+        <div class="min-w-0 flex-1">
+            <span class="mb-2 block text-sm font-semibold">Photo</span>
+            <input type="file" name="photo" accept="image/jpeg,image/png,image/webp"
+                @change="preview = $event.target.files[0] ? URL.createObjectURL($event.target.files[0]) : null; cleared = false"
+                class="block w-full max-w-sm cursor-pointer rounded-xl border border-slate-200 bg-white text-sm file:mr-4 file:cursor-pointer file:rounded-l-xl file:border-0 file:bg-slate-100 file:px-4 file:py-3 file:text-sm file:font-semibold file:text-slate-700 dark:border-white/10 dark:bg-slate-800 dark:file:bg-slate-700 dark:file:text-slate-200">
+            <x-input-error :messages="$errors->get('photo')" />
+            <span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">JPG, PNG or WebP, up to 4 MB. Kept off the public web — only staff who may see this child can open it.</span>
+            @if($currentPhoto)
+                <label class="mt-2 inline-flex items-center gap-2 text-xs font-medium text-rose-600 dark:text-rose-400">
+                    <input type="checkbox" name="remove_photo" value="1" x-model="cleared" class="rounded border-slate-300 text-rose-600 focus:ring-rose-500">
+                    Remove the photo on file
+                </label>
+            @endif
+        </div>
+    </div>
+
     {{-- Identity and enrolment. Three columns at most: every field here carries a
          line of help under it, and a fourth column would squeeze those to shreds. --}}
     <div class="grid gap-5 @md:grid-cols-2 @4xl:grid-cols-3">
@@ -39,10 +77,13 @@
              `birth_date` after it. Reading only the newer column opened those
              records with the field blank, which then saved the date away. --}}
         @php($formBirthDate = old('birth_date', $child?->birthDate()?->toDateString() ?? ($extracted['birth_date'] ?? null)) ?: null)
-        {{-- The date of birth is the fact that gets typed in; the age is read
-             off it wherever it is shown, so there is no second field to keep in
-             step and no age left behind when the date is corrected. --}}
-        <label class="block"><span class="mb-2 block text-sm font-semibold">Date of birth{!! $fromDocument('birth_date') ? $documentBadge : '' !!}</span><input id="birth_date" type="date" name="birth_date" value="{{ $formBirthDate }}" class="{{ $fieldClass('birth_date') }}"><x-input-error :messages="$errors->get('birth_date')" /><span id="age-preview" class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">@php($previewAge = $formBirthDate ? \App\Models\Child::ageLabelFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null){{ $previewAge ? 'Currently '.$previewAge.' old.' : 'The age on the roster follows this date.' }}</span></label>
+        {{-- The date of birth is the fact that gets typed in; the roster's Age
+             column is this same date written 3/15/2026, so there is no second
+             field to keep in step and nothing left behind when it is corrected. --}}
+        <label class="block"><span class="mb-2 block text-sm font-semibold">Date of birth{!! $fromDocument('birth_date') ? $documentBadge : '' !!}</span><input id="birth_date" type="date" name="birth_date" value="{{ $formBirthDate }}" class="{{ $fieldClass('birth_date') }}"><x-input-error :messages="$errors->get('birth_date')" /><span id="age-preview" class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">@php($previewAge = $formBirthDate ? \App\Models\Child::ageLabelFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null){{ $previewAge ? 'The roster shows this as '.$previewAge.'.' : 'The age on the roster follows this date.' }}</span></label>
+        {{-- Only the drawn stand-in face reads this, which is exactly why it is
+             asked rather than guessed: a name does not say, in any language. --}}
+        <label class="block"><span class="mb-2 block text-sm font-semibold">Girl or boy</span><select name="gender" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><option value="">Not recorded</option>@foreach(\App\Models\Child::GENDERS as $gender)<option value="{{ $gender }}" @selected(old('gender', $child?->gender) === $gender)>{{ $gender }}</option>@endforeach</select><x-input-error :messages="$errors->get('gender')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">Used for the drawn face shown until a photo is uploaded. Leave it blank and the face stays neutral.</span></label>
         @php($automaticRoom = $formBirthDate ? \App\Services\ClassroomAssignment::automaticFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null)
         @php($chosenRoom = old('classroom_override', $child?->classroom_override))
         <div class="block">
@@ -58,6 +99,13 @@
                         Add a date of birth and the room follows it.
                     @endif
                 </p>
+                {{-- What the room this child lands in actually runs as. Read
+                     only: it is set once for the whole room on the Room
+                     Schedules page, not per child. --}}
+                @php($roomSchedule = \App\Models\RoomSchedule::byRoom()[$chosenRoom ?: $automaticRoom] ?? null)
+                @if($roomSchedule?->hoursLabel())
+                    <p class="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">🕘 {{ $roomSchedule->hoursLabel() }}</p>
+                @endif
             </div>
         </div>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Override the classroom</span><select name="classroom_override" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><option value="">Use the automatic room</option>@foreach(\App\Services\ClassroomAssignment::rooms() as $room)<option value="{{ $room }}" @selected(old('classroom_override', $child?->classroom_override) === $room)>{{ $room }}</option>@endforeach</select><x-input-error :messages="$errors->get('classroom_override')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">For moving a child up early. It holds until you clear it.</span></label>
@@ -70,6 +118,16 @@
              — the attendance does that — so a wrong number here never puts a
              child in a room nobody staffed for. --}}
         <label class="block @md:col-span-2"><span class="mb-2 block text-sm font-semibold">Expected hours a week</span><input type="number" name="expected_hours_per_week" step="0.25" min="0" max="168" value="{{ old('expected_hours_per_week', $child?->expected_hours_per_week) }}" placeholder="e.g. {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS * 5, 1) }} for a full week" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('expected_hours_per_week')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">A full day counts as {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS, 1) }} h, a morning or afternoon as {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS / 2, 1) }} h. Leave blank if it has not been agreed — the week's projection then reports the days without a target to hit. Zero means they are not expected at all.</span></label>
+        {{-- The hours of the day, as against the expected hours of the week and
+             the schedule boxes on the attendance page — those say which days a
+             child comes, these say when in the day they arrive and go home.
+
+             A new record opens on the full day the centre is open; narrowing it
+             is the edit that gets made, and starting from the widest pair means
+             nobody has to type both ends to say "the usual". --}}
+        @php($scheduleDefault = fn ($field, $default) => \App\Models\Child::timeInputValue(old($field, $child ? $child->{$field} : $default)))
+        <label class="block"><span class="mb-2 block text-sm font-semibold">Drop-off time</span><input type="time" name="drop_off_time" value="{{ $scheduleDefault('drop_off_time', \App\Models\Child::DAY_OPENS_AT) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('drop_off_time')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">When they normally arrive. The centre opens at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_OPENS_AT) }}.</span></label>
+        <label class="block"><span class="mb-2 block text-sm font-semibold">Pick-up time</span><input type="time" name="pick_up_time" value="{{ $scheduleDefault('pick_up_time', \App\Models\Child::DAY_CLOSES_AT) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('pick_up_time')" /><span class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">When they normally go home. The centre closes at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_CLOSES_AT) }}.</span></label>
     </div>
     @php($sections = [
         'Child details' => ['Nickname' => 'nickname', 'Address' => 'address', 'City' => 'city', 'Zip' => 'zip', 'Telephone' => 'telephone', 'Parents Status' => 'parents_status', 'Responsible for Payment' => 'responsible_for_payment'],
@@ -89,25 +147,18 @@
     {{-- Two boxes of prose: side by side once there is width for both. --}}
     <section class="mt-8 border-t border-slate-200 pt-7 dark:border-white/10"><h2 class="mb-5 text-lg font-bold">Notes</h2><div class="grid gap-5 @4xl:grid-cols-2"><label><span class="mb-2 block text-sm font-semibold">Other Notes{!! $fromDocument('other_notes') ? $documentBadge : '' !!}</span><textarea name="other_notes" rows="3" class="{{ $fieldClass('other_notes') }}">{{ old('other_notes', $child?->other_notes ?? ($extracted['other_notes'] ?? '')) }}</textarea></label><label><span class="mb-2 block text-sm font-semibold">Important Notes{!! $fromDocument('important_notes') ? $documentBadge : '' !!}</span><textarea name="important_notes" rows="3" class="{{ $fieldClass('important_notes') }}">{{ old('important_notes', $child?->important_notes ?? ($extracted['important_notes'] ?? '')) }}</textarea></label></div></section>
     <script>
-        /* The age under the field says what the roster will say, so a mistyped
-           year shows up here rather than three screens later. */
+        /* The line under the field says what the roster's Age column will say,
+           so a mistyped year shows up here rather than three screens later. */
         (() => {
             const birth = document.getElementById('birth_date'), preview = document.getElementById('age-preview');
             if (!birth || !preview) return;
-            const plural = (count, word) => `${count} ${count === 1 ? word : word + 's'}`;
             const label = () => {
                 if (!birth.value) return 'The age on the roster follows this date.';
                 const dob = new Date(`${birth.value}T00:00:00`);
                 if (isNaN(dob)) return 'The age on the roster follows this date.';
                 const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 if (dob > today) return 'That date is in the future — check the year.';
-                let years = today.getFullYear() - dob.getFullYear(), months = today.getMonth() - dob.getMonth();
-                if (today.getDate() < dob.getDate()) months--;
-                if (months < 0) { years--; months += 12; }
-                if (years > 0) return `Currently ${plural(years, 'year')}${months ? ` and ${plural(months, 'month')}` : ''} old.`;
-                if (months > 0) return `Currently ${plural(months, 'month')} old.`;
-                const days = Math.round((today - dob) / 86400000);
-                return `Currently ${days >= 7 ? plural(Math.floor(days / 7), 'week') : plural(days, 'day')} old.`;
+                return `The roster shows this as ${dob.getMonth() + 1}/${dob.getDate()}/${dob.getFullYear()}.`;
             };
             const refresh = () => { preview.textContent = label(); };
             birth.addEventListener('change', refresh);

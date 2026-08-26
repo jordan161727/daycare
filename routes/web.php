@@ -17,6 +17,9 @@ use App\Http\Controllers\TimePunchController;
 use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RoomScheduleController;
+use App\Http\Controllers\StaffRuleController;
+use App\Http\Controllers\StaffScheduleController;
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -66,12 +69,26 @@ Route::get('/dashboard', function () {
 
 Route::get('/children', [ChildController::class, 'index'])->name('children.index');
 
+// A child's record, readable by whoever may see the child on the roster — the
+// director, and the teacher whose room they are in. Numbers only, or this would
+// swallow /children/create and the import routes below it.
+Route::get('/children/{child}', [ChildController::class, 'show'])->name('children.show')->whereNumber('child');
+
+// The child's photograph. On the private disk and served through here, so the
+// same people who may open the record are the only ones who may see the face.
+Route::get('/children/{child}/photo', [ChildController::class, 'photo'])->name('children.photo')->whereNumber('child');
+
 Route::middleware('role:admin')->group(function () {
 Route::get('/children/import-document', [ChildDocumentController::class, 'create'])->name('children.document-import.create');
 Route::post('/children/import-document', [ChildDocumentController::class, 'store'])->name('children.document-import.store');
 Route::get('/children/import-document/{token}/review', [ChildDocumentController::class, 'review'])->name('children.document-import.review');
 Route::get('/children/import-document/{token}/file', [ChildDocumentController::class, 'file'])->name('children.document-import.file');
 Route::resource('teachers', TeacherController::class)->parameters(['teachers' => 'teacher']);
+
+// The standing hours of each room and who has it. Read by the children's
+// records, which is why it is set here rather than per week.
+Route::get('/room-schedule', [RoomScheduleController::class, 'index'])->name('room-schedule.index');
+Route::put('/room-schedule', [RoomScheduleController::class, 'update'])->name('room-schedule.update');
 
 // Scheduling rules only ever make sense against the person they constrain, so
 // they are nested rather than given a table of their own.

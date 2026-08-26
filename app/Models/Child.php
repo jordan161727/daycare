@@ -6,12 +6,26 @@ use App\Services\ClassroomAssignment;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use App\Models\User;
 
 class Child extends Model
 {
     /** Rooms signed in by half day rather than one full-day stamp. */
     public const SESSION_ROOMS = ['School Age'];
+
+    /**
+     * What the record may say about a child, and nothing else.
+     *
+     * Blank is the third state and the default one: plenty of records predate
+     * the question being asked. Only the drawn avatar reads this.
+     */
+    public const GENDERS = ['Girl', 'Boy'];
+
+    /** The earliest drop-off and the latest pick-up the centre will take. */
+    public const DAY_OPENS_AT = '07:00';
+
+    public const DAY_CLOSES_AT = '20:00';
 
     protected $casts = [
         'dob' => 'date',
@@ -32,8 +46,12 @@ class Child extends Model
         'enrolled_on',
         'withdrawn_on',
         'expected_hours_per_week',
+        'drop_off_time',
+        'pick_up_time',
         'first_name',
         'last_name',
+        'photo_path',
+        'gender',
         'dob',
         'age',
         'classroom',
@@ -86,49 +104,78 @@ class Child extends Model
     }
 
     /**
-     * How old a child born on a date is, worded the way the roster reads it:
-     * "1 year and 3 months". Worked out on every read rather than stored, so it
-     * cannot drift out of step with the date it comes from.
+     * The date of birth written the way the roster reads it: 3/15/2026.
+     *
+     * The column is headed "Age", but what the office reads off it is the date
+     * itself. Formatted on every read rather than stored, so it cannot drift
+     * out of step with the date it comes from.
      */
-    public static function ageLabelFor(?CarbonInterface $birthDate, ?CarbonInterface $asOf = null): ?string
+    public static function ageLabelFor(?CarbonInterface $birthDate): ?string
     {
-        if (! $birthDate) {
-            return null;
-        }
-
-        $birthDate = $birthDate->copy()->startOfDay();
-        $asOf = ($asOf ? $asOf->copy() : Carbon::today())->startOfDay();
-
-        // A date of birth in the future is a typo, not an age. diff() reports
-        // the gap whichever way round it is, so it has to be ruled out here
-        // instead of coming back as a plausible-looking number of months.
-        if ($birthDate->gt($asOf)) {
-            return null;
-        }
-
-        $difference = $birthDate->diff($asOf);
-        $plural = fn (int $count, string $word) => $count.' '.($count === 1 ? $word : $word.'s');
-
-        if ($difference->y > 0) {
-            return $difference->m > 0
-                ? $plural($difference->y, 'year').' and '.$plural($difference->m, 'month')
-                : $plural($difference->y, 'year');
-        }
-
-        if ($difference->m > 0) {
-            return $plural($difference->m, 'month');
-        }
-
-        // Infants arrive at six weeks, so their first months are read in weeks.
-        return $difference->days >= 7
-            ? $plural(intdiv($difference->days, 7), 'week')
-            : $plural($difference->days, 'day');
+        return $birthDate?->format('n/j/Y');
     }
 
-    /** This child's age today, or null when no date of birth is on file. */
-    public function ageLabel(?Carbon $asOf = null): ?string
+    /** This child's date of birth as the roster shows it, or null when none is on file. */
+    public function ageLabel(): ?string
     {
-        return static::ageLabelFor($this->birthDate(), $asOf);
+        return static::ageLabelFor($this->birthDate());
+    }
+
+    /**
+     * Where the browser can fetch this child's photograph, or null when there
+     * is none to fetch.
+     *
+     * A route rather than a URL on a public disk. The file is a photograph of a
+     * minor, so every request for it goes through the same check the child's
+     * record does — see ChildController::photo. The existence check keeps a row
+     * pointing at a file somebody has since removed from showing as a broken
+     * image on every page the child appears on.
+     */
+    public function photoUrl(): ?string
+    {
+        if (blank($this->photo_path) || ! Storage::disk('local')->exists($this->photo_path)) {
+            return null;
+        }
+
+        return route('children.photo', $this);
+    }
+
+    /** The initial the avatar falls back to while there is no photograph. */
+    public function initial(): string
+    {
+        return strtoupper(substr($this->first_name ?? '?', 0, 1));
+    }
+
+    /**
+     * The contracted day as one line — "7:00 AM – 5:30 PM" — or null until both
+     * ends have been agreed. This is a different fact from the schedule boxes on
+     * the attendance page: those say which days a child comes, these say the
+     * hours of the day they are here.
+     */
+    public function scheduleLabel(): ?string
+    {
+        if (blank($this->drop_off_time) || blank($this->pick_up_time)) {
+            return null;
+        }
+
+        return static::timeLabel($this->drop_off_time).' – '.static::timeLabel($this->pick_up_time);
+    }
+
+    /**
+     * One stored time as it is read aloud: "7:00 AM".
+     *
+     * MySQL hands these back as H:i:s and SQLite as whatever was written, so
+     * they are parsed rather than printed straight out of the column.
+     */
+    public static function timeLabel(?string $time): ?string
+    {
+        return blank($time) ? null : Carbon::parse($time)->format('g:i A');
+    }
+
+    /** A stored time as <input type="time"> wants it, which is H:i and nothing else. */
+    public static function timeInputValue(?string $time): ?string
+    {
+        return blank($time) ? null : Carbon::parse($time)->format('H:i');
     }
 
     /** The room the age bands put this child in, ignoring any override. */

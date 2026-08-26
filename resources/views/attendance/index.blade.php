@@ -216,7 +216,7 @@
                                         <td class="px-3 py-2 text-sm text-slate-400" x-text="index + 1"></td>
                                         <td class="px-3 py-2">
                                             <div class="flex items-center gap-3">
-                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-100 to-violet-100 text-xs font-bold text-indigo-700" x-text="(child.first_name.charAt(0) + child.last_name.charAt(0)).toUpperCase()"></span>
+                                                <span class="h-9 w-9 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
                                                 <div class="min-w-0">
                                                     {{-- The name opens the child record: date of birth and the
                                                          enrolment dates that decide whether a box exists at all. --}}
@@ -228,6 +228,15 @@
                                                     <p class="flex items-center gap-1 truncate text-xs" :class="roomClass(child)" :title="roomTitle(child)">
                                                         <span class="truncate" x-text="roomLabel(child)"></span>
                                                         <span x-show="child.classroom_override" x-cloak class="shrink-0" x-text="child.override_stale ? '⚠' : '✎'"></span>
+                                                    </p>                                                    {{-- The hours the child is contracted for, which is what a
+                                                         box being ticked actually commits the room to. Absent
+                                                         until somebody has agreed them, rather than guessed at. --}}
+                                                    <p x-show="child.schedule_hours" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" x-text="'🕘 ' + child.schedule_hours" :title="'Contracted ' + child.schedule_hours"></p>                                                    {{-- Who is in the room with them over those hours, on the
+                                                         days they are ticked. The roster is the source, so this
+                                                         is absent until a staff week has been generated. --}}
+                                                    <p x-show="child.cover" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" :title="coverTitle(child)">
+                                                        <span x-text="'👩‍🏫 ' + coverNames(child)"></span>
+                                                        <span x-show="child.cover?.partial" class="text-amber-500" title="A booked day with nobody rostered to their room in their hours">⚠</span>
                                                     </p>
                                                 </div>
                                             </div>
@@ -255,11 +264,13 @@
                         <template x-for="(child, index) in filteredChildren" :key="'card-' + child.id">
                             <article class="px-3 py-3">
                                 <div class="flex items-center gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-100 to-violet-100 text-xs font-bold text-indigo-700" x-text="(child.first_name.charAt(0) + child.last_name.charAt(0)).toUpperCase()"></span>
+                                    <span class="h-9 w-9 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
                                     <div class="min-w-0 flex-1">
                                         <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.first_name + ' ' + child.last_name"></a>
                                         <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></p>
                                         <p class="truncate text-xs text-slate-500" x-text="child.classroom"></p>
+                                        <p x-show="child.schedule_hours" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" x-text="'🕘 ' + child.schedule_hours"></p>
+                                        <p x-show="child.cover" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" :title="coverTitle(child)" x-text="'👩‍🏫 ' + coverNames(child)"></p>
                                     </div>
                                     <span class="text-xs text-slate-400" x-text="'#' + (index + 1)"></span>
                                 </div>
@@ -435,15 +446,30 @@ function attendanceApp() { return {
     presentCount: {{ $presentToday }},
     canEdit: @js($canEditSchedule),
     // Only an admin may open a child record, so only they get a link.
-    canOpenProfile: @js(auth()->user()->isAdmin()),
-    profileUrl(childId) { return "{{ route('children.edit', ['child' => '__ID__']) }}".replace('__ID__', childId); },
+    canOpenProfile: true,
+    {{-- The record, not the edit form. Everybody on this page is looking at
+         children they may already see — the list is filtered by the same rule
+         the record is — so the teacher gets the phone numbers and the pick-up
+         list from here too, instead of a link they are refused. --}}
+    profileUrl(childId) { return "{{ route('children.show', ['child' => '__ID__']) }}".replace('__ID__', childId); },
     weekStart: @js($weekStartDate),
     paint: null,
     pending: {},
     saving: false,
     saveError: '',
     notice: '',
-    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale()])->values()),
+    {{-- The avatar is drawn here rather than in Alpine, so the roster, the
+         record and this page all get the same face out of the one component —
+         a second copy of the drawing in JavaScript would drift from it within
+         a month. It arrives as markup and goes in with x-html; sizing is left
+         to the wrapper, so the one string serves the 32px and 36px rows. --}}
+    @php($avatarMarkup = fn ($child) => preg_replace('/>\s+</', '><', trim(view('components.child-avatar', [
+        'child' => $child,
+        'size' => 'h-full w-full',
+        'shape' => '',
+        'attributes' => new \Illuminate\View\ComponentAttributeBag,
+    ])->render())))
+    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
     rooms: @js(\App\Services\ClassroomAssignment::rooms()),
     // Moving a child between rooms changes who can see them, so it is the
     // director's call rather than a teacher's.
@@ -480,6 +506,17 @@ function attendanceApp() { return {
     },
     matches(name, classroom) { return name.includes(this.search.toLowerCase()) && (this.room === '' || classroom === this.room); },
     matchesChild(child) { return this.matches((child.first_name + ' ' + child.last_name).toLowerCase(), child.classroom); },
+    /* Two names fit on a row; the rest are counted, and the tooltip has the
+       day-by-day breakdown for anyone who needs it. */
+    coverNames(child) {
+        const names = child.cover?.names ?? [];
+        return names.length > 2 ? names.slice(0, 2).join(', ') + ' +' + (names.length - 2) : names.join(', ');
+    },
+    coverTitle(child) {
+        if (! child.cover) return '';
+        const detail = child.cover.detail;
+        return child.cover.partial ? detail + ' · some booked days have no cover in their hours' : detail;
+    },
     toggleSort() { this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc'; },
     isPresent(childId, date, session) { return !!this.attendance?.[childId]?.[date]?.[session]; },
     sessionTime(childId, date, session) { return this.attendance?.[childId]?.[date]?.[session] ?? ''; },

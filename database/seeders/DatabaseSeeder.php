@@ -45,5 +45,9 @@ class DatabaseSeeder extends Seeder
                 'classroom' => $teacher['classroom'],
             ]);
         }
+
+        // Every room opens with the centre until somebody says otherwise, so
+        // the children's rows read a class time from the first run.
+        $this->call(RoomScheduleSeeder::class);
     }
 }

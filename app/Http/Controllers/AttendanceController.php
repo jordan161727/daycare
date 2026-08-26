@@ -10,6 +10,7 @@ use App\Models\ClosureDay;
 use App\Models\ScheduleSlot;
 use App\Models\ScheduleWeek;
 use App\Services\AttendanceProjection;
+use App\Services\RoomCover;
 use App\Services\ClassroomAssignment;
 use App\Services\WeekSchedule;
 use Illuminate\Validation\ValidationException;
@@ -131,6 +132,13 @@ class AttendanceController extends Controller
             $projectionSource = $projection['source_week_start'];
             $projectionBasisLabels = AttendanceProjection::BASIS_LABELS;
 
+            // Who is on the floor with each child: their room's rostered
+            // teachers, over the hours the child is contracted for, on the days
+            // they are ticked. Empty until a staff week has been generated —
+            // the roster is the source, and there is nothing to claim without
+            // one. See RoomCover, which reads the relationship RoomDemand built.
+            $roomCover = app(RoomCover::class)->forWeek($weekStartDate, $children);
+
             // "Copy" almost always means "same as last week", so the week just
             // gone is offered on its own button and leads the picker.
             // Also what the "open this week" prompt names, so the offer says which
@@ -191,7 +199,8 @@ class AttendanceController extends Controller
                 'projectionTotals',
                 'projectionDayTotals',
                 'projectionSource',
-                'projectionBasisLabels'
+                'projectionBasisLabels',
+                'roomCover'
             ));
     }
 

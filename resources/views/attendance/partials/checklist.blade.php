@@ -47,7 +47,7 @@
                     <tr>
                         <td class="px-3 py-2">
                             <div class="flex items-center gap-3">
-                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-blue-100 to-violet-100 text-[11px] font-bold text-indigo-700" x-text="(child.first_name.charAt(0) + child.last_name.charAt(0)).toUpperCase()"></span>
+                                <span class="h-8 w-8 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
                                 <div class="min-w-0">
                                     {{-- Straight to the enrolment dates, which are the reason a
                                          row has fewer boxes than the rest. --}}
@@ -66,6 +66,17 @@
                                         <span class="truncate" x-text="roomLabel(child)"></span>
                                         <span x-show="child.classroom_override" x-cloak class="shrink-0" x-text="child.override_stale ? '⚠' : '✎'"></span>
                                     </button>
+                                    {{-- The hours agreed for the day, beside the days being
+                                         ticked: a tick says the child comes, this says for
+                                         how long, and the two are read together. --}}
+                                    <p x-show="child.schedule_hours" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" x-text="'🕘 ' + child.schedule_hours" :title="'Contracted ' + child.schedule_hours"></p>
+                                    {{-- Ticking a day is what creates the demand this cover was
+                                         generated from, so it is worth seeing who it landed on
+                                         while the ticks are being changed. --}}
+                                    <p x-show="child.cover" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" :title="coverTitle(child)">
+                                        <span x-text="'👩‍🏫 ' + coverNames(child)"></span>
+                                        <span x-show="child.cover?.partial" class="text-amber-500">⚠</span>
+                                    </p>
                                 </div>
                             </div>
 

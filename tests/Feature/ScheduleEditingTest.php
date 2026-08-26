@@ -464,18 +464,25 @@ class ScheduleEditingTest extends TestCase
         $this->assertSame(5, ScheduleSlot::where('child_id', $child->id)->where('week_start', '2026-07-20')->count());
     }
 
-    public function test_the_childs_name_opens_their_record_for_an_admin(): void
+    public function test_the_childs_name_opens_their_record(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
         app(WeekSchedule::class)->open(self::MONDAY);
 
+        // The record rather than the edit form, so the teacher standing in the
+        // room gets the numbers and the pick-up list from the same link the
+        // director uses — this page only lists children they may already see.
         $this->actingAs($this->admin)
             ->get(route('attendance.index', ['date' => self::MONDAY]))
             ->assertOk()
             ->assertSee('profileUrl(child.id)', false)
-            ->assertSee('/children/__ID__/edit', false);
+            ->assertSee('/children/__ID__"', false);
 
-        // And the record itself carries the dates that govern the boxes.
+        $this->actingAs(User::factory()->create(['role' => 'teacher', 'classroom' => 'Toddler']))
+            ->get(route('children.show', $child))
+            ->assertOk();
+
+        // And the record behind it carries the dates that govern the boxes.
         $this->actingAs($this->admin)
             ->get(route('children.edit', $child))
             ->assertOk()
@@ -743,6 +750,47 @@ class ScheduleEditingTest extends TestCase
         $this->assertDatabaseHas('attendances', ['child_id' => $child->id, 'attendance_date' => self::MONDAY]);
     }
 
+    public function test_the_week_shows_the_hours_a_child_is_contracted_for(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler', [
+            'drop_off_time' => '07:00',
+            'pick_up_time' => '17:30',
+        ]);
+
+        $child = $this->childrenOnThePage()[0];
+
+        $this->assertSame('7:00 AM – 5:30 PM', $child['schedule_hours']);
+    }
+
+    public function test_a_child_with_no_hours_agreed_carries_none_into_the_week(): void
+    {
+        $this->makeChild('Hopper', 'Grace', 'Toddler');
+
+        $child = $this->childrenOnThePage()[0];
+
+        $this->assertArrayHasKey('schedule_hours', $child);
+        $this->assertNull($child['schedule_hours']);
+    }
+
+    /**
+     * The rows Alpine draws, read back off the page.
+     *
+     * The grid is rendered client side, so the server only ships the data —
+     * and @js hands it over as a JS string literal with every quote and every
+     * non-ASCII character escaped, which is why this unwraps twice rather than
+     * matching on the markup.
+     */
+    private function childrenOnThePage(string $date = self::MONDAY): array
+    {
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => $date]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertSame(1, preg_match("/childrenData: JSON\.parse\('(.*?)'\)/", $html, $matches));
+
+        return json_decode(json_decode('"'.$matches[1].'"'), associative: true);
+    }
     private function makeChild(string $last, string $first, string $room, array $extra = []): Child
     {
         return Child::create(array_merge([
