@@ -50,6 +50,23 @@
 }
 
 @layer base {
+    /*
+     * Everything one pixel smaller, in one place.
+     *
+     * Tailwind's sizes are all in rem — text, padding, gaps, the lot — so
+     * dropping the root from the browser's 16px to 15px takes a pixel off every
+     * one of them at once: text-base 16→15, text-sm 14→13, a button's padding
+     * and a row's height with them. Setting each class by hand would be a
+     * thousand edits and the next new page would not match.
+     *
+     * Sizes written in px on purpose — text-[11px], h-[18px], the grid's
+     * min-width — are deliberately not scaled: they are there because that
+     * exact pixel was wanted.
+     *
+     * Put this back to 16px to undo it; 14px takes another pixel off.
+     */
+    html { font-size: 15px; }
+
     body { font-family: Inter, 'Instrument Sans', ui-sans-serif, system-ui, sans-serif; }
     [x-cloak] { display: none !important; }
 }
@@ -64,8 +81,28 @@
 
 @layer utilities {
     .glass-card { @apply border border-white/70 bg-white/80 shadow-sm shadow-slate-200/60 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none; }
-    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950; }
+    /* Tight on purpose. A director's sidebar carries fourteen links, and at the
+       old size the last of them fell off the bottom of a laptop screen. */
+    .nav-link { @apply flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950; }
     .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70; }
+
+    /* Ruled columns for the week sheets.
+
+       A register of sixty children and seven columns is read across a row and
+       down a column in equal measure, and horizontal rules alone leave the eye
+       to hold the column edges by itself. The lines are faint on purpose: they
+       are guides, not a cage, and the sign-in boxes have to stay the loudest
+       thing on the sheet. The last column has no rule — there is nothing on the
+       far side of it to be divided from. */
+    .sheet-grid :is(th, td) { @apply border-r border-slate-100 dark:border-white/5; }
+    .sheet-grid :is(th, td):last-child { @apply border-r-0; }
+
+    /* The scrollbar the nav gets when the links outrun the screen: present when
+       it is needed, and not a grey slab down the side of the brand colour. */
+    .sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.75) transparent; }
+    .sidebar-scroll::-webkit-scrollbar { width: 8px; }
+    .sidebar-scroll::-webkit-scrollbar-thumb { border-radius: 9999px; background: rgb(255 255 255 / 0.75); }
+    .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
 
     /* Form chrome, so a field is one class instead of a paragraph of them. */
     .form-label { @apply mb-2 block text-sm font-semibold; }

@@ -84,12 +84,16 @@ class ScheduleController extends Controller
 
         abort_if($this->weeks->isFrozen($weekStart), 422, 'That week has ended and can no longer be edited.');
 
-        $cleared = $this->weeks->setClosure($data['date'], $data['closed'], $data['reason'] ?? null, $request->user());
+        // Closing reports what it took off the board; reopening reports what it
+        // put back. The browser needs the second one to know whether the grid it
+        // is holding is still true.
+        $moved = $this->weeks->setClosure($data['date'], $data['closed'], $data['reason'] ?? null, $request->user());
 
         return response()->json([
             'success' => true,
             'closed' => $data['closed'],
-            'cleared' => $cleared,
+            'cleared' => $data['closed'] ? $moved : 0,
+            'restored' => $data['closed'] ? 0 : $moved,
         ]);
     }
 

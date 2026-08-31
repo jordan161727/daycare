@@ -8,6 +8,7 @@ use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
+use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveRequestController;
@@ -25,6 +26,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Attendance;
 use App\Models\Child;
+use App\Models\ClosureDay;
 
 Route::redirect('/', '/dashboard');
 
@@ -46,12 +48,23 @@ Route::get('/password/change', [PasswordController::class, 'edit'])->name('passw
 Route::put('/password/change', [PasswordController::class, 'update'])->name('password.change.update');
 
 Route::get('/dashboard', function () {
+    // The next few days the centre is shut. A teacher cannot open the holidays
+    // page — that is the director's — so the dashboard is where they find out,
+    // which is the whole reason it is on the screen everybody opens each
+    // morning. Guarded like the counts below: a database mid-migration has no
+    // closures table, and a dashboard is a poor place to discover that.
+    $upcomingClosures = rescue(fn () => ClosureDay::where('closed_on', '>=', today()->toDateString())
+        ->orderBy('closed_on')
+        ->take(4)
+        ->get(), collect(), false);
+
     if (! Schema::hasTable('children') || ! Schema::hasTable('attendances')) {
         return view('dashboard.index', [
             'totalChildren' => 0,
             'presentToday' => 0,
             'totalRooms' => 0,
             'recentAttendance' => collect(),
+            'upcomingClosures' => $upcomingClosures,
         ]);
     }
 
@@ -63,7 +76,7 @@ Route::get('/dashboard', function () {
         ->whereHas('child', fn ($query) => $query->visibleTo($user))
         ->latest('signed_in_at')->take(5)->get();
 
-    return view('dashboard.index', compact('totalChildren', 'presentToday', 'totalRooms', 'recentAttendance'));
+    return view('dashboard.index', compact('totalChildren', 'presentToday', 'totalRooms', 'recentAttendance', 'upcomingClosures'));
 })->name('dashboard');
 
 
@@ -89,6 +102,22 @@ Route::resource('teachers', TeacherController::class)->parameters(['teachers' =>
 // records, which is why it is set here rather than per week.
 Route::get('/room-schedule', [RoomScheduleController::class, 'index'])->name('room-schedule.index');
 Route::put('/room-schedule', [RoomScheduleController::class, 'update'])->name('room-schedule.update');
+
+// The days the centre is shut, set once and ahead of time. A closure is true of
+// the whole centre, so every room's attendance schedule reads it rather than
+// being greyed out one at a time — including weeks not built yet, which pick it
+// up when they are opened.
+Route::get('/holidays', [HolidayController::class, 'index'])->name('holidays.index');
+Route::post('/holidays', [HolidayController::class, 'store'])->name('holidays.store');
+Route::put('/holidays/{holiday}', [HolidayController::class, 'update'])->name('holidays.update');
+Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
+
+// Holidays that come back every year. The rule is entered once; it writes
+// itself out as ordinary closures years ahead, so nothing downstream needs to
+// know the difference.
+Route::post('/holidays/rules', [HolidayController::class, 'storeRule'])->name('holidays.rules.store');
+Route::put('/holidays/rules/{rule}', [HolidayController::class, 'updateRule'])->name('holidays.rules.update');
+Route::delete('/holidays/rules/{rule}', [HolidayController::class, 'destroyRule'])->name('holidays.rules.destroy');
 
 // Scheduling rules only ever make sense against the person they constrain, so
 // they are nested rather than given a table of their own.

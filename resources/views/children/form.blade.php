@@ -78,7 +78,7 @@
              records with the field blank, which then saved the date away. --}}
         @php($formBirthDate = old('birth_date', $child?->birthDate()?->toDateString() ?? ($extracted['birth_date'] ?? null)) ?: null)
         {{-- The date of birth is the fact that gets typed in; the roster's Age
-             column is this same date written 3/15/2026, so there is no second
+             column is this same date written 2026/3/15, so there is no second
              field to keep in step and nothing left behind when it is corrected. --}}
         <label class="block"><span class="mb-2 block text-sm font-semibold">Date of birth{!! $fromDocument('birth_date') ? $documentBadge : '' !!}</span><input id="birth_date" type="date" name="birth_date" value="{{ $formBirthDate }}" class="{{ $fieldClass('birth_date') }}"><x-input-error :messages="$errors->get('birth_date')" /><span id="age-preview" class="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">@php($previewAge = $formBirthDate ? \App\Models\Child::ageLabelFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null){{ $previewAge ? 'The roster shows this as '.$previewAge.'.' : 'The age on the roster follows this date.' }}</span></label>
         {{-- Only the drawn stand-in face reads this, which is exactly why it is

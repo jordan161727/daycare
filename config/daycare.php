@@ -10,6 +10,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Province
+    |--------------------------------------------------------------------------
+    |
+    | Two-letter code, used by the Canadian holiday seeder to decide which
+    | statutory days the centre closes for. Blank seeds the federal list only,
+    | which every jurisdiction observes; a code adds that province's own — the
+    | February family day, the August civic holiday, Quebec's Fête nationale.
+    |
+    | AB BC MB NB NL NS NT NU ON PE QC SK YT
+    |
+    */
+
+    'province' => env('DAYCARE_PROVINCE', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Opening hours
     |--------------------------------------------------------------------------
     |

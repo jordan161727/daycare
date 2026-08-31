@@ -109,6 +109,31 @@ class ScheduleEditingTest extends TestCase
         $response->assertSee('Schedule copied from');
     }
 
+    /**
+     * The quick-set presets end the row, so they are the first thing to fall off
+     * the side of a sheet that has grown too wide — which is exactly what had
+     * happened: the column was there, and nobody could see it. Short labels keep
+     * the whole row on screen, and the title still says what each one does.
+     */
+    public function test_the_quick_set_presets_are_labelled_short_enough_to_stay_on_screen(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        app(WeekSchedule::class)->open('2026-07-20');
+
+        $response = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk();
+
+        $response->assertSee('Quick set');
+        $response->assertSee('title="Monday, Wednesday and Friday"', escape: false);
+        $response->assertSee('>MWF<', escape: false);
+        $response->assertSee('title="Tuesday and Thursday"', escape: false);
+        $response->assertSee('>TTh<', escape: false);
+        // The widths that pushed the column off the sheet.
+        $response->assertDontSee('>Full week<', escape: false);
+        $response->assertDontSee('>M W F<', escape: false);
+    }
+
     public function test_ticking_days_saves_only_this_week(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
@@ -582,8 +607,10 @@ class ScheduleEditingTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // Every state the grid can paint is named beside it, so a colour never
-        // has to be learned from the documentation.
+        // Every state the grid can paint is named on the sheet itself, so a
+        // colour never has to be learned from the documentation — folded behind
+        // the "?" that opens the key, rather than printed above every page.
+        $this->assertStringContainsString('aria-haspopup="true"', $html);
         $this->assertStringContainsString('Signed in, not scheduled', $html);
         $this->assertStringContainsString('Scheduled', $html);
         $this->assertStringContainsString('Not scheduled', $html);

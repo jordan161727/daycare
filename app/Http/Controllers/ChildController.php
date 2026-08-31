@@ -49,7 +49,11 @@ class ChildController extends Controller
         // whether or not a week has been generated.
         $roomSchedules = RoomSchedule::byRoom();
 
-        return view('children.index', compact('children', 'sort', 'direction', 'roomSchedules'));
+        // The whole roll, not the page: "61 active" counted off ten rows would
+        // be a different number on every page of the same list.
+        $activeCount = Child::visibleTo($requestUser)->where('status', 'Active')->count();
+
+        return view('children.index', compact('children', 'sort', 'direction', 'roomSchedules', 'activeCount'));
     }
 
     /**

@@ -163,7 +163,17 @@ class ChildPhotoTest extends TestCase
 
         $this->assertStringContainsString('x-html="child.avatar"', $html);
         $this->assertStringContainsString('data-child-avatar', $html);
-        $this->assertStringNotContainsString('charAt(0)', $html, 'An initial is still being drawn somewhere.');
+        $this->assertStringNotContainsString('charAt(0)', $html, 'An initial is being worked out in the browser again.');
+    }
+
+    public function test_the_roster_draws_the_same_face_as_the_sheet(): void
+    {
+        $this->child(['gender' => 'Girl']);
+
+        $this->actingAs($this->admin())
+            ->get(route('children.index'))
+            ->assertOk()
+            ->assertSee('data-child-avatar', escape: false);
     }
 
     public function test_the_record_can_open_the_photo_full_size(): void

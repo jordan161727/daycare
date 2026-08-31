@@ -183,25 +183,71 @@ class WeekSchedule
      * Closing grays out every box on that date in one go. Sign-ins already
      * recorded are left alone — if a child was here, that is still true, and it
      * is still billable.
+     *
+     * The ticks it takes off are written onto the closure first, so reopening
+     * the day puts back exactly the day that was called off rather than an
+     * empty column. Returns the number of boxes moved, either way.
      */
-    public function setClosure(string $date, bool $closed, ?string $reason = null, ?User $user = null): int
+    public function setClosure(string $date, bool $closed, ?string $reason = null, ?User $user = null, ?int $ruleId = null): int
     {
-        return DB::transaction(function () use ($date, $closed, $reason, $user) {
+        return DB::transaction(function () use ($date, $closed, $reason, $user, $ruleId) {
             if (! $closed) {
-                ClosureDay::where('closed_on', $date)->delete();
-
-                return 0;
+                return $this->reopen($date);
             }
+
+            $cleared = ScheduleSlot::where('slot_date', $date)
+                ->where('is_scheduled', true)
+                ->get(['child_id', 'session']);
 
             ClosureDay::updateOrCreate(
                 ['closed_on' => $date],
-                ['reason' => $reason, 'created_by' => $user?->id],
+                [
+                    'reason' => $reason,
+                    'created_by' => $user?->id,
+                    'holiday_rule_id' => $ruleId,
+                    // Read before the update below, or this records the state
+                    // the clearing left behind — which is nothing.
+                    'cleared_slots' => $cleared->map(fn ($slot) => [
+                        'child_id' => $slot->child_id,
+                        'session' => $slot->session,
+                    ])->all(),
+                ],
             );
 
             return ScheduleSlot::where('slot_date', $date)
                 ->where('is_scheduled', true)
                 ->update(['is_scheduled' => false]);
         });
+    }
+
+    /**
+     * Open a closed day back up, re-ticking what the closure took off.
+     *
+     * Only boxes that still exist and still match are restored. A child who has
+     * left, or whose room now splits the day into AM and PM, has no box to put
+     * a tick back into — so the count returned is what was actually restored,
+     * not what was once cleared.
+     */
+    private function reopen(string $date): int
+    {
+        $closure = ClosureDay::firstWhere('closed_on', $date);
+
+        if (! $closure) {
+            return 0;
+        }
+
+        $restored = 0;
+
+        foreach (collect($closure->cleared_slots ?? [])->groupBy('session') as $session => $rows) {
+            $restored += ScheduleSlot::where('slot_date', $date)
+                ->where('session', $session)
+                ->whereIn('child_id', collect($rows)->pluck('child_id'))
+                ->update(['is_scheduled' => true]);
+        }
+
+        $closure->delete();
+
+        return $restored;
     }
 
     /**

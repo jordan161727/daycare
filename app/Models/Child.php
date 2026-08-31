@@ -7,6 +7,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use App\Models\User;
 
 class Child extends Model
@@ -104,21 +105,64 @@ class Child extends Model
     }
 
     /**
-     * The date of birth written the way the roster reads it: 3/15/2026.
+     * The date of birth written the way the roster reads it: 2022/12/15.
      *
      * The column is headed "Age", but what the office reads off it is the date
-     * itself. Formatted on every read rather than stored, so it cannot drift
-     * out of step with the date it comes from.
+     * itself. Year first, so a column of them sorts by eye the way it sorts by
+     * click, and so 3/4 is never one date to one reader and another to the next.
+     * Formatted on every read rather than stored, so it cannot drift out of
+     * step with the date it comes from.
      */
     public static function ageLabelFor(?CarbonInterface $birthDate): ?string
     {
-        return $birthDate?->format('n/j/Y');
+        return $birthDate?->format('Y/n/j');
     }
 
     /** This child's date of birth as the roster shows it, or null when none is on file. */
     public function ageLabel(): ?string
     {
         return static::ageLabelFor($this->birthDate());
+    }
+
+    /**
+     * How old the child is, said the way the room says it: "3 years 2 months".
+     *
+     * Worked out on every read and never stored, because it is different next
+     * month. The unit that matters follows the age: years and months for a
+     * child old enough to have both, months alone for a baby, days for one who
+     * is only days old — nobody describes a fortnight-old as nought years.
+     *
+     * Days are dropped once there are months to report. They matter to a parent
+     * and not to a roster, and "3 years 2 months 14 days" in a column is three
+     * facts where one was wanted.
+     */
+    public function ageInWords(?Carbon $asOf = null): ?string
+    {
+        $birthDate = $this->birthDate();
+
+        if ($birthDate === null) {
+            return null;
+        }
+
+        $asOf = $asOf ? $asOf->copy()->startOfDay() : Carbon::today();
+        $birthDate = $birthDate->copy()->startOfDay();
+
+        // A date of birth in the future is somebody's typo, not a negative age.
+        if ($birthDate->greaterThan($asOf)) {
+            return null;
+        }
+
+        $age = $birthDate->diff($asOf);
+
+        $said = fn (int $count, string $unit) => $count.' '.Str::plural($unit, $count);
+
+        if ($age->y > 0) {
+            return $age->m > 0
+                ? $said($age->y, 'year').' '.$said($age->m, 'month')
+                : $said($age->y, 'year');
+        }
+
+        return $age->m > 0 ? $said($age->m, 'month') : $said($age->d, 'day');
     }
 
     /**

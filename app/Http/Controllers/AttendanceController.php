@@ -105,7 +105,7 @@ class AttendanceController extends Controller
             // Once a week has ended its pattern is a record, so the checklist and
             // every copy control drop away rather than sitting there inert.
             $weekIsFrozen = $weeks->isFrozen($weekStartDate);
-            $closedDays = ClosureDay::whereBetween('closed_on', [$weekDates->first(), $weekDates->last()])
+            $closedDays = ClosureDay::betweenDates($weekDates->first(), $weekDates->last())
                 ->get()
                 ->keyBy(fn ($day) => $day->closed_on->toDateString())
                 ->map(fn ($day) => $day->reason ?: 'Centre closed');

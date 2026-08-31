@@ -124,12 +124,16 @@ class AttendanceSheetTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // Date form takes its own full-width line before sm.
-        $this->assertStringContainsString('flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto', $html);
+        // The toolbar wraps onto more lines rather than overflowing.
+        $this->assertStringContainsString('flex flex-wrap items-center gap-x-3 gap-y-2', $html);
         // Room pills scroll sideways rather than stacking rows.
         $this->assertStringContainsString('overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap', $html);
-        // Search is full width on a phone.
-        $this->assertStringContainsString('relative w-full shrink-0 sm:w-56', $html);
+        // The search box is dropped below sm: on a phone the sheet is scrolled
+        // rather than searched, and the box would take the whole line.
+        $this->assertStringContainsString('relative hidden sm:block', $html);
+        // Jumping to a far-off week is behind the overflow menu, so the line
+        // holds only what is used on every visit.
+        $this->assertStringContainsString('aria-label="More"', $html);
     }
 
     public function test_each_child_carries_the_sessions_their_room_uses(): void
@@ -198,8 +202,25 @@ class AttendanceSheetTest extends TestCase
         $this->assertSame(2, Attendance::where('child_id', $child->id)->count());
     }
 
-    public function test_another_day_is_refused_with_a_reason_the_sheet_can_show(): void
+    public function test_the_sheet_does_not_offer_a_day_it_would_refuse(): void
     {
+        $this->makeChild('Turing', 'Alan', 'Toddler');
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->getContent();
+
+        // The box for any day but today is disabled, so the click is never
+        // taken and then explained away in a dialog.
+        $this->assertStringContainsString("! canSignIn('", $html);
+        $this->assertStringContainsString('canSignIn(date) { return date === this.today; }', $html);
+    }
+
+    public function test_another_day_is_still_refused_by_the_server(): void
+    {
+        // The sheet no longer offers the click, but the rule is the record's,
+        // not the page's — a hand-made post is refused just the same.
         $child = $this->makeChild('Turing', 'Alan', 'Toddler');
 
         $response = $this->actingAs($this->admin)
@@ -211,7 +232,7 @@ class AttendanceSheetTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('attendance_date');
 
-        // The pop-up shows this text verbatim, so it has to name both days.
+        // Still names both days: it reaches a person if anything ever does show it.
         $message = $response->json('errors.attendance_date.0');
         $this->assertStringContainsString(today()->format('l, M j'), $message);
         $this->assertStringContainsString(today()->subDay()->format('l, M j'), $message);

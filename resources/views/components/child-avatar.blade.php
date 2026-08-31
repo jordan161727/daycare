@@ -20,10 +20,11 @@
 @php($name = trim(($child->first_name ?? '').' '.($child->last_name ?? '')))
 @php($photo = $child->photoUrl())
 
+@php($seed = crc32(($child->lan ?? '').'|'.$name))
+
 @if($photo)
     <img src="{{ $photo }}" alt="{{ $name }}" {{ $attributes->class([$size, $shape, 'shrink-0 object-cover']) }}>
 @else
-    @php($seed = crc32(($child->lan ?? '').'|'.$name))
     {{-- Skin, hair and clothes are drawn from separate slices of the one number
          so two children who share a hairstyle rarely share everything else. --}}
     @php($skin = ['#f7d7bd', '#f0c49b', '#dda476', '#b57746', '#8a5433'][$seed % 5])

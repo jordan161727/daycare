@@ -63,32 +63,66 @@
     <div class="flex flex-col gap-4">
         <section class="min-w-0 flex-1">
             <div class="glass-card rounded-2xl px-3 py-2.5">
-                {{-- Title, live counts and the date picker share one line. --}}
+                {{-- One line: what page this is, which week, how the week stands,
+                     and the two controls used on every visit. Everything else —
+                     jumping to a far-off date, the copy dialog — is behind the
+                     "…", because a toolbar that shows every control equally makes
+                     the two that matter no easier to find than the rest. --}}
+                @php($prevWeek = \Illuminate\Support\Carbon::parse($weekStartDate)->subWeek()->toDateString())
+                @php($nextWeek = \Illuminate\Support\Carbon::parse($weekStartDate)->addWeek()->toDateString())
+                @php($thisWeek = \Illuminate\Support\Carbon::today()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->toDateString())
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <h1 class="text-base font-bold tracking-tight sm:text-lg">Class Attendance</h1>
-                    @if($canEditSchedule)
-                        <div class="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800" role="group" aria-label="View">
-                            <button type="button" @click="view = 'signin'" :class="view === 'signin' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'" class="rounded-md px-2.5 py-1 text-xs font-semibold transition">Sign in</button>
-                            <button type="button" @click="view = 'schedule'" :class="view === 'schedule' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'" class="rounded-md px-2.5 py-1 text-xs font-semibold transition">Set schedule</button>
-                        </div>
-                    @endif
-                    <div class="flex flex-wrap items-center gap-1.5">
-                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300"><span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span><span class="font-bold text-slate-900 dark:text-white">{{ $totalChildren }}</span> enrolled</span>
-                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span><span class="font-bold" x-text="presentCount"></span> present</span>
-                        <span class="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span><span class="font-bold" x-text="{{ $totalChildren }} - presentCount"></span> not signed in</span>
+                    <h1 class="text-base font-bold tracking-tight sm:text-lg">Attendance</h1>
+
+                    {{-- The week as one control: a step either side of the range it
+                         is showing, rather than two buttons and a label apart. --}}
+                    <div class="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+                        <a href="{{ route('attendance.index', ['date' => $prevWeek]) }}" class="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($prevWeek)->format('M j') }}" aria-label="Previous week">‹</a>
+                        <span class="px-1.5 text-xs font-semibold tabular-nums">{{ $weekDates->first()->format('M j') }} – {{ $weekDates->last()->format($weekDates->first()->format('M') === $weekDates->last()->format('M') ? 'j' : 'M j') }}</span>
+                        <a href="{{ route('attendance.index', ['date' => $nextWeek]) }}" class="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($nextWeek)->format('M j') }}" aria-label="Next week">›</a>
                     </div>
-                    {{-- Stepping a week at a time is the common move; the date box
-                         is for jumping somewhere far off. --}}
-                    @php($prevWeek = \Illuminate\Support\Carbon::parse($weekStartDate)->subWeek()->toDateString())
-                    @php($nextWeek = \Illuminate\Support\Carbon::parse($weekStartDate)->addWeek()->toDateString())
-                    <div class="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">
-                        <a href="{{ route('attendance.index', ['date' => $prevWeek]) }}" class="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" title="Week of {{ \Illuminate\Support\Carbon::parse($prevWeek)->format('M j') }}">‹ Prev</a>
-                        <a href="{{ route('attendance.index', ['date' => $nextWeek]) }}" class="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" title="Week of {{ \Illuminate\Support\Carbon::parse($nextWeek)->format('M j') }}">Next ›</a>
-                        <form method="GET" action="{{ route('attendance.index') }}" class="flex min-w-0 flex-1 items-center gap-1.5 sm:flex-none">
-                            <label class="sr-only" for="attendance-date">Attendance date</label>
-                            <input id="attendance-date" type="date" name="date" value="{{ $selectedDate }}" class="min-w-0 flex-1 rounded-lg border-0 bg-slate-100 px-2 py-1.5 text-xs text-slate-800 sm:flex-none dark:bg-slate-800 dark:text-slate-100">
-                            <button class="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">View</button>
-                        </form>
+                    {{-- Beside the dates, always: on another week it is the way
+                         back, and on this one it is the label that says the dates
+                         beside it are the current week rather than one you have
+                         stepped to and forgotten. --}}
+                    @if($weekStartDate === $thisWeek)
+                        <span class="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white dark:bg-white dark:text-slate-900" aria-current="date">This week</span>
+                    @else
+                        <a href="{{ route('attendance.index') }}" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10">This week</a>
+                    @endif
+
+                    {{-- Counts as a sentence rather than three chips: the numbers
+                         are the point, so they carry the colour and the weight and
+                         the labels stay out of the way. --}}
+                    <p class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span><b class="font-bold text-slate-900 dark:text-white">{{ $totalChildren }}</b> enrolled</span>
+                        <span><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount"></b> in</span>
+                        <span><b class="font-bold text-rose-600 dark:text-rose-400" x-text="{{ $totalChildren }} - presentCount"></b> not in</span>
+                    </p>
+
+                    <div class="ml-auto flex items-center gap-1.5">
+                        {{-- Searching is the way a big roll is used, so the box is on
+                             the top line rather than below the filters. --}}
+                        <label x-show="view === 'signin'" class="relative hidden sm:block">
+                            <svg class="pointer-events-none absolute left-2.5 top-1.5 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg>
+                            <input x-model="search" class="w-44 rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-3 text-xs transition focus:w-56 focus:ring-2 focus:ring-indigo-500 lg:w-56 dark:border-white/10 dark:bg-slate-800" placeholder="Search children">
+                        </label>
+
+                        @if($canEditSchedule)
+                            <button type="button" @click="view = view === 'signin' ? 'schedule' : 'signin'" :class="view === 'schedule' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition" x-text="view === 'signin' ? 'Set schedule' : 'Sign in'"></button>
+                        @endif
+
+                        {{-- The rarely-wanted control, kept but not on show. --}}
+                        <div x-data="{ menu: false }" @click.outside="menu = false" @keydown.escape.window="menu = false" class="relative shrink-0">
+                            <button type="button" @click="menu = ! menu" :aria-expanded="menu" class="grid h-6 w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
+                            <div x-show="menu" x-cloak x-transition class="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
+                                <form method="GET" action="{{ route('attendance.index') }}" class="space-y-1.5">
+                                    <label class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400" for="attendance-date">Jump to a date</label>
+                                    <input id="attendance-date" type="date" name="date" value="{{ $selectedDate }}" class="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800">
+                                    <button class="w-full rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-indigo-700">Go to that week</button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -100,78 +134,33 @@
                     </div>
                 @endif
 
-                {{-- Where this week's pattern came from, and how to rebuild it. --}}
-                @if($canEditSchedule)
-                    <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-indigo-50/70 px-2.5 py-1.5 text-[11px] text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">
-                        @if($scheduleWeek->copied_from_week_start)
-                            <span>Schedule copied from <b>{{ $scheduleWeek->copied_from_week_start->format('M j') }} – {{ $scheduleWeek->copied_from_week_start->copy()->addDays(4)->format('M j') }}</b> and independent since — later edits to that week won't reach this one.</span>
-                        @else
-                            <span>First week in the system — set up by hand. Every later week copies forward from here.</span>
-                        @endif
-                        @if($sourceWeeks->isNotEmpty())
-                            {{-- One way in: the dialog, where the source week and
-                                 what happens to this week's ticks are both chosen
-                                 deliberately. --}}
-                            <button type="button" @click="$refs.copyWeek.showModal()" class="ml-auto rounded-md border border-indigo-200 bg-white px-2 py-0.5 font-semibold text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-400/30 dark:bg-transparent dark:text-indigo-200">Copy from another week</button>
-                        @endif
-                    </div>
-                @endif
-                {{-- The forecast, beside the plan and never on top of it: what last
-                     week's attendance, the enrolment dates and the contracted
-                     hours say this week should look like. Recomputed on every
-                     load, so a profile edited this morning shows here now.
-
-                     A week nobody has opened has no plan to sit beside, so the
-                     forecast waits with everything else. --}}
-                @if($weekIsOpen)
-                @php($projectedShortfall = ($projectionTotals['contract_hours'] ?? 0) > 0
-                    ? round($projectionTotals['projected_hours'] - $projectionTotals['contract_hours'], 2)
-                    : null)
-                <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-sky-50/70 px-2.5 py-1.5 text-[11px] text-sky-900 dark:bg-sky-500/10 dark:text-sky-200">
-                    <span class="font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">Projected</span>
-                    @if($projectionTotals['sessions'] === 0)
-                        <span>Nothing to go on yet — no attendance in the week of {{ \Illuminate\Support\Carbon::parse($projectionSource)->format('M j') }} and no days ticked here.</span>
-                    @else
-                        <span class="inline-flex flex-wrap items-center gap-1.5">
-                            @foreach($weekDates as $date)
-                                <span class="rounded-md bg-white/70 px-1.5 py-0.5 tabular-nums dark:bg-white/10" title="{{ $date->format('l j F') }} — {{ $projectionDayTotals[$date->toDateString()] ?? 0 }} expected">
-                                    {{ $date->format('D') }} <b>{{ $projectionDayTotals[$date->toDateString()] ?? 0 }}</b>
-                                </span>
-                            @endforeach
-                        </span>
-                        <span><b>{{ number_format($projectionTotals['projected_hours'], 1) }} h</b> from the week of {{ \Illuminate\Support\Carbon::parse($projectionSource)->format('M j') }}</span>
-                        @if($projectedShortfall !== null)
-                            <span class="{{ abs($projectedShortfall) >= 0.01 ? 'font-semibold text-amber-700 dark:text-amber-300' : '' }}">
-                                against {{ number_format($projectionTotals['contract_hours'], 1) }} h expected
-                                @if(abs($projectedShortfall) >= 0.01)
-                                    ({{ $projectedShortfall > 0 ? '+' : '−' }}{{ number_format(abs($projectedShortfall), 1) }} h)
-                                @endif
-                            </span>
-                        @endif
-                    @endif
-                    @if($projectionTotals['without_pattern'] > 0)
-                        <span class="font-semibold text-amber-700 dark:text-amber-300" title="Their hours are on file but there is no attendance and nothing ticked to say which days">
-                            {{ $projectionTotals['without_pattern'] }} with hours but no pattern
-                        </span>
-                    @endif
-                    <span x-show="mismatchCount > 0" x-cloak class="ml-auto rounded-md bg-white/70 px-1.5 py-0.5 font-semibold dark:bg-white/10">
-                        <span x-text="mismatchCount"></span> day(s) differ from the schedule
-                    </span>
-                </div>
-                @endif
-
                 {{-- Search and room filters on the second line. Hidden while setting
                      the schedule, which always covers the whole centre — a filter
                      sitting there would imply it applies. --}}
-                <div x-show="view === 'signin'" class="mt-2.5 flex flex-col gap-1.5 border-t border-slate-200/70 pt-2.5 sm:flex-row sm:items-center dark:border-white/10">
-                    <label class="relative w-full shrink-0 sm:w-56"><svg class="pointer-events-none absolute left-3 top-2 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg><input x-model="search" class="w-full rounded-lg border-0 bg-slate-100 py-1.5 pl-9 pr-3 text-xs ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:ring-white/10" placeholder="Search children..."></label>
-                    <span class="hidden h-5 w-px shrink-0 bg-slate-200 sm:block dark:bg-white/10"></span>
-                    {{-- Rooms scroll sideways on a phone instead of stacking three rows deep. --}}
-                    <div class="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-                        <button @click="room=''" :class="room === '' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'" class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition">All</button>
+                <div x-show="view === 'signin'" class="mt-2.5 flex items-center gap-2 border-t border-slate-200/70 pt-2.5 dark:border-white/10">
+                    {{-- Rooms scroll sideways on a phone instead of stacking three
+                         rows deep. Each carries its own count, so the size of a
+                         room is answered without filtering to it first. --}}
+                    <div class="-mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
+                        <button @click="room=''" :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition">
+                            All <span class="ml-0.5 font-bold opacity-60">{{ $totalChildren }}</span>
+                        </button>
                         @foreach($classrooms as $classroom)
-                            <button @click="room=@js($classroom)" :class="room === @js($classroom) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'" class="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition">{{ $classroom }}</button>
+                            <button @click="room=@js($classroom)" :class="room === @js($classroom) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition">
+                                {{ $classroom }} <span class="ml-0.5 font-bold opacity-60" x-text="roomCount(@js($classroom))"></span>
+                            </button>
                         @endforeach
+                    </div>
+
+                    <div class="flex shrink-0 items-center gap-2">
+                        {{-- Days the centre is shut are why a column is gray, so the
+                             count sits beside the filters rather than being found by
+                             opening the schedule view. --}}
+                        <span x-show="closedCount > 0" x-cloak class="hidden items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 sm:inline-flex dark:bg-rose-500/10 dark:text-rose-300">
+                            <span x-text="closedCount"></span> <span x-text="closedCount === 1 ? 'day closed' : 'days closed'"></span>
+                        </span>
+                        {{-- The key, last: read once and then wanted rarely. --}}
+                        @include('attendance.partials.legend', ['for' => 'signin', 'boxStates' => $boxStates])
                     </div>
                 </div>
             </div>
@@ -185,12 +174,9 @@
 
             <div class="mt-3" x-show="view === 'signin'">
                 <div class="glass-card overflow-hidden rounded-2xl">
-                    {{-- What the colours mean, above the grid they describe. --}}
-                    @include('attendance.partials.legend', ['for' => 'signin', 'boxStates' => $boxStates])
-
                     {{-- Week grid: needs the width, so it only appears from md up. --}}
                     <div class="hidden overflow-x-auto md:block">
-                        <table class="w-full min-w-[860px] border-collapse text-left">
+                        <table class="sheet-grid w-full min-w-[860px] border-collapse text-left">
                             <thead>
                                 <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
                                     <th scope="col" class="w-12 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">#</th>
@@ -200,10 +186,20 @@
                                             <span class="text-[10px] leading-none text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-300" x-text="sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A'"></span>
                                         </button>
                                     </th>
+                                    {{-- Their own columns rather than more lines under the name:
+                                         read down a column these compare at a glance, and the
+                                         name cell was already carrying the room, the hours and
+                                         the cover. The date is the fact on file; the age is what
+                                         the room and the ratio are actually judged on, so both
+                                         are here rather than one standing for the other. --}}
+                                    <th scope="col" class="w-px px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" title="Date of birth, year/month/day">DOB</th>
+                                    <th scope="col" class="w-px px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Age</th>
                                     @foreach($weekDates as $date)
-                                        <th scope="col" class="px-2 py-2 text-center">
-                                            <span class="block text-[11px] uppercase tracking-wide text-slate-400">{{ $date->format('D') }}</span>
-                                            <span class="block text-xs font-semibold text-slate-700 dark:text-slate-200">{{ $date->format('M d') }}</span>
+                                        {{-- Today is the column being worked in, so it is picked
+                                             out of the five rather than counted along to. --}}
+                                        <th scope="col" class="px-2 py-2 text-center {{ $date->isToday() ? 'rounded-t-lg bg-indigo-50 dark:bg-indigo-500/10' : '' }}">
+                                            <span class="block text-[11px] uppercase tracking-wide {{ $date->isToday() ? 'font-semibold text-indigo-600 dark:text-indigo-300' : 'text-slate-400' }}">{{ $date->format('D') }}</span>
+                                            <span class="block text-xs font-semibold {{ $date->isToday() ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-200' }}">{{ $date->format('M d') }}</span>
                                             {{-- A closed day still takes sign-ins, so the column stays live — it just says why it is all gray. --}}
                                             <span x-show="isClosed('{{ $date->toDateString() }}')" x-cloak class="mt-0.5 block rounded-md bg-rose-50 px-1 text-[10px] font-semibold uppercase text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" x-text="closureReason('{{ $date->toDateString() }}')"></span>
                                         </th>
@@ -213,36 +209,37 @@
                             <tbody class="divide-y divide-slate-100 dark:divide-white/10">
                                 <template x-for="(child, index) in filteredChildren" :key="child.id">
                                     <tr class="transition hover:bg-slate-50 dark:hover:bg-white/5">
-                                        <td class="px-3 py-2 text-sm text-slate-400" x-text="index + 1"></td>
-                                        <td class="px-3 py-2">
-                                            <div class="flex items-center gap-3">
-                                                <span class="h-9 w-9 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
+                                        <td class="px-3 py-1.5 text-sm text-slate-400" x-text="index + 1"></td>
+                                        <td class="px-3 py-1.5">
+                                            <div class="flex items-center gap-2.5">
+                                                <span class="h-8 w-8 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
                                                 <div class="min-w-0">
-                                                    {{-- The name opens the child record: date of birth and the
-                                                         enrolment dates that decide whether a box exists at all. --}}
-                                                    <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100" x-text="child.first_name + ' ' + child.last_name" :title="'Open ' + child.first_name + '\'s record'"></a>
-                                                    <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></p>
-                                                    {{-- The brand blue is close enough to gray that a
-                                                         hand-set room read as an automatic one. The mark
-                                                         says which it is without relying on the colour. --}}
-                                                    <p class="flex items-center gap-1 truncate text-xs" :class="roomClass(child)" :title="roomTitle(child)">
-                                                        <span class="truncate" x-text="roomLabel(child)"></span>
-                                                        <span x-show="child.classroom_override" x-cloak class="shrink-0" x-text="child.override_stale ? '⚠' : '✎'"></span>
-                                                    </p>                                                    {{-- The hours the child is contracted for, which is what a
-                                                         box being ticked actually commits the room to. Absent
-                                                         until somebody has agreed them, rather than guessed at. --}}
-                                                    <p x-show="child.schedule_hours" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" x-text="'🕘 ' + child.schedule_hours" :title="'Contracted ' + child.schedule_hours"></p>                                                    {{-- Who is in the room with them over those hours, on the
-                                                         days they are ticked. The roster is the source, so this
-                                                         is absent until a staff week has been generated. --}}
-                                                    <p x-show="child.cover" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" :title="coverTitle(child)">
-                                                        <span x-text="'👩‍🏫 ' + coverNames(child)"></span>
-                                                        <span x-show="child.cover?.partial" class="text-amber-500" title="A booked day with nobody rostered to their room in their hours">⚠</span>
+                                                    {{-- Name and room on one line. Stacked, every row was two
+                                                         lines tall for a room name that is repeated down the
+                                                         whole column — beside the name it reads as the aside
+                                                         it is, and the register fits half again as many
+                                                         children on a screen. --}}
+                                                    <p class="flex min-w-0 items-baseline gap-1.5">
+                                                        {{-- The name opens the child record: the numbers to ring
+                                                             and the enrolment dates that decide whether a box
+                                                             exists at all. --}}
+                                                        <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100" x-text="child.first_name + ' ' + child.last_name" :title="'Open ' + child.first_name + '\'s record'"></a>
+                                                        <span x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></span>
+                                                        {{-- The brand blue is close enough to gray that a
+                                                             hand-set room read as an automatic one. The mark
+                                                             says which it is without relying on the colour. --}}
+                                                        <span class="flex shrink-0 items-center gap-0.5 text-xs" :class="roomClass(child)" :title="roomTitle(child)">
+                                                            <span x-text="roomLabel(child)"></span>
+                                                            <span x-show="child.classroom_override" x-cloak x-text="child.override_stale ? '⚠' : '✎'"></span>
+                                                        </span>
                                                     </p>
                                                 </div>
                                             </div>
                                         </td>
+                                        <td class="w-px whitespace-nowrap px-2 py-1.5 text-sm tabular-nums text-slate-500 dark:text-slate-400" x-text="child.birth_date || '—'"></td>
+                                        <td class="w-px whitespace-nowrap px-2 py-1.5 text-sm text-slate-500 dark:text-slate-400" x-text="child.age || '—'"></td>
                                         @foreach($weekDates as $date)
-                                            <td class="px-2 py-2 text-center align-middle">
+                                            <td class="px-2 py-1.5 text-center align-middle {{ $date->isToday() ? 'bg-indigo-50/50 dark:bg-indigo-500/5' : '' }}">
                                                 @include('attendance.partials.day-buttons', ['date' => $date, 'variant' => 'table'])
                                             </td>
                                         @endforeach
@@ -268,9 +265,7 @@
                                     <div class="min-w-0 flex-1">
                                         <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.first_name + ' ' + child.last_name"></a>
                                         <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.first_name + ' ' + child.last_name"></p>
-                                        <p class="truncate text-xs text-slate-500" x-text="child.classroom"></p>
-                                        <p x-show="child.schedule_hours" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" x-text="'🕘 ' + child.schedule_hours"></p>
-                                        <p x-show="child.cover" x-cloak class="truncate text-[11px] text-slate-400 dark:text-slate-500" :title="coverTitle(child)" x-text="'👩‍🏫 ' + coverNames(child)"></p>
+                                        <p class="truncate text-xs text-slate-500" x-text="child.birth_date ? child.classroom + ' · ' + child.birth_date : child.classroom" title="Room and date of birth"></p>
                                     </div>
                                     <span class="text-xs text-slate-400" x-text="'#' + (index + 1)"></span>
                                 </div>
@@ -469,13 +464,14 @@ function attendanceApp() { return {
         'shape' => '',
         'attributes' => new \Illuminate\View\ComponentAttributeBag,
     ])->render())))
-    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
+    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
     rooms: @js(\App\Services\ClassroomAssignment::rooms()),
     // Moving a child between rooms changes who can see them, so it is the
     // director's call rather than a teacher's.
     canEditRooms: @js(auth()->user()->isAdmin()),
     roomEditing: null,
     today: @js(today()->toDateString()),
+    todayLabel: @js(today()->format('l, M j')),
     attendance: @js($attendanceMap),
     schedule: @js($scheduleMap),
     // The forecast, kept in its own map so it can never be mistaken for a tick.
@@ -517,6 +513,10 @@ function attendanceApp() { return {
         const detail = child.cover.detail;
         return child.cover.partial ? detail + ' · some booked days have no cover in their hours' : detail;
     },
+    // What each room holds, counted off the roll the page was given rather than
+    // queried per room. The filter chips carry it, so the size of a room is
+    // answered without having to filter to it and read the rows.
+    roomCount(room) { return this.childrenData.filter(child => child.classroom === room).length; },
     toggleSort() { this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc'; },
     isPresent(childId, date, session) { return !!this.attendance?.[childId]?.[date]?.[session]; },
     sessionTime(childId, date, session) { return this.attendance?.[childId]?.[date]?.[session] ?? ''; },
@@ -651,6 +651,7 @@ function attendanceApp() { return {
 
     /* ---- centre closures: a whole column gray in one move ---- */
     isClosed(date) { return date in this.closed; },
+    get closedCount() { return Object.keys(this.closed).length; },
     closureReason(date) { return this.closed[date] || 'Closed'; },
     async toggleClosure(date) {
         if (!this.canEdit) return;
@@ -672,6 +673,12 @@ function attendanceApp() { return {
                 });
             } else {
                 delete this.closed[date];
+
+                // Reopening puts back the ticks the closure took off. The grid
+                // in the browser still shows them cleared, so let the server's
+                // answer redraw it rather than guessing which came back.
+                const body = await response.json().catch(() => ({}));
+                if (body.restored > 0) window.location.reload();
             }
         } catch (error) {
             this.notice = error.message;
@@ -687,11 +694,21 @@ function attendanceApp() { return {
     isUnplanned(childId, date, session) {
         return this.isPresent(childId, date, session) && ! this.isScheduled(childId, date, session);
     },
+    // A sign-in stamps the moment somebody arrived, so only today can be
+    // signed in — a day already gone is a record, not a form. The box says so
+    // by being disabled rather than by taking the click and refusing it after.
+    canSignIn(date) { return date === this.today; },
     boxClass(childId, date, session) {
         if (this.isPresent(childId, date, session)) {
             return this.boxStates[this.isUnplanned(childId, date, session) ? 'unplanned' : 'present'].classes;
         }
-        const base = this.boxStates[this.isScheduled(childId, date, session) ? 'scheduled' : 'off'].classes;
+        let base = this.boxStates[this.isScheduled(childId, date, session) ? 'scheduled' : 'off'].classes;
+
+        // Nothing to click here, so nothing that looks clickable: the hover
+        // fills come off and the box is faded to sit behind today's column.
+        if (! this.canSignIn(date)) {
+            base = base.replace(/\s*(dark:)?hover:\S+/g, '') + ' cursor-not-allowed opacity-60';
+        }
 
         // Sky ring: the forecast disagrees with the plan. A ring rather than a
         // fill, so it never competes with the four states the box already has.
@@ -707,6 +724,14 @@ function attendanceApp() { return {
                 ? 'Signed in ' + this.sessionTime(childId, date, session)
                 : 'Signed in ' + this.sessionTime(childId, date, session) + ' — not scheduled, still billable';
         }
+        // Say which day can be signed in, on the box that cannot: the sheet
+        // shows five columns and "only today" does not say which one.
+        if (! this.canSignIn(date)) {
+            const scheduled = this.isScheduled(childId, date, session) ? 'Scheduled. ' : '';
+
+            return scheduled + 'Only ' + this.todayLabel + ' can be signed in.';
+        }
+
         const base = this.isScheduled(childId, date, session) ? 'Scheduled. Click to sign in.' : 'Not scheduled. Click to sign in anyway.';
         const note = this.projectionNote(childId, date, session);
 

@@ -315,7 +315,14 @@ class AttendanceProjectionTest extends TestCase
      * opinion and there is no button that turns it into ticks — the schedule is
      * set by hand or copied from a week that actually happened.
      */
-    public function test_the_week_view_shows_the_forecast_but_offers_no_way_to_apply_it(): void
+    /**
+     * The forecast belongs where the week is planned, not over the sheet
+     * somebody opens to tick one box. It reads per child in the schedule view's
+     * Projected column and as the sky ring on a day the forecast argues with —
+     * never as a banner of standing explanation on the sign-in sheet, and never
+     * as a button that would write the forecast into the plan.
+     */
+    public function test_the_forecast_reads_beside_the_plan_and_is_never_applied_to_it(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler', ['expected_hours_per_week' => 45]);
         $this->attended($child, ['2026-07-27', '2026-07-29']);
@@ -326,9 +333,10 @@ class AttendanceProjectionTest extends TestCase
             ->assertOk();
 
         $response->assertSee('Projected');
-        $response->assertSee('18.0 h');                       // two full days
-        $response->assertSee('against 45.0 h expected');
+        $response->assertSee('projectionSummary(child.id)', escape: false);
         $response->assertDontSee('Fill from projection');
+        // The week's totals no longer sit above the grid.
+        $response->assertDontSee('against 45.0 h expected');
     }
 
     public function test_a_teacher_sees_the_forecast_for_their_own_rooms_only(): void

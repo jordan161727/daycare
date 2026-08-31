@@ -31,6 +31,30 @@ class LayoutChromeTest extends TestCase
         $this->assertStringNotContainsString('xl:sticky', $html);
     }
 
+    /**
+     * A director carries fourteen links. They have to be able to run past the
+     * bottom of the screen without taking the account block and the way out
+     * with them.
+     */
+    public function test_the_links_scroll_and_the_account_block_stays_put(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $html = $this->actingAs($admin)->get(route('dashboard'))->assertOk()->getContent();
+
+        // All three are needed: a flex child does not shrink below its content
+        // without min-h-0, and without shrinking there is nothing to scroll.
+        $this->assertMatchesRegularExpression('/<nav class="[^"]*min-h-0[^"]*"/', $html);
+        $this->assertMatchesRegularExpression('/<nav class="[^"]*flex-1[^"]*"/', $html);
+        $this->assertMatchesRegularExpression('/<nav class="[^"]*overflow-y-auto[^"]*"/', $html);
+
+        // And the account block sits after the nav closes, not inside it, so
+        // scrolling the links never scrolls the way out off the screen.
+        $navEnds = strpos($html, '</nav>');
+        $this->assertNotFalse($navEnds);
+        $this->assertGreaterThan($navEnds, strpos($html, 'aria-label="Log out"'));
+    }
+
     public function test_the_sidebar_counts_the_leave_requests_waiting_on_a_director(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -39,7 +63,9 @@ class LayoutChromeTest extends TestCase
         // Nothing waiting: the link is there, the badge is not.
         $this->actingAs($admin)->get(route('dashboard'))->assertOk()
             ->assertSee('Leave Requests')
-            ->assertDontSee('bg-amber-500 px-2 py-0.5', escape: false);
+            // The badge's colour, not its padding: the sidebar is laid out
+            // more than once a year and this test is about the count.
+            ->assertDontSee('rounded-full bg-amber-500', escape: false);
 
         foreach (['2026-09-01', '2026-09-08'] as $date) {
             LeaveRequest::create([
@@ -54,7 +80,7 @@ class LayoutChromeTest extends TestCase
 
         $html = $this->actingAs($admin)->get(route('dashboard'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('bg-amber-500 px-2 py-0.5', $html);
+        $this->assertStringContainsString('rounded-full bg-amber-500', $html);
         $this->assertMatchesRegularExpression('/bg-amber-500[^>]*>2</', $html);
 
         // A teacher has no queue to be counted at, so neither link is theirs.
