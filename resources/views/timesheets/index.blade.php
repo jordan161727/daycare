@@ -124,9 +124,9 @@
 <section class="glass-card mt-5 overflow-hidden rounded-2xl">
     <div class="overflow-x-auto">
         <table class="min-w-full text-left text-sm">
-            <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/60">
+            <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-night-800/60">
                 <tr>
-                    <th class="sticky left-0 z-10 bg-slate-50 px-4 py-3 font-semibold dark:bg-slate-800/60">Employee</th>
+                    <th class="sticky left-0 z-10 bg-slate-50 px-4 py-3 font-semibold dark:bg-night-800/60">Employee</th>
                     @foreach($dates as $date)
                         <th class="px-1.5 py-3 text-center font-semibold {{ $date->isWeekend() ? 'text-slate-300 dark:text-slate-600' : '' }}">
                             <span class="block text-[10px]">{{ $date->format('D') }}</span>

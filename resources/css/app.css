@@ -47,6 +47,38 @@
     --color-violet-600: #7486b6;
     --color-violet-700: #5b6c98;
     --color-violet-800: #465577;
+
+    /* Dark theme surfaces. Black at the back, and three deepening purples
+       forward of it: page, card, input, accent. Named rather than written in
+       place so the four values live together and a change is one edit. */
+    --color-night-950: #000000;
+    --color-night-900: #150050;
+    --color-night-800: #3f0071;
+    --color-night-700: #610094;
+}
+
+/*
+ * The dark theme, applied by re-pointing the slate scale rather than by
+ * rewriting every view.
+ *
+ * The app already says dark:bg-slate-900 in a hundred and fifty places, and
+ * those utilities compile to var(--color-slate-900) — so redefining the
+ * variable inside .dark repaints all of them at once. Light mode never sees
+ * these because .dark is only ever on <html>.
+ *
+ * Only the dark end of the scale is moved. The theme's text shades are 100–500
+ * and its surfaces are 700–950, and the two do not overlap, so nothing that
+ * has to stay legible is touched.
+ *
+ * The one thing this cannot reach is an opacity variant — dark:bg-night-900/70
+ * compiles to a baked-in #0f172ab3, not a var — so those few are written
+ * against the night scale directly in the markup.
+ */
+.dark {
+    --color-slate-950: var(--color-night-950);
+    --color-slate-900: var(--color-night-900);
+    --color-slate-800: var(--color-night-800);
+    --color-slate-700: var(--color-night-700);
 }
 
 @layer base {
@@ -80,11 +112,11 @@
 }
 
 @layer utilities {
-    .glass-card { @apply border border-white/70 bg-white/80 shadow-sm shadow-slate-200/60 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-none; }
+    .glass-card { @apply border border-white/70 bg-white/80 shadow-sm shadow-slate-200/60 backdrop-blur-xl dark:border-white/10 dark:bg-night-900/70 dark:shadow-none; }
     /* Tight on purpose. A director's sidebar carries fourteen links, and at the
        old size the last of them fell off the bottom of a laptop screen. */
-    .nav-link { @apply flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950; }
-    .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70; }
+    .nav-link { @apply flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white; }
+    .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70 dark:bg-night-700 dark:text-white dark:ring-white/15; }
 
     /* Ruled columns for the week sheets.
 

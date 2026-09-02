@@ -15,7 +15,7 @@
              input so a failed validation does not silently flip it back. --}}
         <div class="sm:col-span-2" x-data="{ invite: {{ old('send_invite', '1') == '1' ? 'true' : 'false' }} }">
             <input type="hidden" name="send_invite" value="0">
-            <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white/60 p-4 dark:border-white/10 dark:bg-slate-800/60">
+            <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white/60 p-4 dark:border-white/10 dark:bg-night-800/60">
                 <input type="checkbox" name="send_invite" value="1" x-model="invite" class="mt-0.5 h-4 w-4 rounded border-slate-300">
                 <span>
                     <span class="block text-sm font-semibold">Email a temporary password</span>

@@ -113,7 +113,7 @@
                     <span><b class="font-semibold text-slate-600 dark:text-slate-300">Ticked</b> — expected that day</span>
                 </li>
                 <li class="flex items-start gap-2">
-                    <span class="mt-px inline-flex shrink-0 items-center gap-1 rounded-lg border-[1.5px] border-slate-300 bg-slate-50 px-1.5 py-0.5 dark:border-white/10 dark:bg-slate-800/60">
+                    <span class="mt-px inline-flex shrink-0 items-center gap-1 rounded-lg border-[1.5px] border-slate-300 bg-slate-50 px-1.5 py-0.5 dark:border-white/10 dark:bg-night-800/60">
                         <span class="grid h-3 w-3 place-items-center rounded border-[1.5px] border-slate-300 bg-white text-[8px] leading-none text-transparent dark:border-white/20 dark:bg-slate-900">✓</span>
                     </span>
                     <span><b class="font-semibold text-slate-600 dark:text-slate-300">Empty</b> — not expected</span>

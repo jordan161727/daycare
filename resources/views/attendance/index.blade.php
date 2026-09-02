@@ -269,7 +269,7 @@
                                     </div>
                                     <span class="text-xs text-slate-400" x-text="'#' + (index + 1)"></span>
                                 </div>
-                                <div class="mt-2 space-y-1 rounded-xl bg-slate-50 p-1.5 dark:bg-slate-800/50">
+                                <div class="mt-2 space-y-1 rounded-xl bg-slate-50 p-1.5 dark:bg-night-800/50">
                                     @foreach($weekDates as $date)
                                         <div class="flex items-center justify-between gap-2 rounded-lg px-2 py-1">
                                             <span class="text-xs font-medium text-slate-600 dark:text-slate-300">{{ $date->format('D') }} <span class="text-slate-400">{{ $date->format('M d') }}</span></span>

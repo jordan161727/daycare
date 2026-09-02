@@ -9,6 +9,9 @@
         @yield('title', 'Daycare Dashboard')
     </title>
 
+    @include('layouts.favicon')
+
+
     @vite(['resources/css/app.css','resources/js/app.js'])
 
 </head>

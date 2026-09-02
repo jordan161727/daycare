@@ -165,7 +165,7 @@
             <table class="w-full min-w-[1400px] border-collapse">
                 <thead>
                     <tr class="bg-slate-50/70 dark:bg-white/5">
-                        <th class="sticky left-0 z-10 bg-slate-50/70 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-900/80">Teacher</th>
+                        <th class="sticky left-0 z-10 bg-slate-50/70 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-night-900/80">Teacher</th>
                         @foreach($dates as $dayCode => $date)
                             <th class="border-l border-slate-100 px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:border-white/10">
                                 {{ strtoupper($date->format('D')) }}
@@ -181,7 +181,7 @@
                             $weekHours = round($mine->sum(fn ($s) => $s->minutes()) / 60, 1);
                         @endphp
                         <tr class="hover:bg-slate-50/60 dark:hover:bg-white/5">
-                            <td class="sticky left-0 z-10 w-44 bg-white/90 px-4 py-2 align-middle backdrop-blur dark:bg-slate-900/80">
+                            <td class="sticky left-0 z-10 w-44 bg-white/90 px-4 py-2 align-middle backdrop-blur dark:bg-night-900/80">
                                 <a href="{{ route('teachers.show', $person) }}" class="block truncate text-sm font-bold hover:text-indigo-600">{{ $person->name }}</a>
                                 <span class="text-[11px] text-slate-400">
                                     {{ $person->employment ?: 'No type' }} &middot; <span class="tabular-nums">{{ $weekHours }}h</span>

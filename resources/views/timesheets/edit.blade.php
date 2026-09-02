@@ -39,7 +39,7 @@
     <section class="glass-card overflow-hidden rounded-2xl">
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
-                <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/60">
+                <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-night-800/60">
                     <tr>
                         <th class="px-4 py-3 font-semibold">Day</th>
                         <th class="px-3 py-3 font-semibold">In</th>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ClosureDay;
 use App\Models\LeaveRequest;
 use App\Models\StaffScheduleWeek;
 use App\Models\StaffShift;
@@ -73,6 +74,14 @@ class StaffScheduleController extends Controller
 
         $dates = StaffScheduleWeek::datesOf($weekStart);
 
+        // The roster is never generated for a day the centre is shut, so
+        // without this a public holiday reaches this screen as an empty card
+        // reading "Not scheduled" — which is true, and says nothing about why.
+        $closures = ClosureDay::betweenDates($dates[array_key_first($dates)], end($dates))
+            ->get()
+            ->keyBy(fn ($day) => $day->closed_on->toDateString())
+            ->map(fn ($day) => $day->label());
+
         return view('staff-schedule.mine', [
             'staff' => $user,
             'weekStart' => $weekStart,
@@ -86,7 +95,33 @@ class StaffScheduleController extends Controller
             // What the rules say they are owed, so a short week is visible as a
             // short week rather than as a number with nothing to compare it to.
             'expected' => $user->loadMissing('staffRules')->weeklyHours(),
+            'closures' => $closures,
+            // The one question this page is actually opened to answer, hoisted
+            // out of the grid so it is not five cards away from being read.
+            'nextShift' => $this->nextShift($shifts),
         ]);
+    }
+
+    /**
+     * The shift that has not finished yet — today's if it is still running or
+     * still to come, otherwise the next one this week.
+     *
+     * Null once the week is behind them, which is the honest answer: a banner
+     * pointing at Monday on a Friday afternoon is worse than no banner.
+     */
+    private function nextShift($shifts): ?StaffShift
+    {
+        $now = now();
+        $minute = $now->hour * 60 + $now->minute;
+
+        return $shifts
+            ->sortBy([['shift_date', 'asc'], ['starts_at', 'asc']])
+            ->first(function (StaffShift $shift) use ($now, $minute) {
+                $date = $shift->shift_date->toDateString();
+
+                return $date > $now->toDateString()
+                    || ($date === $now->toDateString() && $shift->ends_at > $minute);
+            });
     }
 
     /**

@@ -151,7 +151,7 @@
                                                     {{-- Same two fills as the key above the table. --}}
                                                     isScheduled(child.id, '{{ $iso }}', session)
                                                         ? 'border-indigo-500 bg-indigo-200 text-indigo-800 dark:bg-indigo-500/25 dark:text-indigo-100'
-                                                        : 'border-slate-300 bg-slate-50 text-slate-400 hover:border-indigo-400 dark:border-white/10 dark:bg-slate-800/60 dark:text-slate-500',
+                                                        : 'border-slate-300 bg-slate-50 text-slate-400 hover:border-indigo-400 dark:border-white/10 dark:bg-night-800/60 dark:text-slate-500',
                                                     projectionDiffers(child.id, '{{ $iso }}', session) ? 'ring-1 ring-sky-400 dark:ring-sky-500' : '',
                                                 ]"
                                                 class="flex min-h-[30px] flex-1 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg border-[1.5px] px-2 text-xs font-semibold transition"

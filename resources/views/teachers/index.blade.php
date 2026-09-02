@@ -17,7 +17,7 @@
         <div class="border-b border-slate-100 p-4 dark:border-white/10"><input x-model="search" class="w-full rounded-xl border-0 bg-slate-100 px-4 py-3 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:ring-white/10" placeholder="Search teachers by name, email, or classroom..."></div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-left text-sm">
-                <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-slate-800/60"><tr><th class="px-6 py-4 font-semibold">Teacher</th><th class="px-6 py-4 font-semibold">Email</th><th class="px-6 py-4 font-semibold">Assigned classroom</th><th class="px-6 py-4 font-semibold">Assigned students</th><th class="px-6 py-4 font-semibold">Actions</th></tr></thead>
+                <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500 dark:bg-night-800/60"><tr><th class="px-6 py-4 font-semibold">Teacher</th><th class="px-6 py-4 font-semibold">Email</th><th class="px-6 py-4 font-semibold">Assigned classroom</th><th class="px-6 py-4 font-semibold">Assigned students</th><th class="px-6 py-4 font-semibold">Actions</th></tr></thead>
                 <tbody class="divide-y divide-slate-100 dark:divide-white/10">
                     @forelse($teachers as $teacher)
                         <tr x-show="@js(strtolower($teacher->name.' '.$teacher->email.' '.implode(' ', $teacher->assignedClassrooms()).' '.$teacher->employment)).includes(search.toLowerCase())" class="hover:bg-slate-50/80 dark:hover:bg-white/5">

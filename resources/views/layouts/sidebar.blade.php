@@ -2,16 +2,36 @@
 
 {{-- Narrower than it was: the labels are smaller now, so the old 17rem was
      paid for by the page beside it and bought nothing. --}}
-<aside :class="[collapsed ? 'desktop:w-20' : 'desktop:w-60', mobileOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0']" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-[#B6C3E6] text-slate-900 shadow-2xl transition-all duration-300 desktop:sticky desktop:top-0 desktop:h-screen">
-    <div class="flex h-16 items-center justify-between px-4">
-        <a href="{{ route('dashboard') }}" class="flex min-w-0 items-center gap-2.5">
-            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 ring-1 ring-white/20">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 11l9-8 9 8v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9z"/></svg>
-            </span>
-            <span x-show="!collapsed" class="min-w-0"><span class="block text-base font-bold leading-tight">Daycare</span><span class="block text-[11px] text-slate-600">Management</span></span>
+<aside :class="[collapsed ? 'desktop:w-20' : 'desktop:w-60', mobileOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0']" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-[#B6C3E6] text-slate-900 shadow-2xl dark:bg-night-900 dark:text-slate-100 transition-all duration-300 desktop:sticky desktop:top-0 desktop:h-screen">
+    {{-- Deep enough for the logo to be read rather than merely acknowledged.
+         It costs the nav sixteen pixels, which that list can spare — it already
+         scrolls on its own.
+
+         Collapsed, the logo goes and the toggle centres in the rail. There is
+         no room for both: the rail is eighty pixels wide, and a mark beside the
+         toggle overflowed it rather than sitting in it. --}}
+    <div :class="collapsed ? 'desktop:justify-center' : ''" class="flex h-16 items-center justify-between px-3 lg:h-24">
+        {{-- flex-1 so the logo centres in the space the toggle leaves, rather
+             than sitting hard against the left edge.
+
+             The logo alone: it already says the centre's name, so the
+             "Daycare / Management" wordmark that used to sit beside a house
+             icon would only repeat it. No tile behind it — the PNG carries its
+             own transparency — just a soft drop-shadow, which follows the
+             artwork's alpha and lifts the pale angels off the sidebar without
+             drawing a box around them.
+
+             Dark mode inverts it to a white mark. The lettering is outlined in
+             near-black, and on the deep purple "Day Care Center" all but
+             disappears otherwise. --}}
+        <a x-show="!collapsed" href="{{ route('dashboard') }}" class="flex min-w-0 flex-1 justify-center" aria-label="Little Angels Day Care Center — dashboard">
+            <img src="{{ asset('images/littleangels-logo.png') }}"
+                 alt="Little Angels Day Care Center"
+                 width="531" height="228"
+                 class="h-12 w-auto shrink-0 drop-shadow-sm lg:h-16 dark:brightness-0 dark:invert">
         </a>
-        <button @click="collapsed = !collapsed" class="hidden rounded-lg p-2 text-slate-700 hover:bg-white/55 desktop:block" aria-label="Collapse sidebar"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-        <button @click="mobileOpen = false" class="rounded-lg p-2 text-2xl leading-none text-slate-700 desktop:hidden" aria-label="Close menu">×</button>
+        <button @click="collapsed = !collapsed" class="hidden rounded-lg p-2 text-slate-700 hover:bg-white/55 dark:text-slate-300 dark:hover:bg-white/10 desktop:block" aria-label="Collapse sidebar"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <button @click="mobileOpen = false" class="rounded-lg p-2 text-2xl leading-none text-slate-700 dark:text-slate-300 desktop:hidden" aria-label="Close menu">×</button>
     </div>
 
     {{-- Scrolls on its own, so however many links a role collects they never
@@ -57,18 +77,18 @@
     {{-- Who you are and the way out, at the foot of the sidebar. Outside the
          scrolling nav above, so it is pinned there and stays on the screen
          however far the links run. --}}
-    <div class="shrink-0 border-t border-white/20 px-3 py-3">
-        <div :class="collapsed ? 'flex-col gap-1.5' : 'gap-2'" class="flex items-center rounded-xl bg-white/40 p-2">
+    <div class="shrink-0 border-t border-white/20 px-3 py-3 dark:border-white/10">
+        <div :class="collapsed ? 'flex-col gap-1.5' : 'gap-2'" class="flex items-center rounded-xl bg-white/40 p-2 dark:bg-white/5">
             <a href="{{ route('profile.edit') }}" class="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg transition hover:opacity-80" title="My profile">
                 <x-user-avatar :user="auth()->user()" size="h-8 w-8" text="text-xs" />
                 <span x-show="!collapsed" class="min-w-0">
                     <span class="block truncate text-[13px] font-semibold leading-tight">{{ auth()->user()->name }}</span>
-                    <span class="block text-[11px] leading-tight text-slate-600">{{ ucfirst(auth()->user()->role) }}</span>
+                    <span class="block text-[11px] leading-tight text-slate-600 dark:text-slate-400">{{ ucfirst(auth()->user()->role) }}</span>
                 </span>
             </a>
             <form method="POST" action="{{ route('logout') }}" class="shrink-0">
                 @csrf
-                <button class="grid h-8 w-8 place-items-center rounded-lg text-slate-700 transition hover:bg-white/70 hover:text-slate-950" title="Log out" aria-label="Log out">
+                <button class="grid h-8 w-8 place-items-center rounded-lg text-slate-700 transition hover:bg-white/70 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white" title="Log out" aria-label="Log out">
                     <svg class="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m4 8H5a2 2 0 01-2-2V6a2 2 0 012-2h6"/></svg>
                 </button>
             </form>

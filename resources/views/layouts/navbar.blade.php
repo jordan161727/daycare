@@ -1,4 +1,4 @@
-<header class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/70 lg:h-20 bg-slate-50/85 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/85 sm:px-6 lg:px-8">
+<header class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/70 lg:h-20 bg-slate-50/85 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-night-950/85 sm:px-6 lg:px-8">
     @php
     $hour = now()->hour;
     if ($hour < 12) {
