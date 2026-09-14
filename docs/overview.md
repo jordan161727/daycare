@@ -1,17 +1,17 @@
-# The website, end to end — user stories and a walkthrough
+# The website, end to end
 
 One document for the whole app as it stands today: what each screen is for, who
-may open it, the rule behind it, and a script you can follow by hand to see it
-work.
+may open it, the rule behind it, a script you can follow by hand to see it work,
+every button on it, and the order the whole thing runs in.
 
-The other files in `docs/` go deep on single areas — [the attendance
-sheet](user-stories.md), [the roster and payday](staff-walkthrough.md),
-[leave](leave-user-stories.md), [payroll prep](payroll-prep.md), [copying a
-week](copy-week.md). This one is the map they hang off: read it first, then go
-to those for the corners.
+Parts three to six were separate files in `docs/` until they were folded in
+here, and are reproduced whole — nothing was summarised away. `user-stories.md`,
+`walkthrough.md` and `leave.md` are still their own files and go deeper on the
+attendance sheet and on leave than Part one does.
 
-Every story is written as **the rule**, then **why**. The walkthrough at the end
-runs the same ground as numbered steps with what you should see.
+Every story is written as **the rule**, then **why**. Part two walks the same
+ground as numbered steps with what you should see; Part seven lists the controls
+screen by screen; Part eight says what has to happen before what.
 
 ---
 
@@ -27,10 +27,9 @@ runs the same ground as numbered steps with what you should see.
 | **Part four** — [leave, in detail](#part-four--leave-in-detail) | earning it, asking, deciding, and what it does downstream |
 | **Part five** — [payroll preparation](#part-five--payroll-preparation) | clock, roster, corrections, and the CSV at the end |
 | **Part six** — [the staff room walkthrough](#part-six--the-staff-room-the-roster-and-payday) | rules, roster and payday, step by step |
+| **Part seven** — [user guide](#part-seven--user-guide-every-button-screen-by-screen) | every button on every screen, who sees it, what it does |
+| **Part eight** — [workflows](#part-eight--workflows-what-has-to-happen-before-what) | the order things go in, and the orderings that go wrong quietly |
 | [Where the rules live](#where-the-rules-actually-live) | behaviour → the class that enforces it |
-
-Parts three to six were separate files until now. They are reproduced here whole
-— nothing was summarised away.
 
 ## Setting up
 
@@ -2297,6 +2296,580 @@ and no way to change anything already recorded — including their own.
   table. PreK and UPK-4 are both set to 1:10, which was a judgement call.
 - **Configure SMTP.** `MAIL_MAILER=log` means payslips go to the log file, not
   to anybody's inbox.
+
+---
+
+
+---
+
+# Part seven — user guide: every button, screen by screen
+
+What each control on each screen does, who can see it, and what happens when you
+press it. The tables list the controls as they are labelled on screen.
+
+**A** = director only · **A T** = director and teacher
+
+---
+
+## Sidebar and navbar
+
+| Control | Who | What it does |
+|---|---|---|
+| The logo | A T | Back to the dashboard |
+| ☰ (in the sidebar header) | A T | Collapses the sidebar to an icon rail, and back |
+| ☰ (top left, small screens) | A T | Opens the sidebar as a drawer |
+| × (in the drawer) | A T | Closes it |
+| ☀ / ☾ | A T | Switches light and dark. Remembered on this device |
+| 🔔 | A T | Notifications — placeholder, nothing behind it yet |
+| Your name and photo | A T | Opens **Profile** |
+| ⇥ (log out) | A T | Signs out |
+
+Nav items appear by role: **Dashboard · Class Attendance · Children** for
+everyone; **Reports · Week Schedule · My Schedule · My Leave · Time Clock** for
+teachers and directors; and **Teachers · Room Schedules · Holidays · Leave
+Requests · Payroll Prep · Payroll · Import Children** for directors alone.
+**Leave Requests** carries a badge counting what is waiting.
+
+---
+
+## Dashboard
+
+| Control | Who | What it does |
+|---|---|---|
+| **Take attendance →** | A T | Opens today's sheet |
+| **View all** | A T | Recent sign-ins → the full sheet |
+| **Manage holidays** | A | Opens **Holidays**. Not shown to teachers, because the page 403s for them |
+| A closure tile | A T | Opens that week on the attendance board |
+| Quick actions | A T | Import Children (A), Attendance, Reports (A), History |
+
+---
+
+## Class Attendance
+
+### The week bar
+
+| Control | Who | What it does |
+|---|---|---|
+| **‹** / **›** | A T | Previous / next week |
+| **This week** | A T | Back to today's week |
+| Date box → **Go to that week** | A T | Jumps to whatever week that date falls in |
+| **Open this week** | A T | Builds a week that does not exist yet, copying the newest earlier week. Only appears when the week is unbuilt and not finished |
+| **Copy from another week** | A T | Opens the copy dialog. Only when the week is built and not finished |
+
+### The sheet
+
+| Control | Who | What it does |
+|---|---|---|
+| **Sign in** / **Set schedule** | A T | Switches between recording arrivals and planning the week |
+| Search children | A T | Filters the rows |
+| **All** + room chips | A T | Filters by room. A teacher sees only their own rooms |
+| **Student** | A T | Sorts by name |
+| **? Key** | A T | Shows what the four box colours mean |
+| A box, in **Sign in** | A T | Signs the child in for that session. Today only |
+| A box, in **Set schedule** | A T | Ticks or unticks the planned day. Drag across several; **Space** toggles the focused one |
+| A day heading, in **Set schedule** | A T | Sets or clears that whole column |
+| **All · MWF · TTh · Clear** | A T | Quick-sets one child's week |
+| **Done — back to sign-in** | A T | Leaves the schedule view |
+| Closure toggle on a day heading | A T | Shuts the centre for that day, or opens it again. Asks for a reason |
+| A child's name | A T | Opens their record |
+| Room dropdown → **Save** | A | Moves a child to another room from a date. **Clear override** hands them back to the age rule |
+
+### The copy dialog
+
+| Control | Who | What it does |
+|---|---|---|
+| Week list | A T | Which week to copy. Last week is pre-selected; each row shows how many days it had ticked and any closures |
+| **Add** | A T | Only turns days on. Keeps anything ticked here that the source does not have |
+| **Replace this week** | A T | Makes this week an exact match of that one, clearing the extras |
+| Also copy the sign-ins | A | Writes attendance for days nobody signed in. For demo data only — off by default |
+| **Copy schedule** | A T | Runs it. The banner says what moved, including when nothing did |
+| **Cancel** | A T | Closes without changing anything |
+
+---
+
+## Children
+
+| Control | Who | What it does |
+|---|---|---|
+| **+ Add child** | A | New child form |
+| **View** | A T | Opens the record |
+| **Edit** | A | Opens the record for editing |
+| Photograph | A T | Opens it full size. Directors get **Add a photo** when there is none |
+| **← Roster** | A T | Back to the list |
+| **Edit record** / **Edit details** | A | Same, from inside a record |
+
+### Importing
+
+| Control | Who | What it does |
+|---|---|---|
+| **Import children** | A | Reads a spreadsheet of children |
+| **Import PDF / Image** | A | Reads an enrolment form and pulls the fields out |
+| **Open in new tab ↗** | A | Shows the uploaded document beside the review |
+| **← Back to child form** | A | Returns to the extracted fields |
+| **← Import another form** | A | Starts again with a new document |
+| **Remove** | A | Drops the chosen file before uploading |
+
+---
+
+## Holidays
+
+| Control | Who | What it does |
+|---|---|---|
+| Date · Last day · Reason → **Close these days** | A | Shuts the centre. With a last day it closes the range, skipping weekends |
+| Month · Day · Name → **Add annual holiday** | A | A holiday that repeats. Written five years ahead at once |
+| **Edit** (on a closed day) | A | Change its reason, or move it to another date |
+| **Reopen** | A | Opens the day again and puts back the ticks the closure cleared |
+| **Edit** (on an annual holiday) | A | Rename it, or move it. A moving holiday like Good Friday can only be renamed |
+| **Remove** (on an annual holiday) | A | Stops it recurring. Future days reopen; past ones stay |
+| **View week** | A | That week on the attendance board |
+| **Cancel** | A | Closes the dialog |
+
+The reopen dialog names the children who come back before you confirm, and
+strikes through any who cannot because they have left or changed room.
+
+---
+
+## Reports
+
+| Control | Who | What it does |
+|---|---|---|
+| **Daily sheet** / **Class report** | A T | Switches which sheet you are looking at |
+| Date → **View** | A T | Loads that week |
+| **Print** | A T | Prints without the sidebar or navbar, landscape |
+
+---
+
+## Teachers *(director only)*
+
+| Control | What it does |
+|---|---|
+| **+ Add Teacher** | Creates a staff login. The starting password must be changed on first sign-in |
+| **Rules** | Opens their scheduling rules |
+| **Edit** | Their employment details |
+| **Delete** | Removes the account |
+| **Add rule** | Adds a scheduling rule. The form shows only the fields that rule type uses |
+| **Remove** (on a rule) | Deletes it |
+| **Back to roster** | Back to the list |
+
+---
+
+## Room Schedules *(director only)*
+
+| Control | What it does |
+|---|---|
+| Opens / Closes per room | The hours that room runs |
+| **Save hours** | Saves every room at once |
+
+---
+
+## Week Schedule
+
+| Control | Who | What it does |
+|---|---|---|
+| Date → **Go** | A T | Jumps to the week that date falls in. There is no previous/next pair here — the date box is the whole of the navigation |
+| **By teacher** / **By room** | A T | Whose day, or which room's |
+| Day chips | A T | Picks the day the room view draws its ratio bar for |
+| **My schedule** | T | Your own week. Shown only to teachers — a director has no shifts of their own |
+| **Generate schedule** | **A** | Solves the week from the rules, the ratios, approved leave and the closures. Teachers do not get this button |
+
+---
+
+## My Schedule
+
+| Control | Who | What it does |
+|---|---|---|
+| **← Last week** / **This week** / **Next week →** | A T | Moves between weeks |
+| **Everyone's week** | A T | The whole floor, read-only for teachers |
+
+The rest of the page is read-only: the next shift, your hours against your
+target, a card per day. Shifts are not editable here — that is the director's
+roster.
+
+---
+
+## Time Clock
+
+| Control | Who | What it does |
+|---|---|---|
+| **Clock in** | A T | Starts your day |
+| **Start lunch** / **End lunch** | A T | Unpaid, however short |
+| **Start break** / **End break** | A T | Paid for the first 20 minutes, unpaid past that |
+| **Clock out** | A T | Ends your day |
+
+Only the presses that are legal from where you stand are offered — you cannot
+start lunch before clocking in. You cannot change a punch you have made; a
+correction is a supervisor's act.
+
+---
+
+## My Leave
+
+| Control | Who | What it does |
+|---|---|---|
+| Type · first day · last day · hours · reason → **Send the request** | A T | Files it as pending |
+| **Withdraw** | A T | Takes back a request nobody has decided yet. Approved ones need the director to revoke |
+
+Weekends and closed days are not charged for. You may ask for more than your
+balance holds — that is settled at the decision, not the ask.
+
+---
+
+## Leave Requests *(director only)*
+
+| Control | What it does |
+|---|---|
+| Status tabs | Filters the queue. Waiting sorts to the top |
+| **Approve** | Grants it and takes the hours off the balance. Refused first time if it outruns the balance — tick the shortfall box to grant the rest unpaid |
+| **Deny** | Refuses it. The reason is kept and shown to the person who asked |
+| **Revoke** | Undoes an approval. The hours go back and the days come off the timesheet — the shifts do not come back, so regenerate the week |
+| **Balances & accrual** | The balances page |
+
+---
+
+## Balances & accrual *(director only)*
+
+| Control | What it does |
+|---|---|
+| **Run accrual** | Earns leave from the approved pay period. Safe to press twice — it is earned once |
+| Hours · reason → **Post** | Moves a balance by hand. The reason is required |
+| **See every balance →** | From the accrual result back to the list |
+| **Requests** | Back to the queue |
+
+---
+
+## Payroll Prep *(director only)*
+
+| Control | What it does |
+|---|---|
+| **‹ Previous** / **Next ›** | Moves between pay periods |
+| Date → **Go** | Jumps to the period a date falls in |
+| **Fill from the roster** | Copies the published roster in as a draft. Only ever adds — a day somebody confirmed is left alone |
+| A person's name | Opens their day-by-day form |
+| **Confirm these days** | Saves the form. Every day on it becomes somebody's word rather than the roster's |
+| A red **!** on the grid | Opens the punches for the day that does not add up |
+| An underlined figure | Opens the punches behind a clocked day |
+| **Approve period** | Freezes it. Refused while the period is still running, while any day is still the roster's word, or while any punches do not add up |
+| **Reopen** | Unfreezes an approved period. Payroll has the old numbers, so tell them |
+| **Download CSV for payroll** | The deliverable. One row per employee with hours |
+
+### One day's punches
+
+| Control | What it does |
+|---|---|
+| **Add punch** | Records a press nobody made — the 5pm clock-out somebody forgot. Needs a reason |
+| **Move to this time** | Voids the original and writes a replacement pointing at it. Needs a reason |
+| **Void** | Stops a punch counting. It stays visible, struck through, for good |
+
+Nothing here is ever edited or deleted, and every correction wants a reason —
+the question it answers gets asked months later by somebody who was not there.
+
+---
+
+## Payroll *(director only)*
+
+| Control | What it does |
+|---|---|
+| File · period label → **Upload and split** | Splits a combined PDF into one payslip per person |
+| **Review & send** | Opens a batch |
+| The stepper | Moves between payslips |
+| Person dropdown → **Reassign** | Points a payslip at the right person. A slip already sent drops back to pending |
+| **Email subject & body** | Edits what goes out |
+| **Send a copy to me** | A check. Does **not** mark the slip sent |
+| **Email this teacher** | Sends it, marks it green, and moves to the next person |
+| **Delete** | Removes the batch and its PDF from disk |
+| **All payroll runs** | Back to the list |
+
+---
+
+## Profile
+
+| Control | Who | What it does |
+|---|---|---|
+| **Save Changes** | A T | Your name, contact details and photo |
+| **Update Password** | A T | Needs your current one |
+| **Remove photo** | A T | Back to initials |
+| **Undo** | A T | Cancels a photo you picked but have not saved |
+
+---
+
+## Signing in
+
+| Control | What it does |
+|---|---|
+| **Sign in** | Email and password |
+| **Save password** | On the forced first-login change. Until it is done, this is the only page the account can reach |
+| **Sign out** | From that page |
+
+---
+
+## Buttons that are deliberately absent
+
+Worth knowing, because their absence is a decision rather than a gap.
+
+| Not there | Why |
+|---|---|
+| Fill the schedule from the forecast | A prediction built from last week's absences must not become this week's plan |
+| Confirm all, on Payroll Prep | Confirming is somebody reading a person's fortnight and saying yes. One button for everybody would make it a formality |
+| Send all, on Payroll | One misclick would mail a whole payroll run built on a split nobody reviewed |
+| Edit or delete a punch | A correction is a void plus a replacement, so the original never stops being visible |
+| Correct your own punches | A record its subject can revise is not a record |
+| Generate, for a teacher | They may read the roster; only a director rebuilds it |
+| Anything on a finished week | Its Friday has passed. It is a record, and DSS bills against it |
+
+---
+
+
+---
+
+# Part eight — workflows: what has to happen before what
+
+The other parts say what each screen does. This one says the order things go in,
+what each step is waiting on, and which orderings quietly produce a wrong number
+rather than an error.
+
+---
+
+## Two systems, not one
+
+The commonest confusion in this app, so it comes first: **children and staff are
+tracked by two separate pipelines that never touch.**
+
+```
+CHILDREN                                 STAFF
+   enrolment                                employment + rules
+        ↓                                        ↓
+   schedule slots      ← closures →          staff shifts
+        ↓                                        ↓
+   attendance                                time clock
+   (sheet + door kiosk)                           ↓
+        ↓                                     timesheet
+   DSS billing · reports                          ↓
+                                              payroll · leave accrual
+```
+
+They share exactly one thing: **a closure day closes both.** Nothing else
+crosses. A child signing in at the door does not touch anybody's hours; a
+teacher clocking in does not touch any child's attendance.
+
+Say the words apart and most of it comes clear:
+
+| | Children | Staff |
+|---|---|---|
+| Planned by | the schedule slots ticked on the sheet | the generated roster |
+| Recorded by | a sign-in, from the sheet **or the door kiosk** | a punch on the time clock |
+| Lives in | `attendances`, `child_attendance_punches` | `time_punches`, `timesheet_entries` |
+| Ends up as | DSS billing and reports | a payroll CSV |
+
+---
+
+## Once, when a centre starts
+
+```
+1  Rooms          Room Schedules → hours per room
+2  Holidays       Holidays → the year's closures, and the annual rules
+3  Teachers       Teachers → account, employment type, pay rate
+4  Rules          Teachers → …→ Rules → fixed shifts, windows, keyholders
+5  Children       Children → enrolment dates, contracted hours, room
+6  Guardians      PINs and the pickup list, if the door kiosk is on
+```
+
+**Order matters at step 4 → 5.** The roster is solved against the *ratios the
+booked children need*. On an empty roll every room reads as needing nobody, so a
+roster generated before the children are in comes out empty and correct-looking.
+That is why `StaffSeeder` runs after `DemoScenarioSeeder`.
+
+---
+
+## Every day
+
+```
+   morning
+      │
+      ├─ a guardian at the door ──→ kiosk PIN ──→ tap child ──┐
+      │                                                        ├─→ attendances
+      └─ a teacher on the sheet ──→ tap the box ──────────────┘   (one row, either way)
+                                                                       │
+   during the day                                                      │
+      └─ teachers punch the time clock ──→ time_punches ──┐            │
+                                                          │            │
+   afternoon                                              │            │
+      └─ a guardian collects ──→ kiosk ──→ signed_out_at ─────────────┘
+                                                          │
+                                                          ↓
+                                            rolled into timesheet_entries
+```
+
+**Only today can be signed in.** A missed day is not fixed on the sheet; it is
+fixed by the director on the week it belongs to, or not at all.
+
+**The door and the sheet write the same row.** A kiosk sign-in *is* a sheet
+sign-in — same table, same keys, stamped at the minute the guardian pressed it.
+Nobody transcribes anything, and the two can never disagree.
+
+---
+
+## Every week
+
+```
+   Mon  ── open the week ──→ copies the newest earlier week's pattern
+             │                (only the plan travels, never the sign-ins)
+             ↓
+        adjust the ticks ──→ or copy from a better week (Add / Replace)
+             │
+             ↓
+        closures already set greyed their columns and cannot be ticked
+             │
+             ↓
+        Generate the roster  ← reads: rules · ratios from booked children
+             │                        · approved leave · closures
+             ↓
+        teachers read it on Week Schedule / My Schedule
+             │
+   Fri  ── the week ends ──→ frozen. Pattern, closures and room moves all refuse.
+```
+
+**What blocks what**
+
+| Step | Waits on | If you do it early |
+|---|---|---|
+| Open a week | nothing — but it copies the newest week *that exists* | it inherits from further back than you meant |
+| Tick the sheet | the week being open | there is nothing to tick |
+| Generate the roster | children booked, rules set, leave decided | a roster with no gaps because nobody needed staffing |
+| Approve leave | — | see below: leave granted after generating needs a regenerate |
+
+**Leave approved after the roster was published** pulls that person's shifts and
+leaves a warning asking for a regenerate. Colleagues' shifts are deliberately
+left alone — re-solving the week would rewrite everybody's published hours
+around one person's day off, and people have arranged childcare around them.
+
+---
+
+## Every fortnight — the pay period
+
+Semi-monthly: the 1st to the 15th, and the 16th to month end. **A period never
+lines up with a week**, and most of the design below follows from that.
+
+```
+   the period runs
+        │
+        ├─ punches roll up per day as they happen
+        │
+   it ends
+        │
+   1 ── Fill from the roster ──→ days nobody punched arrive as a draft (amber)
+        │                        never overwrites a confirmed day
+        ↓
+   2 ── Confirm the days ──────→ a person reads a fortnight and says yes (bold)
+        │                        a punched day needs no confirming — it is
+        │                        already the employee's own account
+        ↓
+        corrections: void + replacement on the punches, with a reason
+        ↓
+   3 ── Approve ───────────────→ frozen, and leave accrues in the same act
+        │
+        ↓
+   4 ── Download CSV ──────────→ the deliverable
+```
+
+**Approve is refused three ways, and the three are different questions:**
+
+| Refusal | Means |
+|---|---|
+| the period has not finished | you are approving days that have not happened |
+| *n* days are still the roster's word | **nobody has said yet** what happened |
+| *n* days have punches that do not add up | **what was said cannot be true** |
+
+**Overtime is weekly; pay is per period.** The split is worked out across the
+whole Monday–Sunday week — including the days on the far side of the period
+boundary — and only then collected into the period each day falls in. Doing it
+inside each period instead makes overtime vanish at every boundary.
+
+**Approving is what earns leave.** Accrual posts in the same act, because leave
+should be earned only from hours somebody has signed off — and posting is
+idempotent, so reopening and re-approving does not pay it twice.
+
+---
+
+## Every year
+
+```
+   Holidays ──→ an annual rule writes itself five years ahead as ordinary
+                closures, and tops the horizon up on every visit to the page
+                     │
+                     ├──→ greys the attendance column
+                     ├──→ leaves the roster unstaffed that day
+                     └──→ costs nobody any leave
+
+   Leave ─────→ balances run continuously and stop at the cap.
+                Nothing resets or carries over at year end — see the open list
+                in Part four.
+```
+
+---
+
+## Payroll — the one that runs backwards
+
+Everything above pushes forward. Payroll pulls: a PDF comes *back* from the
+provider and is split into payslips.
+
+```
+   Payroll Prep CSV ──→ [ your payroll provider ] ──→ combined PDF
+                                                          │
+                                          Payroll → upload and split
+                                                          │
+                                       match to people → preview → send
+```
+
+The two halves never talk. **Payroll Prep is the hours going out; Payroll is the
+payslips coming back**, and nothing in the app carries a number between them.
+
+---
+
+## Orderings that go wrong quietly
+
+These produce a plausible number rather than an error, which is what makes them
+worth a list.
+
+| Doing this | before this | gives you |
+|---|---|---|
+| Generate the roster | booking the children | an empty roster and no shortfalls — every room reads as needing nobody |
+| Generate the roster | deciding leave | somebody rostered on a day they were granted off |
+| Approve the period | correcting the punches | a short week sent to payroll as finished |
+| Fill from the roster | the roster being generated | nothing copied, and no warning that the roster was blank |
+| Set a closure | opening the week | nothing wrong — this one is safe, and is the point of setting them ahead |
+| Re-run the holiday seeder | — | safe: a year already written is never revisited |
+
+The last two are there on purpose. Closures and annual holidays are the two
+places where doing it early is the *correct* order, and it is worth knowing
+which side of the line they sit on.
+
+---
+
+## The whole thing, once
+
+```
+  ONCE          rooms · holidays · teachers · rules · children · guardians
+                                        │
+  ┌─────────────────────────────────────┴──────────────────────────────────┐
+  │                                                                        │
+  DAILY                                                          WEEKLY
+  door kiosk ─┐                                          open week
+  the sheet  ─┴──→ attendances ──→ reports · DSS              ↓
+                                                          tick the pattern
+  time clock ─────→ time_punches                              ↓
+                         │                                generate roster
+                         │                                    ↓
+  ┌──────────────────────┴──────────────────┐           teachers read it
+  │                                         │
+  FORTNIGHTLY                          CONTINUOUS
+  fill → confirm → approve → CSV       leave asked · decided · accrued
+                    │                  holidays written years ahead
+                    ↓
+              payroll provider
+                    │
+                    ↓
+              PDF back → split → match → send
+```
 
 ---
 

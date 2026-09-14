@@ -55,17 +55,19 @@ class LayoutChromeTest extends TestCase
         $this->assertGreaterThan($navEnds, strpos($html, 'aria-label="Log out"'));
     }
 
-    public function test_the_sidebar_counts_the_leave_requests_waiting_on_a_director(): void
+    /**
+     * Leave is parked, like the time clock, and parked means nothing renders.
+     *
+     * This used to assert the director's queue and its waiting-count badge.
+     * Both links are commented out of the sidebar now — built, not yet being
+     * run — so what is worth holding is that the badge does not appear for
+     * requests that really are waiting. Restore the count assertions with the
+     * link.
+     */
+    public function test_the_leave_nav_is_parked_for_both_roles(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $teacher = User::factory()->create(['role' => 'teacher']);
-
-        // Nothing waiting: the link is there, the badge is not.
-        $this->actingAs($admin)->get(route('dashboard'))->assertOk()
-            ->assertSee('Leave Requests')
-            // The badge's colour, not its padding: the sidebar is laid out
-            // more than once a year and this test is about the count.
-            ->assertDontSee('rounded-full bg-amber-500', escape: false);
 
         foreach (['2026-09-01', '2026-09-08'] as $date) {
             LeaveRequest::create([
@@ -78,15 +80,14 @@ class LayoutChromeTest extends TestCase
             ]);
         }
 
-        $html = $this->actingAs($admin)->get(route('dashboard'))->assertOk()->getContent();
-
-        $this->assertStringContainsString('rounded-full bg-amber-500', $html);
-        $this->assertMatchesRegularExpression('/bg-amber-500[^>]*>2</', $html);
-
-        // A teacher has no queue to be counted at, so neither link is theirs.
-        $this->actingAs($teacher)->get(route('dashboard'))->assertOk()
-            ->assertSee('My Leave')
-            ->assertDontSee('Leave Requests');
+        foreach ([$admin, $teacher] as $user) {
+            $this->actingAs($user)->get(route('dashboard'))->assertOk()
+                ->assertDontSee('Leave Requests')
+                ->assertDontSee('My Leave')
+                // Two requests are pending: the badge that would count them
+                // must not arrive on its own.
+                ->assertDontSee('rounded-full bg-amber-500', escape: false);
+        }
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void
@@ -113,7 +114,7 @@ class LayoutChromeTest extends TestCase
 
         // The four values, in the order they sit forward from the page: black
         // behind, then card, input and accent.
-        foreach (['950' => '#000000', '900' => '#150050', '800' => '#3f0071', '700' => '#610094'] as $shade => $hex) {
+        foreach (['950' => '#070f2b', '900' => '#1b1a55', '800' => '#535c91', '700' => '#9290c3'] as $shade => $hex) {
             $this->assertStringContainsString("--color-night-{$shade}: {$hex};", $css);
         }
     }
@@ -355,6 +356,76 @@ class LayoutChromeTest extends TestCase
 
         $this->assertSame([], $offenders, 'these declare a favicon instead of including layouts.favicon');
     }
+
+    public function test_nothing_puts_white_text_on_the_light_accent(): void
+    {
+        // night-700 is the palest of the four. White on it is about 3:1, which
+        // fails AA for body text; night-950 on it is 6.3:1. Three places had to
+        // change when the palette moved, and this is what finds the fourth.
+        $offenders = [];
+
+        foreach (array_merge($this->bladeFiles(), [resource_path('css/app.css')]) as $file) {
+            foreach (file($file) as $number => $line) {
+                if (! str_contains($line, 'night-700')) {
+                    continue;
+                }
+
+                if (preg_match('/(?:bg-night-700[^"\']*text-white|text-white[^"\']*bg-night-700)/', $line)) {
+                    $offenders[] = basename($file).':'.($number + 1);
+                }
+            }
+        }
+
+        $this->assertSame([], $offenders, 'white text on night-700 is below AA — use text-night-950');
+    }
+
+    public function test_the_palette_keeps_its_text_readable(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+
+        preg_match_all('/--color-night-(\d+):\s*(#[0-9a-f]{6});/i', $css, $matches, PREG_SET_ORDER);
+
+        $palette = [];
+        foreach ($matches as [$whole, $shade, $hex]) {
+            $palette[$shade] = $hex;
+        }
+
+        // The three surfaces that carry body text do so against slate-100, the
+        // shade the views actually use for it. 4.5:1 is AA for normal text.
+        foreach (['950', '900', '800'] as $shade) {
+            $this->assertGreaterThanOrEqual(
+                4.5,
+                $this->contrast('#f1f5f9', $palette[$shade]),
+                "text on night-{$shade} ({$palette[$shade]}) is below AA"
+            );
+        }
+
+        // The accent is a background for short labels, and takes the darkest
+        // shade rather than white.
+        $this->assertGreaterThanOrEqual(4.5, $this->contrast($palette['950'], $palette['700']));
+    }
+
+    private function contrast(string $a, string $b): float
+    {
+        $luminance = function (string $hex): float {
+            $channels = array_map(
+                fn ($pair) => hexdec($pair) / 255,
+                str_split(ltrim($hex, '#'), 2)
+            );
+
+            $channels = array_map(
+                fn ($v) => $v <= 0.04045 ? $v / 12.92 : (($v + 0.055) / 1.055) ** 2.4,
+                $channels
+            );
+
+            return 0.2126 * $channels[0] + 0.7152 * $channels[1] + 0.0722 * $channels[2];
+        };
+
+        [$x, $y] = [$luminance($a), $luminance($b)];
+
+        return (max($x, $y) + 0.05) / (min($x, $y) + 0.05);
+    }
+
     /** Every Blade template in the app, however deeply nested. */
     private function bladeFiles(): array
     {

@@ -193,8 +193,14 @@ return [
              * roster by hand, which is how this worked before the clock
              * existed and is still a reasonable way to run a small site. The
              * punches already recorded are kept and still shown.
+             *
+             * Off for this version. The clock is built and tested — it is the
+             * centre that is not ready to punch one — so it waits here rather
+             * than being taken out, and the next version is this one line.
+             * While it is off, a teacher signing in is not clocked in and
+             * lands on the dashboard like everybody else.
              */
-            'enabled' => true,
+            'enabled' => false,
 
             /**
              * Minutes of a rest break that are paid, per break.
@@ -314,4 +320,23 @@ return [
         ],
     ],
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Door kiosk
+    |--------------------------------------------------------------------------
+    |
+    | The check-in screen at the front door. It is the one route in this app
+    | that answers a signed-out request, so it is off unless a centre asks for
+    | it: with `enabled` false the URL is a 404, not a locked door.
+    |
+    | `device` is written onto every punch, so a centre with a screen at each
+    | entrance can tell which one a child came through.
+    |
+    */
+
+    'kiosk' => [
+        'enabled' => env('DAYCARE_KIOSK', false),
+        'device' => env('DAYCARE_KIOSK_DEVICE', 'Front door'),
+    ],
 ];

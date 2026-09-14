@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\PlacesChildrenInRooms;
 use Tests\TestCase;
@@ -61,7 +62,7 @@ class AttendanceSheetTest extends TestCase
         }
 
         // Every matching child renders, not a page of them.
-        $this->assertStringContainsString('x-for="(child, index) in filteredChildren"', $html);
+        $this->assertStringContainsString('x-for="child in filteredChildren"', $html);
     }
 
     public function test_the_header_shows_counts_as_inline_chips(): void
@@ -74,10 +75,61 @@ class AttendanceSheetTest extends TestCase
             ->assertOk();
 
         $response->assertSee('enrolled');
-        $response->assertSee('present');
-        $response->assertSee('not signed in');
+        $response->assertSee('in');
+        $response->assertSee('not in');
         $response->assertDontSee('Present today');       // the old stat card
         $response->assertDontSee('DAYCARE MANAGEMENT');  // the old eyebrow
+    }
+
+    /**
+     * The first column names the child the way the office does.
+     *
+     * It used to count rows, which answers nothing: the number changed when the
+     * sort flipped or a room was filtered, so it was never the same child twice.
+     */
+    public function test_the_first_column_is_the_lan_not_a_row_number(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('>LAN</th>', $html);
+        $this->assertStringContainsString("x-text=\"child.lan || '—'\"", $html);
+        // The rows are handed to Alpine as JSON, so the LAN has to be in them
+        // as well as named in the markup that draws the column.
+        $this->assertSame(1, preg_match("/childrenData: JSON\.parse\('(.*?)'\)/", $html, $rows));
+        $this->assertSame(
+            '1001',
+            json_decode(json_decode('"'.$rows[1].'"'), associative: true)[0]['lan'],
+            'the LAN never reached the browser'
+        );
+
+        // Nothing left counting rows, in either layout.
+        $this->assertStringNotContainsString('index + 1', $html);
+
+        // And a number on the sheet can be typed into the box beside it.
+        $this->assertStringContainsString("child.lan ?? ''", $html);
+        $this->assertStringContainsString('Search name or LAN', $html);
+    }
+
+    /**
+     * The room has a column of its own, third, rather than trailing the name.
+     *
+     * Beside the name it read as part of it. In a column the rooms stack, and a
+     * child sitting in one nobody else on screen is in stands out — which is
+     * the thing the sheet is grouped and staffed by.
+     */
+    public function test_the_classroom_is_the_third_column(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $this->actingAs($this->admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->assertSeeInOrder(['>LAN</th>', '>Student<', '>Classroom</th>', '>DOB</th>', '>Age</th>'], escape: false);
     }
 
     public function test_the_week_grid_is_replaced_by_cards_on_small_screens(): void
@@ -94,7 +146,7 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('md:hidden', $html);
 
         // Both sign-in layouts loop the same children and can both sort.
-        $this->assertSame(2, substr_count($html, '(child, index) in filteredChildren"'));
+        $this->assertSame(2, substr_count($html, 'child in filteredChildren"'));
         $this->assertSame(2, substr_count($html, '@click="toggleSort"'));
     }
 
@@ -110,8 +162,8 @@ class AttendanceSheetTest extends TestCase
 
         // One handler per weekday per layout; the session comes from the child's own
         // list at runtime rather than being hardcoded per room.
-        $this->assertSame(10, substr_count($html, "signIn(child.id, '"));
-        $this->assertSame(2, substr_count($html, "signIn(child.id, '".$date."', session)"));
+        $this->assertSame(10, substr_count($html, "tapCell(child.id, '"));
+        $this->assertSame(2, substr_count($html, "tapCell(child.id, '".$date."', session)"));
         $this->assertStringContainsString('x-for="session in child.sessions"', $html);
     }
 
@@ -202,7 +254,13 @@ class AttendanceSheetTest extends TestCase
         $this->assertSame(2, Attendance::where('child_id', $child->id)->count());
     }
 
-    public function test_the_sheet_does_not_offer_a_day_it_would_refuse(): void
+    /**
+     * The sheet never offers a tap it would have to explain away afterwards.
+     *
+     * Today always; a day already gone only once Edit is on, and only for
+     * somebody who may correct one; tomorrow never.
+     */
+    public function test_the_sheet_only_offers_the_days_it_can_take(): void
     {
         $this->makeChild('Turing', 'Alan', 'Toddler');
 
@@ -211,33 +269,67 @@ class AttendanceSheetTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // The box for any day but today is disabled, so the click is never
-        // taken and then explained away in a dialog.
-        $this->assertStringContainsString("! canSignIn('", $html);
-        $this->assertStringContainsString('canSignIn(date) { return date === this.today; }', $html);
+        // canTap: signing in today, or in Edit setting the plan for any day.
+        $this->assertStringContainsString("! canTap('", $html);
+        $this->assertStringContainsString('if (date === this.today) return true;', $html);
+        $this->assertStringContainsString('return this.editing && this.canAmend && date < this.today;', $html);
+
+        // Off by default: the sheet a teacher stands in front of all day offers
+        // today and nothing else, because the commonest mistake on a
+        // five-column grid is the column next to the one you meant.
+        $this->assertStringContainsString('editing: false,', $html);
     }
 
-    public function test_another_day_is_still_refused_by_the_server(): void
+    /**
+     * The rule is the record's, not the page's.
+     *
+     * A hand-made post gets the same answer the sheet would have given, and the
+     * two things that stay refused are refused here rather than in the markup.
+     */
+    public function test_the_server_draws_the_boundary_the_sheet_only_shows(): void
     {
-        // The sheet no longer offers the click, but the rule is the record's,
-        // not the page's — a hand-made post is refused just the same.
+        // Mid-week, so "yesterday" and "tomorrow" are both inside it.
+        $this->travelTo(Carbon::parse('2026-09-16 09:00:00'));
         $child = $this->makeChild('Turing', 'Alan', 'Toddler');
 
-        $response = $this->actingAs($this->admin)
+        // Yesterday, inside this week: a correction, and allowed.
+        $this->actingAs($this->admin)
             ->postJson(route('attendance.signin'), [
                 'child_id' => $child->id,
-                'attendance_date' => today()->subDay()->toDateString(),
+                'attendance_date' => '2026-09-15',
+                'session' => 'FULL',
+            ])
+            ->assertOk()
+            ->assertJson(['success' => true]);
+
+        // Tomorrow: an arrival that has not happened is a guess, not a record.
+        $message = $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-17',
                 'session' => 'FULL',
             ])
             ->assertStatus(422)
-            ->assertJsonValidationErrors('attendance_date');
+            ->assertJsonValidationErrors('attendance_date')
+            ->json('errors.attendance_date.0');
 
-        // Still names both days: it reaches a person if anything ever does show it.
-        $message = $response->json('errors.attendance_date.0');
-        $this->assertStringContainsString(today()->format('l, M j'), $message);
-        $this->assertStringContainsString(today()->subDay()->format('l, M j'), $message);
+        // Named dates: the sheet shows a whole week at once, and "today" alone
+        // does not say which column was meant.
+        $this->assertStringContainsString('Thursday, Sep 17', $message);
+        $this->assertStringContainsString('has not happened yet', $message);
 
-        $this->assertSame(0, Attendance::count());
+        // Last week is open too: a missing day is usually noticed when the
+        // month is being reconciled, which is weeks after the fact. The frozen
+        // week still locks its *plan* — this is its record.
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-11',
+                'session' => 'FULL',
+            ])
+            ->assertOk();
+
+        $this->assertSame(2, Attendance::count());
     }
 
     private function makeChild(string $last, string $first, string $room): Child

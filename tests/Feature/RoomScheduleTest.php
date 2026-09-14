@@ -127,38 +127,46 @@ class RoomScheduleTest extends TestCase
             ->assertDontSee('Ada Lovelace');
     }
 
-    public function test_a_child_shows_the_hours_of_the_room_they_are_in(): void
+    /**
+     * The roster's Schedule column is about the child, not the room.
+     *
+     * The room's hours used to sit under every child's own. Every child in a
+     * room shares them, so down a column of sixty they were the same line sixty
+     * times — and the one thing the column could not tell you was which child
+     * was different. They are still set and read on the Room Schedules page,
+     * where a room is the subject rather than the backdrop.
+     */
+    public function test_the_roster_shows_the_childs_own_arrangement_only(): void
+    {
+        $this->roomSchedule('Infant', '08:00', '17:00');
+        $this->child('Infant', [
+            'drop_off_time' => '07:00',
+            'pick_up_time' => '17:30',
+            'schedule_days' => [1, 3, 5],
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('children.index'))
+            ->assertOk()
+            // Their hours and their days, which differ child to child.
+            ->assertSee('7:00 AM – 5:30 PM')
+            ->assertSee('Mon, Wed, Fri')
+            // And not the room's, repeated on every row.
+            ->assertDontSee('Class 8:00 AM – 5:00 PM')
+            ->assertDontSee('8:00 AM – 5:00 PM');
+    }
+
+    public function test_the_room_page_still_owns_the_rooms_hours(): void
     {
         $this->roomSchedule('Infant', '08:00', '17:00');
         $this->child('Infant');
 
+        // Removed from the roster, not from the app: this is the page where a
+        // room's own day is set and read.
         $this->actingAs($this->admin)
-            ->get(route('children.index'))
+            ->get(route('room-schedule.index'))
             ->assertOk()
-            ->assertSee('Class 8:00 AM – 5:00 PM');
-    }
-
-    public function test_a_child_in_another_room_does_not_borrow_its_hours(): void
-    {
-        $this->roomSchedule('Infant', '08:00', '17:00');
-        $this->child('Toddler');
-
-        $this->actingAs($this->admin)
-            ->get(route('children.index'))
-            ->assertOk()
-            ->assertDontSee('8:00 AM – 5:00 PM');
-    }
-
-    public function test_the_childs_own_hours_and_the_rooms_are_both_shown(): void
-    {
-        $this->roomSchedule('Infant', '08:00', '17:00');
-        $this->child('Infant', ['drop_off_time' => '07:00', 'pick_up_time' => '17:30']);
-
-        $this->actingAs($this->admin)
-            ->get(route('children.index'))
-            ->assertOk()
-            ->assertSee('7:00 AM – 5:30 PM')
-            ->assertSee('Class 8:00 AM – 5:00 PM');
+            ->assertSee('8:00 AM – 5:00 PM');
     }
 
     public function test_the_seeder_opens_every_room_with_the_centre(): void

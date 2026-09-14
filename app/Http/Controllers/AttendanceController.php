@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use App\Models\Attendance;
+use App\Models\AttendanceAmendment;
 use App\Models\Child;
 use App\Models\ClosureDay;
 use App\Models\ScheduleSlot;
 use App\Models\ScheduleWeek;
 use App\Services\AttendanceProjection;
+use App\Services\AttendanceSheet;
 use App\Services\RoomCover;
 use App\Services\ClassroomAssignment;
 use App\Services\WeekSchedule;
@@ -46,7 +48,18 @@ class AttendanceController extends Controller
             $weekDates = collect(range(0, 4))->map(fn ($offset) => $weekStart->copy()->addDays($offset));
 
             $attendanceRecords = Attendance::with('child')
-                ->whereBetween('attendance_date', [$weekDates->first(), $weekDates->last()])
+                // Date strings, not Carbon instances. attendance_date is a DATE
+                // column; a Carbon binds as 'Y-m-d H:i:s', and SQLite compares
+                // the two as text — so '2026-09-14' sorts before
+                // '2026-09-14 00:00:00' and a sign-in on the Monday of the week
+                // was silently dropped from the sheet. The same trap
+                // ClosureDay::scopeBetweenDates documents, and Monday is not a
+                // rare day to be missing. Every other range in the app already
+                // binds strings; this one had been left behind.
+                ->whereBetween('attendance_date', [
+                    $weekDates->first()->toDateString(),
+                    $weekDates->last()->toDateString(),
+                ])
                 ->whereHas('child', fn ($query) => $query->visibleTo($user))
                 ->get();
 
@@ -55,7 +68,7 @@ class AttendanceController extends Controller
             foreach ($attendanceRecords as $attendance) {
                 $date = $attendance->attendance_date->toDateString();
                 $session = $attendance->session ?? 'FULL';
-                $attendanceMap[$attendance->child_id][$date][$session] = $attendance->signed_in_at->timezone($timezone)->format('g:i A');
+                $attendanceMap[$attendance->child_id][$date][$session] = Child::timeShort($attendance->signed_in_at->timezone($timezone));
             }
 
             // Dashboard Statistics
@@ -91,11 +104,14 @@ class AttendanceController extends Controller
             $weekStartDate = $weekStart->toDateString();
             $isCurrentWeek = $weekStartDate === ScheduleWeek::startOf(today()->toDateString());
 
-            $scheduleWeek = $weeks->isOpen($weekStartDate) || $isCurrentWeek
+            // "Open" means open to this reader: their own rooms having boxes in
+            // it. Another teacher having been here first builds their rooms, not
+            // everybody's, so the week's row existing is no longer the question.
+            $scheduleWeek = $weeks->isOpenFor($weekStartDate, $user) || $isCurrentWeek
                 ? $weeks->open($weekStartDate, $user)
                 : null;
 
-            $weekIsOpen = $scheduleWeek !== null;
+            $weekIsOpen = $scheduleWeek !== null && $weeks->isOpenFor($weekStartDate, $user);
 
             $scheduleMap = [];
             foreach (ScheduleSlot::where('week_start', $weekStartDate)->get() as $slot) {
@@ -117,6 +133,30 @@ class AttendanceController extends Controller
             // A finished week is a record of what did not happen. Offering to
             // build one now would write a plan into a week that is already over.
             $canOpenWeek = ($user->isAdmin() || $user->role === 'teacher') && ! $weekIsOpen && ! $weekIsFrozen;
+
+            /*
+             * Correcting a day already gone.
+             *
+             * A room teacher is the one who knows who actually turned up, so it
+             * is not a director-only job. Any week that exists and has already
+             * begun, finished ones included — those are exactly the weeks a
+             * missing day is noticed in, when the month is being reconciled.
+             *
+             * Deliberately not $canEditSchedule: that one closes on a finished
+             * week, and rightly so. The plan for a week that is over is over;
+             * the record of what happened in it is still correctable, and every
+             * correction is written to attendance_amendments.
+             */
+            $canAmendAttendance = ($user->isAdmin() || $user->role === 'teacher')
+                && $weekIsOpen
+                && $weekStartDate <= ScheduleWeek::startOf(today()->toDateString());
+
+            // What has already been corrected in this week, so a row that was
+            // not a live sign-in is visibly not one.
+            $amendmentMap = AttendanceAmendment::mapForRange(
+                $weekDates->first()->toDateString(),
+                $weekDates->last()->toDateString()
+            );
 
             // What the week is expected to look like: last week's actual
             // attendance, bounded by the enrolment dates and closures, measured
@@ -157,8 +197,24 @@ class AttendanceController extends Controller
             // week thinned out by holidays reads as a low count and a closure
             // flag, so the choice is made from the list rather than by opening
             // each week in turn.
+            /*
+             * Counted over the rooms this reader holds, because that is what a
+             * copy would actually move.
+             *
+             * The copy itself is scoped — a teacher copies their own rooms
+             * forward and an admin copies the centre — so a centre-wide count
+             * beside it was a number from a different question. A Toddler
+             * teacher choosing "62 days ticked" and getting ten was being shown
+             * the whole building's week to decide their own room's by.
+             *
+             * The closed-day count below is deliberately not scoped: a closure
+             * is a fact about the centre, and it thins everybody's week equally.
+             */
+            $sourceChildIds = $user->isAdmin() ? null : Child::visibleTo($user)->pluck('id')->all();
+
             $sourceTicks = ScheduleSlot::whereIn('week_start', $sourceList)
                 ->where('is_scheduled', true)
+                ->when($sourceChildIds !== null, fn ($query) => $query->whereIn('child_id', $sourceChildIds))
                 ->selectRaw('week_start, count(*) as total')
                 ->groupBy('week_start')
                 ->pluck('total', 'week_start');
@@ -200,9 +256,192 @@ class AttendanceController extends Controller
                 'projectionDayTotals',
                 'projectionSource',
                 'projectionBasisLabels',
-                'roomCover'
+                'roomCover',
+                'canAmendAttendance',
+                'amendmentMap'
             ));
     }
+
+    /**
+     * Take an arrival back off the register.
+     *
+     * The other half of a correction: a cell tapped by mistake, or the wrong
+     * child in a room of two Levis. Without it Edit could only ever add, which
+     * would make the sheet drift further from the truth rather than closer.
+     *
+     * Bounded exactly as signing in is — this week, never the future, and only
+     * a child this person may see — because deleting a day is the more
+     * consequential half of the pair, not the lesser one.
+     */
+    public function removeSignIn(Request $request)
+    {
+        $validated = $request->validate([
+            'child_id' => 'required|exists:children,id',
+            'attendance_date' => [
+                'required',
+                'date_format:Y-m-d',
+                function ($attribute, $value, $fail) {
+                    $today = now()->toDateString();
+
+                    if ($value > $today) {
+                        $fail(Carbon::parse($value)->format('l, M j').' has not happened yet, '
+                            .'so there is nothing on it to take off.');
+                    }
+                },
+            ],
+            'session' => 'nullable|in:AM,PM,FULL',
+        ]);
+
+        $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+
+        $session = $validated['session'] ?? 'FULL';
+
+        $attendance = Attendance::where('child_id', $child->id)
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->where('session', $session)
+            ->first();
+
+        // Written down before it goes, and with the time that was on it: a
+        // deletion leaves nothing in `attendances` to ask about afterwards, so
+        // this is the only place the old value can survive.
+        if ($attendance) {
+            AttendanceAmendment::record(
+                AttendanceAmendment::REMOVED,
+                $attendance,
+                $request->user(),
+                $attendance->signed_in_at
+            );
+
+            $attendance->delete();
+        }
+
+        return response()->json(['success' => true, 'removed' => $attendance ? 1 : 0]);
+    }
+
+    /**
+     * Change the hour on an arrival already recorded.
+     *
+     * The commonest correction there is — the child was here, the tap came
+     * late — and until now the only way to make it was to take the arrival off
+     * and put it back, which wrote two amendments to say one thing. The row
+     * keeps its identity; the time on it moves; and for a day already gone
+     * the move is written down with who made it.
+     *
+     * Today included. An arrival tapped at 9:20 for a child who walked in at
+     * 8:45 is wrong today as much as it will be next month, and the person who
+     * knows is standing at the sheet now.
+     */
+    public function retime(Request $request)
+    {
+        $validated = $request->validate([
+            'child_id' => 'required|exists:children,id',
+            'attendance_date' => [
+                'required',
+                'date_format:Y-m-d',
+                function ($attribute, $value, $fail) {
+                    if ($value > now()->toDateString()) {
+                        $fail(Carbon::parse($value)->format('l, M j').' has not happened yet, '
+                            .'so there is no arrival on it to move.');
+                    }
+                },
+            ],
+            'session' => 'nullable|in:AM,PM,FULL',
+            'signed_in_time' => ['required', 'date_format:H:i'],
+        ]);
+
+        $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+        $session = $validated['session'] ?? 'FULL';
+
+        $attendance = Attendance::where('child_id', $child->id)
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->where('session', $session)
+            ->first();
+
+        if (! $attendance) {
+            return response()->json([
+                'message' => $child->displayName().' has no arrival recorded on '
+                    .Carbon::parse($validated['attendance_date'])->format('l, M j').' to move.',
+            ], 422);
+        }
+
+        $attendance->signed_in_at = Carbon::parse(
+            $validated['attendance_date'].' '.$validated['signed_in_time'],
+            config('app.timezone')
+        );
+        $attendance->save();
+
+        // The new hour is what the register now says; the old one survives
+        // only here. record() writes nothing for today, deliberately — see it.
+        $amendment = AttendanceAmendment::record(
+            AttendanceAmendment::RETIMED,
+            $attendance,
+            $request->user(),
+            $attendance->signed_in_at
+        );
+
+        return response()->json([
+            'success' => true,
+            'time' => Child::timeShort($attendance->signed_in_at->timezone(config('app.timezone'))),
+            'amendment' => $amendment ? [
+                'action' => $amendment->action,
+                'by' => $request->user()->name,
+                'on' => $amendment->created_at->format('M j'),
+            ] : null,
+        ]);
+    }
+    /**
+     * The week as a page for the clipboard.
+     *
+     * The same children and the same slots the sign-in grid shows, arranged
+     * for landscape Letter by AttendanceSheet. Nothing is written by looking:
+     * a week nobody has opened prints as an empty page rather than being built
+     * on the way to the printer.
+     */
+    public function print(AttendanceSheet $sheet)
+    {
+        $user = request()->user();
+        $selectedDate = trim((string) request('date')) ?: today()->toDateString();
+        validator(['date' => $selectedDate], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+        ClassroomAssignment::syncAll();
+
+        /*
+         * One week, or the month that week falls in.
+         *
+         * A month is the same sheet several times over rather than a different
+         * one: twenty-two weekday columns will not fit across a page, and a
+         * register nobody can write on is not a register. So each week keeps
+         * the layout the centre already knows and takes a page of its own.
+         *
+         * Whole weeks, including the days either side of the month boundary.
+         * The alternative is a two-column page in the first week of November,
+         * which reads as a printing fault rather than as a month starting on a
+         * Wednesday — and those days have to be signed for by somebody too.
+         */
+        $range = request('range') === 'month' ? 'month' : 'week';
+        $selected = Carbon::parse($selectedDate);
+        $children = Child::visibleTo($user)->where('status', 'Active')->get();
+
+        // Where "back to attendance" and the other range's link should land.
+        $shared = [
+            'range' => $range,
+            'weekStart' => $selected->copy()->startOfWeek(Carbon::MONDAY)->toDateString(),
+            'selectedDate' => $selectedDate,
+        ];
+
+        // The month is its own page rather than five weekly ones stapled
+        // together � see AttendanceSheet::buildMonth for why the geometry has
+        // to change rather than repeat.
+        if ($range === 'month') {
+            return view('attendance.print-month', $sheet->buildMonth($selectedDate, $children) + $shared);
+        }
+
+        return view('attendance.print', [
+            'sheets' => collect([$sheet->build($shared['weekStart'], $children)]),
+            'rangeLabel' => null,
+        ] + $shared);
+    }
+
 
     /**
      * Build a week, because somebody said so.
@@ -238,42 +477,6 @@ class AttendanceController extends Controller
                 : 'Week of '.Carbon::parse($weekStart)->format('M j').' opened. Nothing came before it, so the days start empty.');
     }
 
-    // public function signIn(Request $request)
-    // {
-    //     $validated = $request->validate([
-    //         'child_id' => 'required|exists:children,id',
-    //         'attendance_date' => 'required|date_format:Y-m-d',
-    //         'session' => 'nullable|in:AM,PM,FULL',
-    //     ]);
-
-    //     $validated['session'] = $validated['session'] ?? 'FULL';
-
-    //     $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
-
-    //     $attendance = Attendance::firstOrCreate(
-    //         [
-    //             'child_id' => $child->id,
-    //             'attendance_date' => $validated['attendance_date'],
-    //             'session' => $validated['session'],
-    //         ],
-    //         [
-    //             'signed_in_at' => now(),
-    //         ]
-    //     );
-
-    //     $attendance->load('child');
-
-    //     return response()->json([
-    //         'success' => true,
-    //         'created' => $attendance->wasRecentlyCreated,
-    //         'time' => $attendance->signed_in_at->format('h:i A'),
-    //         'child' => [
-    //             'name' => $attendance->child->first_name.' '.$attendance->child->last_name,
-    //             'classroom' => $attendance->child->classroom,
-    //         ],
-    //         'session' => $attendance->session,
-    //     ]);
-    // }
     public function signIn(Request $request)
 {
     
@@ -282,21 +485,121 @@ class AttendanceController extends Controller
         'attendance_date' => [
             'required',
             'date_format:Y-m-d',
+            /*
+             * Today, or a day already gone inside the week on screen.
+             *
+             * Today is the ordinary case and needs no explaining. The days
+             * behind it are the correction: a child was here on Monday and
+             * nobody tapped the cell, and the register has to be able to say
+             * so. The sheet only offers those cells once somebody has pressed
+             * Edit — but that is an affordance against accidents, not an
+             * authorisation, so the boundary is drawn here where it counts.
+             *
+             * One thing stays refused: a date ahead of today, because an
+             * arrival that has not happened is not a correction but a guess.
+             *
+             * Earlier weeks are open too, including weeks the centre has
+             * already reported and billed from. That is a deliberate loosening
+             * of the frozen-week rule and it is why every such change is
+             * written to attendance_amendments — the row can move, but not
+             * quietly. The ticked schedule of a finished week stays locked; it
+             * is the plan, and the plan is over.
+             */
             function ($attribute, $value, $fail) {
-                if ($value !== now()->toDateString()) {
+                $today = now()->toDateString();
+
+                if ($value > $today) {
                     // Named dates, because the sheet shows a whole week at once
                     // and "today" alone does not say which column to use.
-                    $fail('Only '.now()->format('l, M j').' can be signed in. '
-                        .Carbon::parse($value)->format('l, M j').' is closed — use "Copy from another week" to fill a past week.');
+                    $fail(Carbon::parse($value)->format('l, M j').' has not happened yet — '
+                        .now()->format('l, M j').' is the last day that can be signed in.');
+
+                    return;
+                }
+            },
+
+            /*
+             * On the roll that day.
+             *
+             * The sheet draws no cell for a day outside a child's enrolment
+             * dates — it draws a dash — so this is never reached by tapping.
+             * It is reached by a stale tab: a page opened on Friday, a leaving
+             * date entered on Monday, and the Friday tab still offering cells
+             * that no longer exist. Billing a day a child was not enrolled for
+             * is the kind of error nobody finds until an audit.
+             */
+            function ($attribute, $value, $fail) use ($request) {
+                $child = Child::find($request->input('child_id'));
+
+                if ($child && ! $child->isEnrolledOn($value)) {
+                    $fail($child->displayName().' was not on the roll on '
+                        .Carbon::parse($value)->format('l, M j').'.');
                 }
             },
         ],
-        'session' => 'nullable|in:AM,PM,FULL',
+
+        /*
+         * The halves of the day a child's room actually uses.
+         *
+         * School Age is signed in by morning and afternoon; every other room is
+         * signed in once for the whole day. The list is not a matter of
+         * preference — an AM row for a Toddler is a half day of attendance
+         * against a child who has no half days, which is a billing figure that
+         * cannot be reconciled against anything.
+         *
+         * The sheet builds its cells from the child's own session list, so this
+         * too is a boundary check rather than a thing a person can trip over.
+         */
+        'session' => [
+            'nullable',
+            'in:AM,PM,FULL',
+            function ($attribute, $value, $fail) use ($request) {
+                $child = Child::find($request->input('child_id'));
+
+                if (! $child) {
+                    return;
+                }
+
+                $sessions = $child->sessions();
+
+                if (! in_array($value ?? 'FULL', $sessions, true)) {
+                    $fail(count($sessions) > 1
+                        ? $child->classroom.' is signed in by half day — choose AM or PM.'
+                        : $child->classroom.' is signed in once for the whole day, not by half.');
+                }
+            },
+        ],
+
+        /*
+         * The hour they arrived, when somebody is entering it rather than
+         * witnessing it. Optional: at the door the tap is the moment, and the
+         * sheet sends nothing here. In Edit mode the time is typed, and a
+         * typed time is the correction — so it is taken as given, on today as
+         * on any other day.
+         */
+        'signed_in_time' => ['nullable', 'date_format:H:i'],
     ]);
 
     $validated['session'] = $validated['session'] ?? 'FULL';
 
     $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+
+    /*
+     * When to say they arrived.
+     *
+     * Today it is the moment the cell was tapped, which is the whole point of
+     * a sign-in sheet. A day already gone has no such moment — nobody is
+     * standing at the door — so it takes the hours that day was agreed for:
+     * the child's own drop-off time, or the hour the centre opens if none has
+     * been agreed. Stamping now() would write this afternoon onto Monday.
+     */
+    $signedInAt = match (true) {
+        // Typed: that is the fact being recorded, whichever day it is.
+        filled($validated['signed_in_time'] ?? null)
+            => Carbon::parse($validated['attendance_date'].' '.$validated['signed_in_time'], config('app.timezone')),
+        $validated['attendance_date'] === now()->toDateString() => now(),
+        default => Carbon::parse($validated['attendance_date'].' '.Child::timeInputValue($child->drop_off_time ?: Child::DAY_OPENS_AT)),
+    };
 
     $attendance = Attendance::firstOrCreate(
         [
@@ -305,18 +608,31 @@ class AttendanceController extends Controller
             'session' => $validated['session'],
         ],
         [
-            'signed_in_at' => now(),
+            'signed_in_at' => $signedInAt,
         ]
     );
+
+    // A day already gone did not get this row by somebody tapping a cell with
+    // the child in front of them, so the register should not pretend it did.
+    $amendment = $attendance->wasRecentlyCreated
+        ? AttendanceAmendment::record(AttendanceAmendment::ADDED, $attendance, $request->user())
+        : null;
 
     $attendance->load('child');
 
     return response()->json([
         'success' => true,
         'created' => $attendance->wasRecentlyCreated,
-        'time' => $attendance->signed_in_at->format('h:i A'),
+        'time' => Child::timeShort($attendance->signed_in_at->timezone(config('app.timezone'))),
+        'amendment' => $amendment ? [
+            'action' => $amendment->action,
+            'by' => $request->user()->name,
+            'on' => $amendment->created_at->format('M j'),
+        ] : null,
         'child' => [
-            'name' => $attendance->child->first_name.' '.$attendance->child->last_name,
+            // The reader's own format, so a row that arrives from a sign-in
+            // matches the sixty already on the sheet above it.
+            'name' => $attendance->child->displayName(),
             'classroom' => $attendance->child->classroom,
         ],
         'session' => $attendance->session,

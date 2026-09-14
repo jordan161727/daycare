@@ -21,6 +21,24 @@ class ProfileController extends Controller
         return view('profile.edit', ['user' => $request->user()]);
     }
 
+    /**
+     * How this person likes to read a child's name.
+     *
+     * Its own tiny endpoint rather than part of the profile form, because the
+     * place anybody decides they want surnames first is the roster they are
+     * reading at the time — not a settings page two clicks away. It changes
+     * only the reader's own screens, so it needs no role check beyond being
+     * signed in, and it comes back to the page it was set from.
+     */
+    public function nameFormat(Request $request)
+    {
+        $request->user()->update($request->validate([
+            'name_format' => ['required', Rule::in(array_keys(User::NAME_FORMATS))],
+        ]));
+
+        return back();
+    }
+
     public function update(Request $request)
     {
         $user = $request->user();

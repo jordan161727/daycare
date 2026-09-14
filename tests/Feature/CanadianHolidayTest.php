@@ -207,6 +207,9 @@ class CanadianHolidayTest extends TestCase
             'last_name' => $last,
             'classroom' => 'Toddler',
             'status' => 'Active',
+            // Full-week registration: a week built after the holiday opens with
+            // five ticks from the record for the closure to take one of.
+            'schedule_days' => [1, 2, 3, 4, 5],
         ]);
     }
 }

@@ -89,9 +89,10 @@ class ChildProfileTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'teacher', 'classroom' => 'Infant']))
             ->get(route('children.show', $child))
             ->assertOk()
-            // Reading is not editing, and the form behind that button is the
-            // director's.
-            ->assertDontSee('Edit record');
+            // And may keep it up to date: a teacher is the one told a new
+            // mobile number at the door. What decides rooms, enrolment and
+            // billing is still the director's — see ChildRecordEditingTest.
+            ->assertSee('Edit record');
     }
 
     public function test_a_teacher_may_not_read_a_child_in_another_room(): void

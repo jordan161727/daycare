@@ -48,13 +48,16 @@
     --color-violet-700: #5b6c98;
     --color-violet-800: #465577;
 
-    /* Dark theme surfaces. Black at the back, and three deepening purples
-       forward of it: page, card, input, accent. Named rather than written in
-       place so the four values live together and a change is one edit. */
-    --color-night-950: #000000;
-    --color-night-900: #150050;
-    --color-night-800: #3f0071;
-    --color-night-700: #610094;
+    /* Dark theme surfaces, deepest first: page, card, input, accent. Named
+       rather than written in place so the four values live together and a
+       change of palette is one edit.
+
+       The accent is light enough that white text on it is only 3:1 — so the
+       three places that sit on it take night-950 instead, which is 6.3:1. */
+    --color-night-950: #070f2b;
+    --color-night-900: #1b1a55;
+    --color-night-800: #535c91;
+    --color-night-700: #9290c3;
 }
 
 /*
@@ -116,7 +119,7 @@
     /* Tight on purpose. A director's sidebar carries fourteen links, and at the
        old size the last of them fell off the bottom of a laptop screen. */
     .nav-link { @apply flex items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white; }
-    .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70 dark:bg-night-700 dark:text-white dark:ring-white/15; }
+    .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70 dark:bg-night-700 dark:text-night-950 dark:ring-white/15; }
 
     /* Ruled columns for the week sheets.
 
@@ -141,4 +144,778 @@
     .form-input { @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:focus:border-indigo-400; }
     .card-title { @apply flex items-center gap-2.5 text-base font-bold; }
     .card-icon { @apply grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300; }
+}
+
+/*
+ * The child record form — a stepper on Edit, one long sheet on Add and on the
+ * PDF review.
+ *
+ * It is the one page in the app that is a hundred fields long, and the app's
+ * ordinary form chrome (14px labels, 44px inputs, a help line under every one)
+ * put four of them on a screen. This is a denser system of its own: 34px
+ * fields, 11.5px labels, cards of 200px-minimum columns — so a section is read
+ * in one look rather than scrolled through.
+ *
+ * Scoped to .cs-form so none of it leaks into the rest of the app, and every
+ * value is a variable on that one element, which is what lets dark mode be a
+ * dozen lines at the bottom instead of a second stylesheet.
+ *
+ * Manrope and IBM Plex Mono are named first and fall back to what the app
+ * already loads; nothing here fetches a font, so an offline centre gets the
+ * layout without waiting on a CDN that will not answer.
+ */
+@layer components {
+    .cs-form {
+        --cs-band: #dbe8f6;
+        --cs-band-ink: #14304f;
+        --cs-band-muted: #5b7796;
+        --cs-primary: #2f6fb0;
+        --cs-primary-hover: #23558a;
+        --cs-primary-soft: #e7effa;
+        --cs-step-done: #bcd4ec;
+        --cs-step-done-ink: #1f4d7e;
+        --cs-step-next: #eaf1fa;
+        --cs-step-next-ink: #7d97b2;
+        --cs-card: #ffffff;
+        --cs-card-border: #e3e8e6;
+        --cs-field-border: #e0e6e3;
+        --cs-field-fill: #fafbfa;
+        --cs-ink: #131816;
+        --cs-label: #6d7a75;
+        --cs-help: #98a29e;
+        --cs-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+        /* No width cap. The comp drew the form at 1120px, but the page it
+           actually sits on is a sidebar and whatever is left of a 1900px
+           monitor — capped, that left two hundred pixels of empty page down
+           each side and the four-column grid never got its fourth column. The
+           columns are sized by minmax() anyway, so the form fills the room it
+           is given rather than a number chosen against a narrower mock. */
+        width: 100%;
+        /* No panel of its own. The form used to sit in a bordered #f4f7fb box
+           on the app's own near-white page, which read as a card inside a card
+           — two edges a millimetre apart in almost the same colour. The band is
+           the only thing that still carries a background; the cards float
+           straight on the page, as they do on every other screen. */
+        background: transparent;
+        color: var(--cs-ink);
+        font-family: Manrope, Inter, 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+    }
+
+    /* ---- the header band: who is being edited, and where you are in the form ---- */
+    /* Padded to 18px so the name and the step labels sit on the same left edge
+       as the card titles underneath them. */
+    .cs-band { background: var(--cs-band); color: var(--cs-band-ink); border-radius: 16px; padding: 14px 18px 0; }
+    .cs-band-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-bottom: 12px; }
+    .cs-band-name { font-size: 15px; font-weight: 700; line-height: 1.25; }
+    .cs-meta { font-family: var(--cs-mono); font-size: 11px; color: var(--cs-band-muted); }
+
+    /* Sideways rather than wrapping to a second row: five steps on a phone
+       would otherwise push the first card below the fold. */
+    .cs-tabs { display: flex; gap: 18px; overflow-x: auto; scrollbar-width: none; }
+    .cs-tabs::-webkit-scrollbar { display: none; }
+    .cs-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 2px 10px;
+        border-bottom: 2px solid transparent;
+        font-size: 12.5px;
+        font-weight: 600;
+        white-space: nowrap;
+        color: var(--cs-band-muted);
+        background: none;
+    }
+    .cs-dot {
+        display: grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        background: var(--cs-step-next);
+        color: var(--cs-step-next-ink);
+        font-family: var(--cs-mono);
+        font-size: 10.5px;
+        font-weight: 600;
+    }
+    /* Done first, then active — a step you have passed and are back on is
+       active, and the later rule is the one that wins. */
+    .cs-tab[data-done="true"] .cs-dot { background: var(--cs-step-done); color: var(--cs-step-done-ink); }
+    .cs-tab[aria-selected="true"] { color: var(--cs-band-ink); border-bottom-color: var(--cs-primary); }
+    .cs-tab[aria-selected="true"] .cs-dot { background: var(--cs-primary); color: #fff; }
+    /* A step holding a rejected field, so a validation error three sections
+       back is not something you have to go hunting for. */
+    .cs-tab[data-invalid="true"] .cs-dot { background: #fee4e2; color: #b42318; }
+
+    /* ---- the sheet ---- */
+    .cs-body { padding: 20px 0 6px; }
+    .cs-title { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+    .cs-blurb { margin-top: 2px; font-size: 12.5px; color: var(--cs-label); }
+    .cs-cards { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+    .cs-card { border: 1px solid var(--cs-card-border); border-radius: 14px; background: var(--cs-card); padding: 16px 18px; }
+    .cs-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .cs-card-title { font-size: 13.5px; font-weight: 700; }
+    /* How much of the section is answered. A record half filled in looks
+       exactly like a finished one until something counts it. */
+    .cs-pill {
+        margin-left: auto;
+        border-radius: 999px;
+        background: var(--cs-primary-soft);
+        color: var(--cs-primary);
+        padding: 2px 8px;
+        font-family: var(--cs-mono);
+        font-size: 10.5px;
+        font-weight: 600;
+    }
+
+    /* Columns from the width available rather than from a breakpoint: the same
+       card fills a 1120px page and stays single-column beside a scanned PDF. */
+    .cs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
+    .cs-wide { grid-column: 1 / -1; }
+
+    .cs-label { display: block; margin-bottom: 5px; font-size: 11.5px; font-weight: 500; color: var(--cs-label); }
+    .cs-req { color: #d0463b; }
+    .cs-input {
+        width: 100%;
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid var(--cs-field-border);
+        border-radius: 9px;
+        background: var(--cs-field-fill);
+        color: var(--cs-ink);
+        font: inherit;
+        font-size: 13px;
+    }
+    select.cs-input { padding-right: 6px; }
+    textarea.cs-input { height: auto; padding: 8px 10px; line-height: 1.5; }
+    .cs-input:focus { outline: none; border-color: var(--cs-primary); box-shadow: 0 0 0 3px rgb(47 111 176 / 0.16); }
+    .cs-help { display: block; margin-top: 4px; font-size: 10.5px; color: var(--cs-help); }
+    /* A field the PDF import filled in, so a value that was read off a scan is
+       never mistaken for one somebody typed. */
+    .cs-from-doc { border-color: var(--cs-primary); background: var(--cs-primary-soft); }
+    .cs-badge {
+        margin-left: 6px;
+        border-radius: 5px;
+        background: var(--cs-primary-soft);
+        color: var(--cs-primary);
+        padding: 1px 5px;
+        font-size: 9.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .cs-input:disabled,
+    .cs-day input:disabled + span {
+        background: rgb(0 0 0 / 0.03);
+        color: var(--cs-help);
+        cursor: not-allowed;
+    }
+    .dark .cs-input:disabled,
+    .dark .cs-day input:disabled + span { background: rgb(255 255 255 / 0.04); }
+    .cs-day input:disabled:checked + span { border-color: var(--cs-field-border); }
+    .cs-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* Read-only, and says so by not looking like something you can type in. */
+    .cs-readout { border: 1px solid var(--cs-field-border); border-radius: 9px; background: var(--cs-card); padding: 7px 10px; }
+
+    /* ---- navigation ---- */
+    .cs-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 0 4px; }
+    .cs-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 33px;
+        padding: 0 16px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: 12.5px;
+        font-weight: 600;
+        transition: background-color .15s, color .15s;
+    }
+    .cs-btn-primary { background: var(--cs-primary); color: #fff; }
+    .cs-btn-primary:hover { background: var(--cs-primary-hover); }
+    .cs-btn-ghost { border-color: var(--cs-field-border); background: var(--cs-card); color: var(--cs-ink); }
+    .cs-btn-ghost:hover { border-color: var(--cs-primary); color: var(--cs-primary); }
+    .cs-btn-plain { color: var(--cs-band-muted); }
+    .cs-btn-plain:hover { color: var(--cs-band-ink); }
+    .cs-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .cs-btn:disabled:hover { background: var(--cs-primary); }
+    .cs-btn-ghost:disabled:hover { background: var(--cs-card); border-color: var(--cs-field-border); color: var(--cs-ink); }
+    .cs-counter { margin-left: auto; font-family: var(--cs-mono); font-size: 11px; color: var(--cs-label); }
+
+    /*
+     * The same form after dark. Only the twenty variables move — the band
+     * becomes the deep card colour rather than pale blue, and the primary is
+     * lifted because #2f6fb0 on a black page is barely there.
+     */
+    .dark .cs-form {
+        --cs-band: var(--color-night-900);
+        --cs-band-ink: #eaf0ff;
+        --cs-band-muted: #9fb0d6;
+        --cs-primary: #7ba9dd;
+        --cs-primary-hover: #a3c4ea;
+        --cs-primary-soft: rgb(123 169 221 / 0.16);
+        --cs-step-done: rgb(123 169 221 / 0.3);
+        --cs-step-done-ink: #dbe8f6;
+        --cs-step-next: rgb(255 255 255 / 0.08);
+        --cs-step-next-ink: #9fb0d6;
+        --cs-card: var(--color-night-900);
+        --cs-card-border: rgb(255 255 255 / 0.1);
+        --cs-field-border: rgb(255 255 255 / 0.14);
+        --cs-field-fill: var(--color-night-800);
+        --cs-ink: #f1f5f9;
+        --cs-label: #b6c3e6;
+        --cs-help: var(--color-night-700);
+    }
+
+    .dark .cs-btn-primary { color: var(--color-night-950); }
+    .dark .cs-tab[data-invalid="true"] .cs-dot { background: rgb(180 35 24 / 0.35); color: #fecdca; }
+}
+
+/*
+ * The animated background for the two screens children and parents stand in
+ * front of: drifting colour, clouds crossing, and a few things rising past.
+ *
+ * Decoration only — aria-hidden, pointer-events:none, and behind everything.
+ * It sits at z-index -1, which paints it above the body's own background but
+ * below every card, so the glass cards frost over it rather than hide it.
+ *
+ * It is not in the layout: it belongs to the attendance sheet and the roster,
+ * not to payroll.
+ */
+@layer components {
+
+    /*
+     * The kiosk is a touchscreen and nothing else.
+     *
+     * touch-action: manipulation drops the double-tap-to-zoom gesture, and with
+     * it the ~300ms iOS holds every tap for while it waits to see whether a
+     * second one is coming. On a keypad that delay is the difference between
+     * six digits that feel typed and six that feel laggy — and a parent
+     * double-tapping "Sign out" should not end up zoomed into it.
+     *
+     * The text is left selectable nowhere it matters: a long press on a button
+     * offering "Copy" is a touchscreen artefact, not a feature.
+     */
+    .kiosk-touch button {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    .kids-bg {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        overflow: hidden;
+        pointer-events: none;
+        background: linear-gradient(180deg, #f7fbff 0%, #f4f8fc 100%);
+    }
+
+    /* Night sky rather than daylight, or the cards — which are only 70%
+       opaque — would be lit from behind by a white page. */
+    .dark .kids-bg {
+        background: linear-gradient(180deg, var(--color-night-950) 0%, #10163d 100%);
+    }
+
+    .kids-bg-blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(60px);
+        opacity: .5;
+        animation: kids-drift 40s ease-in-out infinite alternate;
+    }
+
+    .dark .kids-bg-blob { opacity: .28; }
+
+    @keyframes kids-drift {
+        from { transform: translate(0, 0) scale(1); }
+        to { transform: translate(60px, 40px) scale(1.08); }
+    }
+
+    /* Clouds move on a transform rather than on `left`: the same picture, but
+       handed to the compositor instead of relaying the page every frame — which
+       is the difference between idle and warm on a kiosk tablet. */
+    .kids-bg-cloud {
+        position: absolute;
+        left: 0;
+        width: 140px;
+        height: 48px;
+        background: #fff;
+        border-radius: 48px;
+        opacity: .85;
+        animation: kids-cloud linear infinite;
+    }
+
+    .dark .kids-bg-cloud { opacity: .10; }
+
+    .kids-bg-cloud::before,
+    .kids-bg-cloud::after {
+        content: "";
+        position: absolute;
+        background: inherit;
+        border-radius: 50%;
+    }
+
+    .kids-bg-cloud::before { width: 60px; height: 60px; left: 22px; top: -28px; }
+    .kids-bg-cloud::after { width: 42px; height: 42px; left: 72px; top: -16px; }
+
+    @keyframes kids-cloud {
+        from { transform: translateX(-200px) scale(var(--s, 1)); }
+        to { transform: translateX(calc(100vw + 200px)) scale(var(--s, 1)); }
+    }
+
+
+    /*
+     * The kiosk strength.
+     *
+     * The quiet version above is right behind a sheet somebody reads all day.
+     * On a screen with nothing else on it, seen from a metre away by a child,
+     * the same values read as a blank white page — so the colour is turned up
+     * rather than a second background being written.
+     */
+    .kids-bg--strong {
+        background: linear-gradient(180deg, #eaf4ff 0%, #fdf3e3 100%);
+    }
+
+    .dark .kids-bg--strong {
+        background: linear-gradient(180deg, var(--color-night-950) 0%, #1a2258 100%);
+    }
+
+    .kids-bg--strong .kids-bg-blob { opacity: .95; filter: blur(50px); }
+    .dark .kids-bg--strong .kids-bg-blob { opacity: .45; }
+
+    .kids-bg--strong .kids-bg-cloud { opacity: 1; }
+    .dark .kids-bg--strong .kids-bg-cloud { opacity: .16; }
+
+    /* Big enough to read as a balloon rather than a speck at kiosk distance. */
+    .kids-bg--strong .kids-bg-float { font-size: 44px; }
+    .kids-bg--strong .kids-bg-star { font-size: 34px; }
+
+    .kids-bg-float {
+        position: absolute;
+        left: var(--x);
+        bottom: -60px;
+        font-size: 26px;
+        line-height: 1;
+        opacity: 0;
+        animation: kids-rise var(--d) linear infinite;
+        animation-delay: var(--delay);
+    }
+
+    .kids-bg-star { color: #ffd166; font-size: 20px; }
+
+    @keyframes kids-rise {
+        0% { transform: translateY(0) rotate(0); opacity: 0; }
+        10% { opacity: .6; }
+        50% { transform: translateY(-50vh) rotate(8deg) translateX(18px); }
+        90% { opacity: .6; }
+        100% { transform: translateY(-110vh) rotate(-6deg); opacity: 0; }
+    }
+
+    /*
+     * Somebody who has asked their system for less motion gets none of it.
+     * The floats are placed with `top` off their own index. The mockup added
+     * the delay multiplied by four to a percentage, which multiplies a time by
+     * a number and so is not a length at all: the whole declaration is dropped
+     * and they pile up at the top of the screen.
+     */
+    @media (prefers-reduced-motion: reduce) {
+        .kids-bg * { animation: none !important; }
+        .kids-bg-float { opacity: .35; bottom: auto; top: var(--rest, 20%); }
+        .kids-bg-cloud { transform: translateX(12vw) scale(var(--s, 1)); }
+    }
+}
+
+/*
+ * Sign-in: the form half.
+ *
+ * The picture beside it moves on its own (below); this is the small handful of
+ * things the form needs — an entrance, a button that says it is working, and an
+ * autofilled field that is still legible after dark.
+ */
+@layer utilities {
+    /*
+     * The column arrives rather than appearing. Staggered by hand off inline
+     * delays, so the eye is walked down the form — mark, heading, fields,
+     * button — instead of being handed the whole thing at once.
+     *
+     * `backwards` matters: without it each block is painted in its final place
+     * for one frame before its delay elapses, which is a flash of the finished
+     * page followed by it animating in.
+     */
+    .auth-rise { animation: auth-rise .55s cubic-bezier(.2, .7, .3, 1) backwards; }
+
+    @keyframes auth-rise {
+        from { opacity: 0; transform: translateY(14px); }
+    }
+
+    .auth-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 999px;
+        animation: auth-spin .7s linear infinite;
+    }
+
+    @keyframes auth-spin {
+        to { transform: rotate(1turn); }
+    }
+
+    /*
+     * A browser paints an autofilled field with its own background and ignores
+     * ours, which after dark is white text on a white slab — the password the
+     * password manager just filled in is invisible. There is no property for
+     * "leave it alone", so the fill is covered by an inset shadow the size of
+     * the field and the text colour is forced.
+     */
+    .dark .auth-field:-webkit-autofill,
+    .dark .auth-field:-webkit-autofill:hover,
+    .dark .auth-field:-webkit-autofill:focus {
+        -webkit-text-fill-color: #fff;
+        -webkit-box-shadow: 0 0 0 1000px var(--color-night-900) inset;
+        caret-color: #fff;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .auth-rise { animation: none; }
+        .auth-spinner { animation-duration: 2.4s; }
+    }
+}
+
+/*
+ * The sign-in scene.
+ *
+ * Sign-in is the only page in the app that is half illustration — a sky beside
+ * the form rather than a wash behind a sheet — so it gets its own component
+ * instead of a third strength of .kids-bg. The panel is decoration under real
+ * content: the glass cards sit on top of it and are the only thing a screen
+ * reader is given.
+ *
+ * It moves slowly enough to feel like weather beyond a window: clouds drift,
+ * balloons sway and the dark sky twinkles. Every animation has a resting
+ * composition for people who prefer reduced motion.
+ */
+@layer utilities {
+    .sky-panel {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(180deg, #93d0ef 0%, #a9dbf3 36%, #c7e8f8 70%, #e6f5fc 100%);
+        background-size: 100% 125%;
+        animation: sky-day-drift 18s ease-in-out infinite alternate;
+    }
+
+    .dark .sky-panel {
+        background: linear-gradient(180deg, #060a25 0%, #111a4b 52%, #283869 100%);
+        animation: none;
+    }
+
+    /*
+     * Which cast is on stage.
+     *
+     * Day and night are two pictures rather than one picture dimmed: the sun,
+     * the rainbow, the birds and the balloons come off after dark, and the
+     * moon, the stars, a shooting star and two sky lanterns take their places.
+     * Written as one pair of lists so nothing can end up in both — a balloon
+     * bobbing over a midnight sky is the giveaway that a theme was only ever
+     * half done.
+     */
+    .dark .sky-sun,
+    .dark .sky-rainbow,
+    .dark .sky-birds,
+    .dark .sky-balloon,
+    .sky-moon,
+    .sky-stars,
+    .sky-shoot,
+    .sky-lantern { display: none; }
+
+    .dark .sky-moon,
+    .dark .sky-stars,
+    .dark .sky-shoot,
+    .dark .sky-lantern { display: block; }
+
+    .dark .sky-cloud { opacity: .18; }
+
+    @keyframes sky-day-drift {
+        from { background-position: center top; }
+        to { background-position: center bottom; }
+    }
+
+    .sky-sun {
+        position: absolute;
+        top: -86px;
+        right: -34px;
+        width: 300px;
+        height: 300px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 44% 40%, #ffeba6 0%, #f8d96d 56%, #f2c94f 100%);
+        /* The pale ring around the disc is a spread shadow rather than a second
+           element, so it stays put if the sun is ever resized. */
+        box-shadow: 0 0 0 38px rgb(255 255 255 / .17), 0 0 130px 44px rgb(255 226 142 / .5);
+        animation: sky-sun-glow 9s ease-in-out infinite alternate;
+    }
+
+    /* The spokes, masked to a band that starts just inside the disc's edge and
+       fades before the ring's — so they read as light leaving the sun instead
+       of as a wheel drawn on top of it. */
+    .sky-sun-rays {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 620px;
+        height: 620px;
+        margin: -310px 0 0 -310px;
+        background: repeating-conic-gradient(from 0deg, rgb(255 255 255 / .3) 0deg 4deg, transparent 4deg 15deg);
+        -webkit-mask-image: radial-gradient(circle, transparent 21%, #000 26%, #000 33%, transparent 41%);
+        mask-image: radial-gradient(circle, transparent 21%, #000 26%, #000 33%, transparent 41%);
+    }
+
+    @keyframes sky-sun-glow {
+        from { transform: scale(1); }
+        to { transform: scale(1.035); }
+    }
+
+    .sky-moon {
+        position: absolute;
+        top: 7%;
+        right: 7%;
+        width: 206px;
+        height: 206px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #fffde9 0%, #f2efcf 48%, #c8c8aa 100%);
+        box-shadow: 0 0 0 24px rgb(224 235 255 / .08), 0 0 72px 24px rgb(193 216 255 / .28);
+        animation: sky-moon-float 10s ease-in-out infinite alternate;
+    }
+
+    .sky-moon-crater {
+        position: absolute;
+        border-radius: 50%;
+        background: rgb(160 163 147 / .25);
+        box-shadow: inset 3px 3px 5px rgb(121 125 113 / .15);
+    }
+
+    .sky-moon-crater--one { width: 34px; height: 34px; top: 42%; left: 24%; }
+    .sky-moon-crater--two { width: 21px; height: 21px; top: 21%; left: 58%; }
+    .sky-moon-crater--three { width: 27px; height: 27px; top: 65%; left: 58%; }
+
+    @keyframes sky-moon-float {
+        from { transform: translate(0, 0); }
+        to { transform: translate(-10px, 8px); }
+    }
+
+    .sky-stars {
+        position: absolute;
+        inset: 0;
+        background-repeat: repeat;
+        animation: sky-stars-twinkle 5s ease-in-out infinite alternate;
+    }
+
+    .sky-stars--far {
+        opacity: .7;
+        background-image: radial-gradient(circle, #fff 0 1px, transparent 1.7px), radial-gradient(circle, #d6e4ff 0 1px, transparent 1.7px), radial-gradient(circle, #fff 0 .8px, transparent 1.5px);
+        background-size: 73px 79px, 109px 113px, 47px 53px;
+        background-position: 12px 20px, 44px 9px, 8px 39px;
+        animation-duration: 4.5s;
+    }
+
+    .sky-stars--near {
+        opacity: .8;
+        background-image: radial-gradient(circle, #fffbe1 0 1.8px, transparent 2.6px), radial-gradient(circle, #e6edff 0 1.4px, transparent 2.2px), radial-gradient(circle, #fff 0 1.2px, transparent 2px);
+        background-size: 151px 137px, 223px 197px, 181px 167px;
+        background-position: 28px 26px, 75px 88px, 114px 41px;
+        animation-delay: -2s;
+        animation-duration: 6.5s;
+    }
+
+    @keyframes sky-stars-twinkle {
+        from { opacity: .45; transform: translateY(0); }
+        to { opacity: .95; transform: translateY(-5px); }
+    }
+
+    /* --x may be negative, which is how a cloud sits half off the left edge
+       instead of floating whole in the middle of the sky. The scale grows each
+       one from its own left edge rather than its centre, so a smaller cloud
+       stays put against that edge instead of sliding in from it. */
+    .sky-cloud {
+        position: absolute;
+        left: var(--x, 0);
+        top: var(--y);
+        width: 180px;
+        height: 60px;
+        background: #fff;
+        border-radius: 60px;
+        opacity: .94;
+        filter: drop-shadow(0 12px 20px rgb(74 137 180 / .2));
+        transform: scale(var(--s, 1));
+        transform-origin: 0 50%;
+        animation: sky-cloud-drift var(--d, 24s) ease-in-out infinite alternate;
+    }
+
+    .sky-cloud::before,
+    .sky-cloud::after {
+        content: "";
+        position: absolute;
+        background: inherit;
+        border-radius: 50%;
+    }
+
+    .sky-cloud::before { width: 82px; height: 82px; left: 26px; top: -38px; }
+    .sky-cloud::after { width: 58px; height: 58px; left: 98px; top: -24px; }
+
+    @keyframes sky-cloud-drift {
+        from { transform: translateX(0) scale(var(--s, 1)); }
+        to { transform: translateX(55px) scale(var(--s, 1)); }
+    }
+
+    .sky-birds {
+        position: absolute;
+        animation: sky-birds-glide 13s ease-in-out infinite alternate;
+    }
+
+    @keyframes sky-birds-glide {
+        from { transform: translate(0, 0); }
+        to { transform: translate(30px, -10px); }
+    }
+
+    /* The tilt is what keeps a still balloon from reading as a decal: it hangs
+       off a string, and a string is never quite vertical. Origin at the foot of
+       it, so the balloon leans from where it is held. */
+    .sky-balloon {
+        position: absolute;
+        transform: rotate(var(--tilt, 0deg));
+        transform-origin: 50% 100%;
+        animation: sky-balloon-sway 5s ease-in-out infinite alternate;
+    }
+
+    @keyframes sky-balloon-sway {
+        from { transform: rotate(calc(var(--tilt, 0deg) - 2deg)) translateY(0); }
+        to { transform: rotate(calc(var(--tilt, 0deg) + 2deg)) translateY(-10px); }
+    }
+
+    .sky-rainbow {
+        position: absolute;
+        opacity: .92;
+    }
+
+    /*
+     * The lantern: the balloon's job at night. It rises and settles rather than
+     * swaying, since paper going up is what a lantern does, and it carries its
+     * own light — the drop-shadow is the glow on the air around it, which is
+     * what stops it reading as a sticker on a flat sky.
+     */
+    .sky-lantern {
+        position: absolute;
+        transform: rotate(var(--tilt, 0deg));
+        transform-origin: 50% 100%;
+        filter: drop-shadow(0 0 16px rgb(255 186 108 / 0.45));
+        animation: sky-lantern-rise var(--d, 6s) ease-in-out infinite alternate;
+    }
+
+    @keyframes sky-lantern-rise {
+        from { transform: rotate(calc(var(--tilt, 0deg) - 1.5deg)) translateY(6px); }
+        to { transform: rotate(calc(var(--tilt, 0deg) + 1.5deg)) translateY(-14px); }
+    }
+
+    /* Its own element so the flame can flicker while the paper holds still. */
+    .sky-lantern-flame {
+        transform-origin: 50% 100%;
+        animation: sky-lantern-flicker 1.9s ease-in-out infinite alternate;
+    }
+
+    @keyframes sky-lantern-flicker {
+        from { opacity: .65; transform: scaleY(.88); }
+        to { opacity: 1; transform: scaleY(1.06); }
+    }
+
+    /*
+     * The shooting star. Mostly it is not there: the streak takes a fifth of
+     * the cycle and the rest is an empty sky, because one that crossed
+     * continuously would be a loading spinner rather than a rare thing seen out
+     * of the corner of an eye.
+     *
+     * The tail is drawn from the star's own edge and rotated to sit along the
+     * path it travels — behind it, up and to the right, since it falls down and
+     * to the left.
+     */
+    .sky-shoot {
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 0 9px 2px rgb(255 255 255 / 0.75);
+        opacity: 0;
+        animation: sky-shoot 9s ease-in infinite;
+    }
+
+    .sky-shoot::before {
+        content: "";
+        position: absolute;
+        left: 2px;
+        top: 50%;
+        width: 96px;
+        height: 2px;
+        transform-origin: 0 50%;
+        transform: rotate(-35deg);
+        background: linear-gradient(to right, rgb(255 255 255 / 0.8), transparent);
+    }
+
+    @keyframes sky-shoot {
+        0% { opacity: 0; transform: translate(0, 0); }
+        3% { opacity: 1; }
+        20% { opacity: 0; transform: translate(-280px, 196px); }
+        100% { opacity: 0; transform: translate(-280px, 196px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .sky-panel *,
+        .sky-panel *::before,
+        .sky-panel *::after { animation: none !important; }
+
+        /* Everything else here has a resting arrangement; a shooting star does
+           not — held still it is a white dot with a smear behind it. It is the
+           one thing that is the movement, so with the movement gone it goes. */
+        .dark .sky-shoot { display: none; }
+    }
+}
+
+/*
+ * The day toggles on the child form: five little tablets that read as ticked or
+ * not at a glance.
+ *
+ * A real checkbox underneath, visually hidden — so the label is still a label,
+ * the keyboard still reaches it, and :checked does the painting. A div with a
+ * click handler would have needed all three rebuilt by hand.
+ */
+@layer components {
+    .cs-day input { position: absolute; opacity: 0; pointer-events: none; }
+    .cs-day span {
+        display: inline-grid;
+        place-items: center;
+        min-width: 44px;
+        height: 28px;
+        padding: 0 9px;
+        border: 1px solid var(--cs-field-border);
+        border-radius: 8px;
+        background: var(--cs-field-fill);
+        color: var(--cs-label);
+        font-size: 11.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color .12s, border-color .12s, color .12s;
+    }
+    .cs-day:hover span { border-color: var(--cs-primary); }
+    .cs-day input:checked + span {
+        border-color: var(--cs-primary);
+        background: var(--cs-primary);
+        color: #fff;
+    }
+    .dark .cs-day input:checked + span { color: var(--color-night-950); }
+    /* Focus has to be visible on the tablet, since the input it belongs to is
+       the thing that cannot be seen. */
+    .cs-day input:focus-visible + span { outline: 2px solid var(--cs-primary); outline-offset: 2px; }
 }

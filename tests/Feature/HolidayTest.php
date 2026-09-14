@@ -117,7 +117,9 @@ class HolidayTest extends TestCase
 
     public function test_a_holiday_set_before_the_week_exists_closes_it_when_it_is_built(): void
     {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        // Registered for the full week: opening no longer copies the week
+        // before, so the five ticks the closure takes one of come from here.
+        $this->makeChild('Lovelace', 'Ada', 'Toddler')->forceFill(['schedule_days' => [1, 2, 3, 4, 5]])->save();
 
         // This week is set up as the pattern every later week copies from.
         app(WeekSchedule::class)->open(self::MONDAY);
@@ -262,7 +264,9 @@ class HolidayTest extends TestCase
 
     public function test_an_annual_holiday_closes_a_week_built_years_later(): void
     {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        // Registered for the full week: opening no longer copies the week
+        // before, so the five ticks the closure takes one of come from here.
+        $this->makeChild('Lovelace', 'Ada', 'Toddler')->forceFill(['schedule_days' => [1, 2, 3, 4, 5]])->save();
         app(WeekSchedule::class)->open(self::MONDAY);
         ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => true]);
 
@@ -375,7 +379,9 @@ class HolidayTest extends TestCase
      */
     public function test_a_holiday_on_a_monday_closes_the_day(): void
     {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        // Registered for the full week: opening no longer copies the week
+        // before, so the five ticks the closure takes one of come from here.
+        $this->makeChild('Lovelace', 'Ada', 'Toddler')->forceFill(['schedule_days' => [1, 2, 3, 4, 5]])->save();
         app(WeekSchedule::class)->open(self::MONDAY);
         ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => true]);
 

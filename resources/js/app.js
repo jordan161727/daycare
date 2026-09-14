@@ -94,6 +94,7 @@ Alpine.data('documentImport', () => ({
     },
 }));
 
+
 Alpine.data('appShell', () => ({
     mobileOpen: false,
     collapsed: false,

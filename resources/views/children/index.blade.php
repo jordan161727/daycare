@@ -1,6 +1,9 @@
 @extends('layouts.app')
 @section('title', 'Children')
 @section('content')
+{{-- The two screens a family stands in front of. See components/kids-background. --}}
+<x-kids-background />
+
 <div x-data="{ search: '' }">
     @php($nextDirection = fn ($column) => $sort === $column && $direction === 'asc' ? 'desc' : 'asc')
     @php($sortUrl = fn ($column) => route('children.index', ['sort' => $column, 'direction' => $nextDirection($column)]))
@@ -13,7 +16,7 @@
             <h1 class="text-base font-bold tracking-tight sm:text-lg">{{ auth()->user()->isAdmin() ? 'Children' : 'My Students' }}</h1>
 
             <p class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                <span><b class="font-bold text-slate-900 dark:text-white">{{ $children->total() }}</b> on the roll</span>
+                <span><b class="font-bold text-slate-900 dark:text-white">{{ $children->count() }}</b> on the roll</span>
                 <span><b class="font-bold text-emerald-600 dark:text-emerald-400">{{ $activeCount }}</b> active</span>
             </p>
 
@@ -46,13 +49,17 @@
                 <thead>
                     <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
                         @php($head = 'px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400')
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{{ $arrow('lan') }}</a></th>
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
+                                                <th scope="col" class="{{ $head }} sticky left-0 z-20 w-[60px] bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{{ $arrow('lan') }}</a></th>
+                        <th scope="col" class="{{ $head }} sticky left-[60px] z-20 border-r border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
+                        {{-- Third, as on the attendance sheet. The two tables list
+                             the same children and are read one after the other, so a
+                             column that sits in a different place on each is one the
+                             eye has to hunt for every time it changes screen. --}}
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('classroom') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Classroom{{ $arrow('classroom') }}</a></th>
                         {{-- Sorting is by date of birth either way, so the arrow sits
                              on the DOB column and the age beside it follows it. --}}
                         <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('age') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Date of birth, year/month/day">DOB{{ $arrow('age') }}</a></th>
                         <th scope="col" class="{{ $head }}">Age</th>
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('classroom') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Classroom{{ $arrow('classroom') }}</a></th>
                         <th scope="col" class="{{ $head }}">Schedule</th>
                         <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('status') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Status{{ $arrow('status') }}</a></th>
                         <th scope="col" class="{{ $head }} text-right">Actions</th>
@@ -61,28 +68,33 @@
                 <tbody class="divide-y divide-slate-100 dark:divide-white/10">
                     @forelse($children as $child)
                         <tr x-show="@js(strtolower($child->first_name.' '.$child->last_name.' '.$child->classroom.' '.$child->lan)).includes(search.toLowerCase())" class="transition hover:bg-slate-50 dark:hover:bg-white/5">
-                            <td class="px-3 py-2 text-sm tabular-nums text-slate-400 dark:text-slate-500">{{ $child->lan }}</td>
-                            <td class="px-3 py-2">
-                                {{-- Name and room read as one line on the sheet; here the
-                                     room has a column of its own, so the name stands alone. --}}
+                                                        {{-- Frozen against a sideways scroll: on a tablet the roll is
+                                 wider than the screen, and a row read with the name
+                                 off-screen is a row about nobody. --}}
+                            <td class="sticky left-0 z-10 w-[60px] bg-white px-3 py-2 text-sm tabular-nums text-slate-400 dark:bg-night-900 dark:text-slate-500">{{ $child->lan }}</td>
+                            <td class="sticky left-[60px] z-10 border-r border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-night-900">
+                                {{-- The room has a column of its own on both tables, so
+                                     the name stands alone here. --}}
                                 <div class="flex items-center gap-3">
                                     <x-child-avatar :child="$child" />
-                                    <a href="{{ route('children.show', $child) }}" class="truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100">{{ $child->first_name }} {{ $child->last_name }}</a>
+                                    <a href="{{ route('children.show', $child) }}" class="truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100">{{ $child->displayName() }}</a>
                                 </div>
                             </td>
+                            <td class="whitespace-nowrap px-3 py-2 text-sm"><x-room-icon :room="$child->classroom" size="text-sm" /> {{ $child->classroom }}</td>
                             <td class="whitespace-nowrap px-3 py-2 text-sm tabular-nums text-slate-500 dark:text-slate-400">{{ $child->ageLabel() ?? '—' }}</td>
-                            <td class="whitespace-nowrap px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{{ $child->ageInWords() ?? '—' }}</td>
-                            <td class="whitespace-nowrap px-3 py-2 text-sm">{{ $child->classroom }}</td>
+                            {{-- Lining figures: "0y 10m" under "3y 2m" only
+                                 compares at a glance if the digits are the same
+                                 width down the column. --}}
+                            <td class="whitespace-nowrap px-3 py-2 text-sm tabular-nums text-slate-500 dark:text-slate-400">{{ $child->ageInWords() ?? '—' }}</td>
                             <td class="px-3 py-2 text-sm">@include('children.partials.schedule')</td>
                             <td class="px-3 py-2">
                                 <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold {{ $child->status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' }}">{{ $child->status }}</span>
                             </td>
                             <td class="whitespace-nowrap px-3 py-2 text-right">
-                                @if(auth()->user()->isAdmin())
-                                    <a href="{{ route('children.edit', $child) }}" class="text-xs font-semibold text-indigo-600 transition hover:text-indigo-800 dark:text-indigo-400">Edit</a>
-                                @else
-                                    <a href="{{ route('children.show', $child) }}" class="text-xs font-semibold text-indigo-600 transition hover:text-indigo-800 dark:text-indigo-400">View</a>
-                                @endif
+                                {{-- The roster is already filtered to what this
+                                     reader may see, so every row here is one
+                                     they may also keep up to date. --}}
+                                <a href="{{ route('children.edit', $child) }}" class="text-xs font-semibold text-indigo-600 transition hover:text-indigo-800 dark:text-indigo-400">Edit</a>
                             </td>
                         </tr>
                     @empty
@@ -91,10 +103,6 @@
                 </tbody>
             </table>
         </div>
-
-        @if($children->hasPages())
-            <div class="border-t border-slate-200/70 px-3 py-2 dark:border-white/10">{{ $children->links() }}</div>
-        @endif
     </section>
 </div>
 @endsection

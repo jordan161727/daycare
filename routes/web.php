@@ -9,6 +9,7 @@ use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
 use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\KioskController;
 use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveRequestController;
@@ -38,6 +39,23 @@ Route::get('/csrf-token', fn () => response()->json(['token' => csrf_token()]))-
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
     Route::post('/login', [AuthController::class, 'store'])->name('login.store');
+});
+
+
+/*
+ * The door kiosk. Outside the auth group on purpose — there is nobody to log in
+ * at a door, and a staff login left open on a lobby tablet would be worse than
+ * none. The guardian's PIN is what authenticates, checked on every press.
+ *
+ * Rate limited because it is the one signed-out endpoint in the app: the row
+ * lockout stops somebody working through one family's PIN, and this stops them
+ * working through every six-digit number.
+ */
+Route::middleware('throttle:kiosk')->group(function () {
+    Route::get('/kiosk', [KioskController::class, 'index'])->name('kiosk.index');
+    Route::post('/kiosk/unlock', [KioskController::class, 'unlock'])->name('kiosk.unlock');
+    Route::post('/kiosk/punch', [KioskController::class, 'punch'])->name('kiosk.punch');
+    Route::post('/kiosk/lock', [KioskController::class, 'lock'])->name('kiosk.lock');
 });
 
 Route::middleware(['auth', 'password.change'])->group(function () {
@@ -169,8 +187,6 @@ Route::post('/payroll/{batch}/slips/{slip}/send', [PayrollController::class, 'se
 Route::post('/staff-schedule/generate', [StaffScheduleController::class, 'generate'])->name('staff-schedule.generate');
 Route::get('/children/create', [ChildController::class, 'create'])->name('children.create');
 Route::post('/children', [ChildController::class, 'store'])->name('children.store');
-Route::get('/children/{child}/edit', [ChildController::class, 'edit'])->name('children.edit');
-Route::put('/children/{child}', [ChildController::class, 'update'])->name('children.update');
 
 Route::get('/children/import',[ChildrenController::class,'showImport'])->name('children.import.form');
 
@@ -178,6 +194,23 @@ Route::post('/children/import',[ChildrenController::class,'import'])->name('chil
 });
 
 Route::middleware('role:admin,teacher')->group(function () {
+    /*
+     * Editing a child's record.
+     *
+     * A teacher keeps the record of the children in their own rooms — they are
+     * the one who is told a new mobile number at the door, and the one who
+     * hears that grandma is collecting on Thursdays. Waiting on the director to
+     * type it in is how a record goes stale.
+     *
+     * Which child is checked in the controller, against the same rule the
+     * roster is filtered by. What may be changed is checked there too: the
+     * facts that decide rooms, enrolment and billing stay the director's, and
+     * `classroom_override` especially — a teacher who could set it could move a
+     * child into their own room and read a record that was never theirs.
+     */
+    Route::get('/children/{child}/edit', [ChildController::class, 'edit'])->name('children.edit')->whereNumber('child');
+    Route::put('/children/{child}', [ChildController::class, 'update'])->name('children.update')->whereNumber('child');
+
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
 
     // Read-only for teachers: knowing who else is on the floor at 3pm is the
@@ -205,10 +238,27 @@ Route::middleware('role:admin,teacher')->group(function () {
 Route::get('/attendance', [AttendanceController::class, 'index'])
     ->name('attendance.index');
 
+// The week on paper. Same audience as the sheet above: whoever may see a
+// child's row on screen may print it.
+Route::get('/attendance/print', [AttendanceController::class, 'print'])
+    ->name('attendance.print');
+
 Route::post('/attendance/sign-in', [AttendanceController::class, 'signIn'])
     ->name('attendance.signin');
 
 Route::middleware('role:admin,teacher')->group(function () {
+    // Taking an arrival back off the register: the other half of a correction,
+    // and the more consequential half, so it sits behind the same door the
+    // schedule controls do rather than beside the open sign-in route.
+    // POST rather than DELETE: the whole app talks to the server through
+    // postJson, which always sends POST with a JSON body — and Laravel reads
+    // _method spoofing out of form parameters, which a JSON body does not
+    // populate. A DELETE route here would 405 every time.
+    Route::post('/attendance/sign-in/remove', [AttendanceController::class, 'removeSignIn'])->name('attendance.signin.remove');
+    // Moving the hour on an arrival. Same door as removing one: it rewrites
+    // a figure the centre bills from, and the same people may do it.
+    Route::post('/attendance/sign-in/retime', [AttendanceController::class, 'retime'])->name('attendance.signin.retime');
+
     // Building a week is a decision, so it has its own door. Merely viewing one
     // never creates it.
     Route::post('/attendance/week/open', [AttendanceController::class, 'openWeek'])->name('attendance.week.open');
@@ -228,6 +278,9 @@ Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit')
 Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
 Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 Route::delete('/profile/photo', [ProfileController::class, 'destroyPhoto'])->name('profile.photo.destroy');
+// Set from whichever roster the reader happens to be on, and changes only
+// their own screens.
+Route::post('/profile/name-format', [ProfileController::class, 'nameFormat'])->name('profile.name-format');
 
 Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });

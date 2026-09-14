@@ -35,6 +35,7 @@ class User extends Authenticatable
         'role',
         'classroom',
         'classrooms',
+        'name_format',
         'employment',
         'title',
         'legal_name',
@@ -184,6 +185,29 @@ class User extends Authenticatable
         }
 
         return in_array($classroom, $this->assignedClassrooms(), true);
+    }
+
+    /**
+     * The two ways a child's name is written, and what each is called on the
+     * screen that offers the choice.
+     *
+     * Keyed by what goes in the column, so a stored value that is no longer
+     * offered — a third format tried and dropped — falls back rather than
+     * printing a name in a shape nothing here defines.
+     */
+    public const NAME_FORMATS = [
+        'first_last' => 'Ada Lovelace',
+        'last_first' => 'Lovelace, Ada',
+    ];
+
+    public const NAME_FORMAT_DEFAULT = 'first_last';
+
+    /** How this person reads a child's name, always one of NAME_FORMATS. */
+    public function nameFormat(): string
+    {
+        return array_key_exists($this->name_format, self::NAME_FORMATS)
+            ? $this->name_format
+            : self::NAME_FORMAT_DEFAULT;
     }
 
     public function isAdmin(): bool

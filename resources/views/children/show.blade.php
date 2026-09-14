@@ -14,6 +14,12 @@
      door as often as at a desk. Fields nobody has filled in are left out
      instead of printed as a column of dashes. Social security numbers are
      deliberately absent — they are enrolment paperwork, not door information. --}}
+
+{{-- The same background as the sheet and the roster: this is the page a parent
+     is shown at the door, so it belongs with the family-facing screens rather
+     than with payroll. The quiet strength — the record is read, not admired. --}}
+<x-kids-background />
+
 @php($digits = fn (?string $number) => preg_replace('/[^0-9+]/', '', (string) $number))
 @php($guardians = collect([
     ['title' => 'Mother', 'name' => $child->mother_name, 'rows' => [
@@ -131,7 +137,7 @@
                 <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">{{ $child->first_name }} {{ $child->last_name }}</h1>
                 <div class="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold">
                     <span class="rounded-full bg-white/15 px-2.5 py-1 ring-1 ring-white/25">LAN {{ $child->lan }}</span>
-                    <span class="rounded-full bg-white/15 px-2.5 py-1 ring-1 ring-white/25">{{ $child->classroom }}</span>
+                    <span class="rounded-full bg-white/15 px-2.5 py-1 ring-1 ring-white/25"><x-room-icon :room="$child->classroom" size="text-sm" /> {{ $child->classroom }}</span>
                     <span class="rounded-full px-2.5 py-1 ring-1 {{ $child->status === 'Active' ? 'bg-emerald-400/25 text-emerald-50 ring-emerald-200/40' : 'bg-white/10 text-white/80 ring-white/25' }}">{{ $child->status }}</span>
                     @if(filled($child->nickname))<span class="rounded-full bg-white/15 px-2.5 py-1 ring-1 ring-white/25">“{{ $child->nickname }}”</span>@endif
                 </div>
@@ -139,15 +145,21 @@
         </div>
         <div class="flex shrink-0 items-center gap-2">
             <a href="{{ route('children.index') }}" class="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold ring-1 ring-white/25 transition hover:bg-white/20">← Roster</a>
-            @if(auth()->user()->isAdmin())
-                <a href="{{ route('children.edit', $child) }}" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-900/20 transition hover:-translate-y-0.5">Edit record</a>
-            @endif
+            {{-- Whoever may read this record may keep it up to date. A teacher
+                 gets the contact details, the pick-up list and the notes; what
+                 decides rooms, enrolment and billing stays the director's, and
+                 the form shows those as set rather than offering them. --}}
+            <a href="{{ route('children.edit', $child) }}" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-900/20 transition hover:-translate-y-0.5">Edit record</a>
         </div>
     </div>
 
-    <dl class="relative grid grid-cols-2 gap-px border-t border-white/15 bg-white/15 sm:grid-cols-4">
+    {{-- Five figures now the days are among them, so the row breaks 3+2 on a
+         tablet and runs clean across a laptop rather than leaving one figure
+         stranded on a line of its own. --}}
+    <dl class="relative grid grid-cols-2 gap-px border-t border-white/15 bg-white/15 sm:grid-cols-3 lg:grid-cols-5">
         @foreach([
             ['Their hours', $child->scheduleLabel() ?? 'Not agreed'],
+            ['Days they attend', $child->scheduleDaysLabel() ?? 'Not set'],
             [$child->classroom.' runs', $roomSchedule?->hoursLabel() ?? 'Not set'],
             ['Date of birth', $child->ageLabel() ?? '—'],
             ['Expected a week', filled($child->expected_hours_per_week) ? rtrim(rtrim(number_format($child->expected_hours_per_week, 2), '0'), '.').' hours' : 'Not agreed'],
@@ -283,6 +295,19 @@
         <section class="glass-card rounded-2xl p-6">
             <h2 class="card-title"><span class="card-icon">🗓</span> Enrolment</h2>
             <dl class="mt-4 space-y-3 text-sm">
+                {{-- The subsidy numbers, when there are any. Shown here rather
+                     than only on the edit form: billing reads them, and reading
+                     a record should not mean opening it for editing. Monospaced,
+                     because these get copied onto a claim by eye and an O beside
+                     a 0 in a proportional face is a rejected claim. --}}
+                @foreach(['DSS Case No' => $child->dss_case_no, 'DSS CIN' => $child->dss_cin] as $label => $number)
+                    @if(filled($number))
+                        <div class="flex justify-between gap-4">
+                            <dt class="text-slate-500 dark:text-slate-400">{{ $label }}</dt>
+                            <dd class="font-mono text-[13px] font-semibold tracking-wide">{{ $number }}</dd>
+                        </div>
+                    @endif
+                @endforeach
                 <div class="flex justify-between gap-4">
                     <dt class="text-slate-500 dark:text-slate-400">Enrolled</dt>
                     <dd class="font-semibold">{{ $child->enrolled_on?->format('n/j/Y') ?? 'Always been here' }}</dd>

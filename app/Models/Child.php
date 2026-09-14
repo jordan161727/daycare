@@ -7,7 +7,6 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use App\Models\User;
 
 class Child extends Model
@@ -37,18 +36,24 @@ class Child extends Model
         // Float rather than decimal: the projection does arithmetic with this on
         // every read, and a decimal cast hands back a string.
         'expected_hours_per_week' => 'float',
+        'schedule_days' => 'array',
         'mother_ssn' => 'encrypted',
         'father_ssn' => 'encrypted',
     ];
 
      protected $fillable = [
-        'lan', 'child_name', 'nickname', 'address', 'city', 'zip', 'telephone', 'birth_date',
+        'lan',
+        // The two numbers the state knows a subsidised child by: the family's
+        // case and this child's own CIN. See the migration that adds them.
+        'dss_case_no', 'dss_cin',
+        'child_name', 'nickname', 'address', 'city', 'zip', 'telephone', 'birth_date',
         'status',
         'enrolled_on',
         'withdrawn_on',
         'expected_hours_per_week',
         'drop_off_time',
         'pick_up_time',
+        'schedule_days',
         'first_name',
         'last_name',
         'photo_path',
@@ -96,6 +101,31 @@ class Child extends Model
     }
 
     /**
+     * This child's name written the way the reader asked for it.
+     *
+     * The office works from surnames because that is how the paper file is
+     * ordered; the room works from first names because that is what a child
+     * answers to. Both read the same roster, so the shape is the reader's
+     * preference and every screen asks this rather than concatenating its own
+     * two columns — which is how one page ends up disagreeing with the next.
+     *
+     * The sort is deliberately not affected. Ordering the roll by surname is
+     * how a roll is found; that is a different question from how a name reads,
+     * and tying the two would reorder the whole sheet on a display setting.
+     *
+     * @param  string|null  $format  a User::NAME_FORMATS key; the signed-in
+     *                               reader's own preference when omitted
+     */
+    public function displayName(?string $format = null): string
+    {
+        $format ??= auth()->user()?->nameFormat() ?? User::NAME_FORMAT_DEFAULT;
+
+        return $format === 'last_first'
+            ? trim($this->last_name.', '.$this->first_name, ' ,')
+            : trim($this->first_name.' '.$this->last_name);
+    }
+
+    /**
      * The date of birth, from whichever column holds it. `dob` came first and
      * `birth_date` arrived with the enrolment form; records exist with either.
      */
@@ -105,17 +135,18 @@ class Child extends Model
     }
 
     /**
-     * The date of birth written the way the roster reads it: 2022/12/15.
+     * The date of birth written the way every screen reads it: 2022/12/15.
      *
-     * The column is headed "Age", but what the office reads off it is the date
-     * itself. Year first, so a column of them sorts by eye the way it sorts by
-     * click, and so 3/4 is never one date to one reader and another to the next.
+     * Year first, so a column of them sorts by eye the way it sorts by click,
+     * and so 3/4 is never one date to one reader and another to the next. Both
+     * halves padded to two digits — unpadded, 2023/6/15 and 2023/12/5 are
+     * different widths and the slashes stop lining up down a column of sixty.
      * Formatted on every read rather than stored, so it cannot drift out of
      * step with the date it comes from.
      */
     public static function ageLabelFor(?CarbonInterface $birthDate): ?string
     {
-        return $birthDate?->format('Y/n/j');
+        return $birthDate?->format('Y/m/d');
     }
 
     /** This child's date of birth as the roster shows it, or null when none is on file. */
@@ -125,16 +156,24 @@ class Child extends Model
     }
 
     /**
-     * How old the child is, said the way the room says it: "3 years 2 months".
+     * How old the child is: "3y 2m".
+     *
+     * One shape everywhere — the roster's Age column, the attendance sheet's,
+     * and anywhere else a child's age is shown. Both halves are always said,
+     * so a ten-month-old reads "0y 10m" rather than "10 months": down a column
+     * of sixty children the years sit under the years and the months under the
+     * months, and two ages are compared by looking rather than by reading. The
+     * long form was also three times the width, in the narrowest column on the
+     * densest screen in the app.
+     *
+     * The exception is a child not yet a month old, who would otherwise be
+     * "0y 0m" — an infant room takes babies at six weeks, and "0y 0m" for a
+     * fortnight-old is not an age at all. Those read "12d", in the same compact
+     * shape, until there is a month to report.
      *
      * Worked out on every read and never stored, because it is different next
-     * month. The unit that matters follows the age: years and months for a
-     * child old enough to have both, months alone for a baby, days for one who
-     * is only days old — nobody describes a fortnight-old as nought years.
-     *
-     * Days are dropped once there are months to report. They matter to a parent
-     * and not to a roster, and "3 years 2 months 14 days" in a column is three
-     * facts where one was wanted.
+     * month. Days are dropped once there are months: they matter to a parent
+     * and not to a roster, and "3y 2m 14d" is three facts where one was wanted.
      */
     public function ageInWords(?Carbon $asOf = null): ?string
     {
@@ -154,15 +193,11 @@ class Child extends Model
 
         $age = $birthDate->diff($asOf);
 
-        $said = fn (int $count, string $unit) => $count.' '.Str::plural($unit, $count);
-
-        if ($age->y > 0) {
-            return $age->m > 0
-                ? $said($age->y, 'year').' '.$said($age->m, 'month')
-                : $said($age->y, 'year');
+        if ($age->y === 0 && $age->m === 0) {
+            return $age->d.'d';
         }
 
-        return $age->m > 0 ? $said($age->m, 'month') : $said($age->d, 'day');
+        return $age->y.'y '.$age->m.'m';
     }
 
     /**
@@ -191,6 +226,89 @@ class Child extends Model
     }
 
     /**
+     * The five days a week can be registered for.
+     *
+     * Monday to Friday only: the centre does not open at the weekend, so a
+     * sixth key would be a box nobody could ever tick. Keyed by ISO weekday so
+     * the number stored is the number Carbon::dayOfWeekIso hands back and
+     * nothing has to translate between the two.
+     */
+    public const WEEKDAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri'];
+
+    /**
+     * The days this child is registered to attend, or null when nobody has said.
+     *
+     * Null and [] are different answers and stay that way: null is every record
+     * that predates the question, and a week opened for such a child starts
+     * blank exactly as it always did. [] is somebody saying "no days", which is
+     * a real statement about a child on the roll who is not currently coming.
+     *
+     * @return array<int, int>|null ISO weekdays, ascending
+     */
+    public function scheduleDays(): ?array
+    {
+        if (! is_array($this->schedule_days)) {
+            return null;
+        }
+
+        $days = array_values(array_unique(array_filter(
+            array_map('intval', $this->schedule_days),
+            fn (int $day) => array_key_exists($day, self::WEEKDAYS)
+        )));
+
+        sort($days);
+
+        return $days;
+    }
+
+    /**
+     * Whether the standing arrangement puts this child here on a given date.
+     *
+     * Only the registered pattern is consulted — not the week's ticks, not the
+     * closures. A week is the authority on itself; this answers what a week
+     * should start from when there is nothing to copy forward.
+     */
+    public function attendsOn(string|CarbonInterface $date): bool
+    {
+        $days = $this->scheduleDays();
+
+        if ($days === null) {
+            return false;
+        }
+
+        $date = $date instanceof CarbonInterface ? $date : Carbon::parse($date);
+
+        return in_array($date->dayOfWeekIso, $days, true);
+    }
+
+    /**
+     * The pattern as a phrase — "Mon, Wed, Thu, Fri" — for the screens that
+     * read a child's arrangement rather than set it.
+     *
+     * The full week gets its own name. "Mon, Tue, Wed, Thu, Fri" is five words
+     * for the commonest arrangement there is, and down a column of sixty
+     * children it is the one that should take the least reading.
+     */
+    public function scheduleDaysLabel(): ?string
+    {
+        $days = $this->scheduleDays();
+
+        if ($days === null) {
+            return null;
+        }
+
+        if ($days === []) {
+            return 'No days';
+        }
+
+        if (count($days) === count(self::WEEKDAYS)) {
+            return 'Every day';
+        }
+
+        return implode(', ', array_map(fn (int $day) => self::WEEKDAYS[$day], $days));
+    }
+
+    /**
      * The contracted day as one line — "7:00 AM – 5:30 PM" — or null until both
      * ends have been agreed. This is a different fact from the schedule boxes on
      * the attendance page: those say which days a child comes, these say the
@@ -203,6 +321,30 @@ class Child extends Model
         }
 
         return static::timeLabel($this->drop_off_time).' – '.static::timeLabel($this->pick_up_time);
+    }
+
+    /**
+     * A clock time at sheet size: "7:10a", "12:28p".
+     *
+     * The sign-in grid is sixty rows by five columns and every filled cell
+     * carries one of these, so the four characters "7:00 AM" costs over the
+     * compact form are four characters times three hundred cells. The meridiem
+     * is one lowercase letter because at this size a full "AM" reads as part of
+     * the number rather than as a suffix to it.
+     *
+     * timeLabel() stays the form for everywhere a time is read in prose — a
+     * child's record, a room's hours — where the width is free and "7:00 AM" is
+     * simply how it is said.
+     */
+    public static function timeShort(\DateTimeInterface|string|null $time): ?string
+    {
+        if (blank($time)) {
+            return null;
+        }
+
+        $time = $time instanceof \DateTimeInterface ? Carbon::instance($time) : Carbon::parse($time);
+
+        return $time->format('g:i').strtolower($time->format('A'))[0];
     }
 
     /**
@@ -290,6 +432,24 @@ class Child extends Model
     }
 
     /** The sessions this child's day splits into. */
+
+    /**
+     * The adults on this child's record. Not users — see Guardian.
+     *
+     * can_collect on the pivot is the one that matters at the door: being told
+     * about a child and being allowed to take them home are different
+     * permissions, and only the second gets past the kiosk.
+     */
+    public function guardians()
+    {
+        return $this->belongsToMany(Guardian::class)->withPivot('can_collect')->withTimestamps();
+    }
+
+    public function attendancePunches()
+    {
+        return $this->hasMany(ChildAttendancePunch::class);
+    }
+
     public function sessions(): array
     {
         return in_array($this->classroom, self::SESSION_ROOMS, true) ? ['AM', 'PM'] : ['FULL'];

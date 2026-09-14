@@ -152,8 +152,6 @@ class ScheduleController extends Controller
         $data = $request->validate([
             'week_start' => ['required', 'date_format:Y-m-d'],
             'source_week_start' => ['required', 'date_format:Y-m-d', 'different:week_start'],
-            'with_sign_ins' => ['nullable', 'boolean'],
-            'mode' => ['nullable', Rule::in(['replace', 'add'])],
         ]);
 
         $weekStart = ScheduleWeek::startOf($data['week_start']);
@@ -169,31 +167,27 @@ class ScheduleController extends Controller
                 ->with('warning', 'That week has ended and can no longer be edited.');
         }
 
-        // Sign-ins only travel when the box is ticked, and only an admin may ask
-        // for it — it writes attendance for days nobody was actually signed in.
-        $withSignIns = $request->boolean('with_sign_ins') && $request->user()->isAdmin();
-        $mode = $data['mode'] ?? 'replace';
 
-        $sourceTicks = $this->weeks->tickedIn($source);
+        // Scoped to the person asking: a teacher copies their own rooms
+        // forward, an admin copies the centre. Ticking one box already works
+        // this way, and a control that rewrites a whole week should not be the
+        // loose one.
+        $scope = $request->user();
+        $scopedIds = $scope->isAdmin() ? null : Child::visibleTo($scope)->pluck('id')->all();
 
-        $this->weeks->copyFrom($weekStart, $source, $withSignIns, $mode);
+        $sourceTicks = $this->weeks->tickedIn($source, $scopedIds);
+
+        $this->weeks->copyFrom($weekStart, $source, $scope);
 
         $label = Carbon::parse($source)->format('M j').' – '.Carbon::parse($source)->addDays(4)->format('M j');
 
         // A copy that changed nothing looks identical to one that failed, so say
         // so outright rather than reporting a success the grid does not show.
-        if ($this->weeks->tickChange === 0 && $this->weeks->copiedSignIns === 0) {
+        if ($this->weeks->tickChange === 0) {
             if ($sourceTicks === 0) {
                 $warning = 'Nothing to copy — the week of '.$label.' has no days ticked. Set that week up first, or pick another one.';
             } else {
-                $warning = 'Nothing changed — this week already has every day the week of '.$label.' does.';
-
-                // "Add" cannot clear anything, so a week holding extra days looks
-                // identical to a no-op. Name the option that would actually move it.
-                if ($mode === 'add' && $this->weeks->tickedDays > $sourceTicks) {
-                    $warning .= ' It also has '.($this->weeks->tickedDays - $sourceTicks)
-                        .' day(s) that week does not — choose "Replace this week" to match it exactly.';
-                }
+                $warning = 'Nothing changed — this week already matches the week of '.$label.'.';
             }
 
             return redirect()
@@ -201,13 +195,7 @@ class ScheduleController extends Controller
                 ->with('warning', $warning);
         }
 
-        $message = $mode === 'add'
-            ? 'Copied from '.$label.'. '.$this->weeks->tickChange.' day(s) added — '.$this->weeks->tickedDays.' now ticked this week.'
-            : 'Copied from '.$label.'. This week now matches it — '.$this->weeks->tickedDays.' day(s) ticked.';
-
-        if ($this->weeks->copiedSignIns > 0) {
-            $message .= ' '.$this->weeks->copiedSignIns.' sign-in(s) came across too.';
-        }
+        $message = 'Copied from '.$label.'. This week now matches it — '.$this->weeks->tickedDays.' day(s) ticked.';
 
         return redirect()
             ->route('attendance.index', ['date' => $weekStart])

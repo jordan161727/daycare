@@ -40,6 +40,40 @@ class ClassroomAssignment
      */
     public const AGES_OUT_AT_YEARS = 12;
 
+
+    /**
+     * The animal each room is known by, youngest first.
+     *
+     * Children who cannot yet read "Transition" can read a turtle, and a parent
+     * asked which room their child is in gets an answer they will remember. The
+     * order follows the bands above, so the animals grow up alongside them.
+     *
+     * Here rather than in the Blade component because two screens need it in
+     * two languages — the component renders it, and the attendance sheet hands
+     * it to Alpine for the rows it draws in JavaScript. A second copy would
+     * drift the first time a room was renamed.
+     */
+    public const ANIMALS = [
+        'Infant' => '🐰',
+        'Transition' => '🐢',
+        'Toddler' => '🦊',
+        'PreK' => '🐻',
+        'UPK-4' => '🦉',
+        'School Age' => '🐘',
+    ];
+
+    /** A room's animal, or a star for one nobody has given an animal to. */
+    public static function animal(?string $room): string
+    {
+        return self::ANIMALS[$room] ?? '⭐';
+    }
+
+    /** The whole map, for handing to the browser in one go. */
+    public static function animals(): array
+    {
+        return self::ANIMALS;
+    }
+
     /** Room names in age order, for pickers and validation. */
     public static function rooms(): array
     {

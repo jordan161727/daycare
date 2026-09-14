@@ -14,6 +14,53 @@
         <x-stat-card icon="rooms" title="Rooms" :value="$totalRooms" color="amber" />
     </div>
 
+    {{--
+        Hidden for now. The clock is off this version (see the flag in
+        config/daycare.php) and this card was the notice saying so; it
+        waits here with it rather than being rebuilt later. What it said,
+        and why, is kept below.
+
+         Signing in used to clock a teacher in and drop them straight onto the
+         clock screen. It is off this version, so they arrive here — and a
+         thing that was on the screen yesterday and gone today reads as
+         something broken unless the screen says where it went.
+
+         It shows the time regardless, because that much of a clock is useful
+         with nothing to punch: it is the first thing looked at by somebody
+         about to write an arrival time onto the sheet by hand, which is how
+         the centre is running until the punches come back. 
+    @if(auth()->user()->role === 'teacher' && ! config('daycare.timesheet.clock.enabled'))
+        <section class="glass-card mt-6 flex flex-wrap items-center gap-x-6 gap-y-4 rounded-2xl p-6">
+            <div x-data="{ now: '', today: '' }"
+                 x-init="
+                    const tick = () => {
+                        const at = new Date();
+                        now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+                        today = at.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+                    };
+                    tick();
+                    setInterval(tick, 1000);
+                 "
+                 class="min-w-0">
+                 (The time is server-rendered first, so it reads correctly
+                     for the moment before Alpine takes over.)
+                <p class="text-3xl font-bold tabular-nums leading-none" x-text="now">{{ now()->format('g:i:s A') }}</p>
+                <p class="mt-1.5 text-sm text-slate-500 dark:text-slate-400" x-text="today">{{ now()->format('l, F j') }}</p>
+            </div>
+
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-base font-semibold">Time Clock</h2>
+                    <span class="rounded-full bg-slate-200/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-white/10 dark:text-slate-300">Next version</span>
+                </div>
+                <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Punching in and out, lunch and breaks are coming in the next version. Until then your hours are kept the way they were before &mdash; on paper, signed off by the director.
+                </p>
+            </div>
+        </section>
+    @endif
+    --}}
+
     <div class="mt-6 grid gap-6 xl:grid-cols-5">
         <section class="glass-card overflow-hidden rounded-2xl p-6 xl:col-span-3">
             <div class="flex items-start justify-between"><div><p class="text-sm font-semibold text-indigo-600 dark:text-indigo-400">TODAY'S ATTENDANCE</p><h2 class="mt-1 text-xl font-bold">Attendance progress</h2></div><span class="rounded-xl bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">{{ $percentage }}%</span></div>

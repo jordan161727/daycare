@@ -21,6 +21,9 @@ class ClockInAtLoginTest extends TestCase
     {
         parent::setUp();
 
+        // The clock is off by default this version; these are its own tests.
+        config()->set('daycare.timesheet.clock.enabled', true);
+
         $this->travelTo(Carbon::parse(self::TODAY.' 07:02:00'));
     }
 

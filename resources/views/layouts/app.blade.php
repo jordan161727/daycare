@@ -33,7 +33,11 @@
 
 
         {{-- Content --}}
-        <main class="px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        {{-- Flush to the bar above it. Every page opens with a card that
+             carries its own padding, so any gap here was space on top of
+             space — and the bar is blurred rather than filled, so content
+             sliding under it on scroll needs no runway to do it in. --}}
+        <main class="px-4 pb-5 pt-0 sm:px-6 lg:px-8 lg:pb-6">
 
             @if(session('error'))
                 <div class="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">

@@ -14,6 +14,25 @@ use Carbon\Carbon;
 
 class ChildController extends Controller
 {
+    /*
+     * Whose record, not which fields.
+     *
+     * A teacher keeps the whole record of the children in their own rooms —
+     * the phone numbers and the pick-up list, and the hours, the dates and the
+     * room too. They are the one who is told any of it first, and splitting the
+     * record in half only decided which corrections had to wait on the office.
+     *
+     * The guard that matters is which child, and it is the same rule the roster
+     * is filtered by: isVisibleTo, checked on both edit() and update(). That is
+     * what keeps the room field safe to hand over. A teacher can only act on a
+     * child they already hold, so setting the room can move one out of their
+     * own roster — never pull one in. There is no record here that becomes
+     * readable by editing.
+     *
+     * Creating a child is still the director's: a new record decides which room
+     * it lands in before anybody holds it, so there is no roster to check it
+     * against. See the route group in routes/web.php.
+     */
     /**
      * Display a listing of the resource.
      */
@@ -35,25 +54,18 @@ class ChildController extends Controller
                 'COALESCE(birth_date, dob) '.($direction === 'asc' ? 'desc' : 'asc')
             ), fn ($query) => $query->orderBy($sort, $direction))
             ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
-            ->paginate(10)
-            ->withQueryString();
+            // The whole roll on one page. It used to page at ten, which put a
+            // sixty-child centre six clicks from the child they were looking
+            // for and broke the search box — it could only find children on the
+            // page it was on. A roster is read by scrolling, like the sheet.
+            ->get();
 
-        // What time each room runs, read against the child's classroom. One
-        // query for the whole page rather than a lookup per row.
-        //
-        // The room's own hours and not the generated roster: a staff week is
-        // shift patterns, breaks and handovers, and reading a class time out of
-        // it gives a row like "7:00 AM – 1:45 PM, 2:00 PM – 6:00 PM" — true
-        // about the rota and useless as an answer to what time the class runs.
-        // That question has one answer, it is set on the room, and it holds
-        // whether or not a week has been generated.
-        $roomSchedules = RoomSchedule::byRoom();
 
         // The whole roll, not the page: "61 active" counted off ten rows would
         // be a different number on every page of the same list.
         $activeCount = Child::visibleTo($requestUser)->where('status', 'Active')->count();
 
-        return view('children.index', compact('children', 'sort', 'direction', 'roomSchedules', 'activeCount'));
+        return view('children.index', compact('children', 'sort', 'direction', 'activeCount'));
     }
 
     /**
@@ -106,6 +118,10 @@ class ChildController extends Controller
      */
     public function edit(Child $child)
     {
+        // The same rule the roster is filtered by, asked about one record: a
+        // teacher edits the children in their own rooms and nobody else's.
+        abort_unless($this->isVisibleTo($child, request()->user()), 403);
+
         return view('children.edit', compact('child'));
     }
 
@@ -114,6 +130,8 @@ class ChildController extends Controller
      */
     public function update(Request $request, Child $child)
     {
+        abort_unless($this->isVisibleTo($child, $request->user()), 403);
+
         $child->update($this->validatedData($request, $child));
 
         $this->syncPhoto($request, $child);
@@ -201,6 +219,16 @@ class ChildController extends Controller
             }
         }
 
+        // The hidden empty input in front of the day boxes keeps "cleared" and
+        // "untouched" apart, but it also means the array arrives with a stray
+        // "" in it whenever anything is ticked. Strip it here so the rules and
+        // the column only ever see weekday numbers.
+        if (is_array($request->input('schedule_days'))) {
+            $request->merge(['schedule_days' => array_values(array_filter(
+                $request->input('schedule_days'),
+                fn ($day) => $day !== '' && $day !== null
+            ))]);
+        }
         $rules = [
             'lan' => ['required', 'string', 'max:255', Rule::unique('children', 'lan')->ignore($child)],
             'child_name' => ['nullable', 'string', 'max:255'],
@@ -219,6 +247,12 @@ class ChildController extends Controller
             // What the parent contracted for. Blank means nobody has said, and
             // the projection then reports the days without claiming a target;
             // zero is the deliberate "not coming" and suppresses it.
+            // The days the parent signed up for. The form posts a hidden empty
+            // value in front of the boxes so that clearing every day arrives as
+            // "no days" rather than as nothing at all — otherwise unticking the
+            // last box would be indistinguishable from never touching the field.
+            'schedule_days' => ['nullable', 'array'],
+            'schedule_days.*' => [Rule::in(array_keys(Child::WEEKDAYS))],
             'expected_hours_per_week' => ['nullable', 'numeric', 'min:0', 'max:168'],
             // The hours of the day the child is here, inside the hours the
             // centre is open. Either end may stand alone while the other is
@@ -310,7 +344,7 @@ class ChildController extends Controller
 
     private function enrollmentFields(): array
     {
-        $fields = ['nickname','address','city','zip','telephone','mother_name','mother_address','mother_home_phone','mother_employer','mother_work_phone','mother_fax','mother_cell','mother_email','mother_title','mother_ssn','father_name','father_address','father_home_phone','father_employer','father_work_phone','father_fax','father_cell','father_email','father_title','father_ssn','email_address','parents_status','responsible_for_payment','emergency_contact','secondary_emergency_contact','emergency_telephone','emergency_relationship','emergency_license_number'];
+        $fields = ['dss_case_no','dss_cin','nickname','address','city','zip','telephone','mother_name','mother_address','mother_home_phone','mother_employer','mother_work_phone','mother_fax','mother_cell','mother_email','mother_title','mother_ssn','father_name','father_address','father_home_phone','father_employer','father_work_phone','father_fax','father_cell','father_email','father_title','father_ssn','email_address','parents_status','responsible_for_payment','emergency_contact','secondary_emergency_contact','emergency_telephone','emergency_relationship','emergency_license_number'];
         for ($number = 1; $number <= 3; $number++) foreach (['name','address','telephone','alternate','relationship','license_number'] as $field) $fields[] = "pickup_{$number}_{$field}";
         return $fields;
     }

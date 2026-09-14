@@ -21,7 +21,7 @@
                     <header class="flex flex-wrap items-end justify-between gap-4 border-b border-slate-100 p-5 dark:border-white/10">
                         <div>
                             <input type="hidden" name="rooms[{{ $index }}][room]" value="{{ $room['name'] }}">
-                            <h2 class="text-base font-semibold">{{ $room['name'] }}</h2>
+                            <h2 class="flex items-center gap-2 text-base font-semibold"><x-room-icon :room="$room['name']" size="text-lg" />{{ $room['name'] }}</h2>
                             {{-- The line a child's record will show, so what is being
                                  set is visible as the thing it turns into. --}}
                             <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
@@ -54,7 +54,17 @@
                                     <x-child-avatar :child="$child" size="h-7 w-7" />
                                     <span class="truncate">{{ $child->first_name }} {{ $child->last_name }}</span>
                                 </a>
-                                <span class="shrink-0 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{{ $child->scheduleLabel() ?? 'No hours agreed' }}</span>
+                                {{-- The child's own arrangement, not the room's:
+                                     which days they come and the hours they are
+                                     here. Both are set on their record at
+                                     registration; this page is where the whole
+                                     room's arrangements are read side by side,
+                                     which is how a director spots the child whose
+                                     day runs past everybody else's. --}}
+                                <span class="shrink-0 whitespace-nowrap text-right text-xs text-slate-500 dark:text-slate-400">
+                                    {{ $child->scheduleLabel() ?? 'No hours agreed' }}
+                                    <span class="mt-0.5 block font-medium {{ $child->scheduleDaysLabel() ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500' }}">{{ $child->scheduleDaysLabel() ?? 'No days set' }}</span>
+                                </span>
                             </li>
                         @empty
                             <li class="px-5 py-8 text-center text-sm text-slate-500 dark:text-slate-400">Nobody is in this room.</li>

@@ -11,6 +11,7 @@ class Attendance extends Model
         'child_id',
         'attendance_date',
         'signed_in_at',
+        'signed_out_at',
         'session',
     ];
 
@@ -20,6 +21,10 @@ class Attendance extends Model
         // lookups miss on any driver that stores what it is given.
         'attendance_date' => 'date:Y-m-d',
         'signed_in_at' => 'datetime',
+        // Written by the door kiosk when a child is collected. The arrival
+        // stands either way: leaving at three does not make the morning not
+        // have happened, and DSS bills against the day, not the departure.
+        'signed_out_at' => 'datetime',
     ];
 
     public function child()
