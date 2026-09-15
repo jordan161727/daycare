@@ -8,13 +8,6 @@
      week. What is left is the pair that means something for every child. --}}
 
 <div class="glass-card overflow-hidden rounded-2xl">
-    {{-- The key's own toggle. The strip of tips that used to carry it is
-         gone — three sentences read once and scrolled past every day after —
-         but a key still has to be able to come back once it has been put away. --}}
-    <div class="flex justify-end border-b border-slate-200/70 px-4 py-1.5 dark:border-white/10">
-        <button type="button" @click="toggleKey()" class="text-[11px] font-medium text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300" x-text="showKey ? 'Hide key' : 'Show key'"></button>
-    </div>
-
     {{-- What every mark on the checklist means, in the checklist's own marks.
 
          Its own strip rather than the sign-in sheet's: this view has ticks

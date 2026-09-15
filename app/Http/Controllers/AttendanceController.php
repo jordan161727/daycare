@@ -426,8 +426,8 @@ class AttendanceController extends Controller
         return redirect()
             ->route('attendance.index', ['date' => $weekStart])
             ->with('success', $source
-                ? 'Week of '.Carbon::parse($weekStart)->format('M j').' opened — '.$weeks->tickedIn($weekStart).' day(s) copied forward from the week of '.$source->format('M j').'.'
-                : 'Week of '.Carbon::parse($weekStart)->format('M j').' opened. Nothing came before it, so the days start from each child\'s record.');
+                ? 'Week opened from '.$source->format('M j').' copy.'
+                : 'Week opened. Nothing came before it, so the days start from each child\'s record.');
     }
 
     public function signIn(Request $request)

@@ -334,25 +334,6 @@ class WeekSchedule
         }
     }
 
-    /** Days ticked in a week — what the teacher counts when they look at the grid. */
-    /**
-     * Days ticked in a week, optionally only for a given set of children.
-     *
-     * The scoped count is what a copy reports back: a teacher told "8 days
-     * added" when four of them were another room's is being told about work
-     * they did not do and cannot see.
-     *
-     * @param  array<int, int>|null  $childIds  null counts the whole centre
-     */
-    public function tickedIn(string $weekStart, ?array $childIds = null): int
-    {
-        return ScheduleSlot::where('week_start', $weekStart)
-            ->where('is_scheduled', true)
-            ->when($childIds !== null, fn ($query) => $query->whereIn('child_id', $childIds))
-            ->count();
-    }
-
-
     /**
      * Write one slot row per child, per weekday, per session.
      *

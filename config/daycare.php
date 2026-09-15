@@ -65,6 +65,20 @@ return [
     /** Weekdays the centre operates. Keyed the way rules store a day. */
     'days' => ['MON', 'TUE', 'WED', 'THU', 'FRI'],
 
+    /**
+     * Whether the attendance sheet offers the Schedule view.
+     *
+     * Off for this version. The view is built and tested — it is how a week's
+     * expected days are ticked — but the centre plans its weeks by opening
+     * them and letting the previous week copy forward, so the button was a
+     * second way in that nobody was asked to use. It waits here rather than
+     * being taken out, and bringing it back is this one line.
+     *
+     * While it is off, a week is still built by "Open this week"; nothing
+     * already ticked is lost or hidden.
+     */
+    'schedule_view' => false,
+
     /*
     |--------------------------------------------------------------------------
     | Staff-to-child ratios

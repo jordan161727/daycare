@@ -56,7 +56,7 @@
             'classes' => 'att-closed',
         ],    ];
 @endphp
-<div x-data="attendanceApp()" @keydown.escape.window="recentOpen = false" @pointermove.window="paintAt($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()">
+<div x-data="attendanceApp()" @attendance-key.window="toggleKey()" @keydown.escape.window="recentOpen = false" @pointermove.window="paintAt($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()">
     {{-- What the last copy did. Without this the page redirects back looking
          untouched, and a copy that worked is indistinguishable from one that
          never ran. --}}
@@ -91,57 +91,101 @@
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <h1 class="text-base font-bold tracking-tight sm:text-lg">Attendance</h1>
 
-                    {{-- The week as one control: a step either side of the range it
-                         is showing, rather than two buttons and a label apart. --}}
-                    <div class="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-                        <a href="{{ route('attendance.index', ['date' => $prevWeek]) }}" class="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-900 dark:hover:bg-night-700 dark:hover:text-night-950" title="Week of {{ \Illuminate\Support\Carbon::parse($prevWeek)->format('M j') }}" aria-label="Previous week">‹</a>
-                        <span class="px-1.5 text-xs font-semibold tabular-nums">{{ $weekDates->first()->format('M j') }} – {{ $weekDates->last()->format($weekDates->first()->format('M') === $weekDates->last()->format('M') ? 'j' : 'M j') }}</span>
-                        <a href="{{ route('attendance.index', ['date' => $nextWeek]) }}" class="grid h-6 w-6 place-items-center rounded-md text-slate-500 transition hover:bg-white hover:text-slate-900 dark:hover:bg-night-700 dark:hover:text-night-950" title="Week of {{ \Illuminate\Support\Carbon::parse($nextWeek)->format('M j') }}" aria-label="Next week">›</a>
+                    {{-- The week as one control: a step either side of the range
+                         it is showing, rather than two buttons and a label apart.
+                         Hairline dividers rather than gaps, so the three read as
+                         segments of one object.
+
+                         The chevrons are drawn rather than typed. As the
+                         characters ‹ › they came out at whatever weight and
+                         baseline the font had for them, which is not the same
+                         font on a tablet as on the office machine. --}}
+                    <div class="flex items-center rounded-full border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800">
+                        <a href="{{ route('attendance.index', ['date' => $prevWeek]) }}" class="grid h-7 w-8 place-items-center rounded-l-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($prevWeek)->format('M j') }}" aria-label="Previous week">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                        </a>
+                        {{-- The dates open a month. Hovering it picks a whole
+                             week rather than a day: this page is addressed by a
+                             Monday, so a Wednesday and the Tuesday beside it are
+                             the same answer, and a day-picker that pretended
+                             otherwise was asking a question it then ignored.
+
+                             Teleported to the body, like every other panel here.
+                             The toolbar is a glass card, and a card carrying a
+                             backdrop-blur clips what hangs out of it. --}}
+                        <div x-data="weekPicker()" @keydown.escape.window="open = false" @scroll.window="open && place()" @resize.window="open && place()" class="contents">
+                            <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="open" aria-haspopup="dialog" class="flex items-center gap-1.5 border-x border-slate-200 px-3 py-1 text-xs font-semibold tabular-nums transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10" title="Pick a week">
+                                <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                                {{ $weekDates->first()->format('M j') }} &ndash; {{ $weekDates->last()->format($weekDates->first()->format('M') === $weekDates->last()->format('M') ? 'j' : 'M j') }}
+                            </button>
+
+                            <template x-teleport="body">
+                                <div x-show="open" x-cloak x-transition.opacity.duration.120ms @click.outside="open = false" :style="`top: ${y}px; left: ${x}px`" role="dialog" aria-label="Pick a week" class="fixed z-50 w-[19rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-slate-900">
+
+                                    <div class="flex items-center justify-between px-1">
+                                        <button type="button" @click="step(-1)" class="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Previous month">
+                                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                                        </button>
+                                        <span class="text-sm font-bold text-slate-900 dark:text-white" x-text="monthLabel"></span>
+                                        <button type="button" @click="step(1)" class="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Next month">
+                                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                                        </button>
+                                    </div>
+
+                                    {{-- Sunday first, because that is how a wall
+                                         calendar reads, even though the sheet
+                                         itself starts on the Monday beside it. --}}
+                                    <div class="mt-2 grid grid-cols-7 text-center text-[11px] font-semibold text-slate-400">
+                                        <template x-for="(name, index) in ['S','M','T','W','T','F','S']" :key="index"><span x-text="name" class="py-1"></span></template>
+                                    </div>
+
+                                    {{-- No gap between the columns: the highlight
+                                         is a bar across the row, and a gap would
+                                         cut it into seven. --}}
+                                    <div class="grid grid-cols-7" @mouseleave="hover = null">
+                                        <template x-for="cell in cells" :key="cell.key">
+                                            <button type="button"
+                                                    @mouseenter="hover = cell.monday"
+                                                    @focus="hover = cell.monday"
+                                                    @click="go(cell.monday)"
+                                                    :class="[
+                                                        lit(cell) ? 'bg-sky-100 text-sky-800 dark:bg-sky-400/20 dark:text-sky-200' : 'text-slate-700 dark:text-slate-300',
+                                                        lit(cell) && cell.first ? 'rounded-l-full' : '',
+                                                        lit(cell) && cell.last ? 'rounded-r-full' : '',
+                                                        cell.outside ? 'opacity-40' : '',
+                                                        cell.today ? 'font-bold underline decoration-2 underline-offset-2' : 'font-semibold',
+                                                    ]"
+                                                    class="py-1.5 text-xs tabular-nums transition"
+                                                    x-text="cell.day"></button>
+                                        </template>
+                                    </div>
+
+                                    {{-- The week under the pointer, named before
+                                         the press rather than after it. --}}
+                                    <div class="mt-2 flex items-center justify-between border-t border-slate-200/70 pt-2 text-xs dark:border-white/10">
+                                        <button type="button" @click="go(today)" class="font-semibold text-sky-700 transition hover:underline dark:text-sky-300">Jump to this week</button>
+                                        <span class="font-medium text-slate-500 dark:text-slate-400" x-text="'Week of ' + label(hover || current)"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <a href="{{ route('attendance.index', ['date' => $nextWeek]) }}" class="grid h-7 w-8 place-items-center rounded-r-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($nextWeek)->format('M j') }}" aria-label="Next week">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                        </a>
                     </div>
                     {{-- Beside the dates, always: on another week it is the way
                          back, and on this one it is the label that says the dates
                          beside it are the current week rather than one you have
-                         stepped to and forgotten. --}}
+                         stepped to and forgotten. The arrow belongs only to the
+                         first — there is nowhere to return to from today. --}}
                     @if($weekStartDate === $thisWeek)
-                        <span class="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white dark:bg-white dark:text-slate-900" aria-current="date">This week</span>
+                        <span class="rounded-full bg-sky-100 px-3.5 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-400/15 dark:text-sky-300" aria-current="date">This week</span>
                     @else
-                        <a href="{{ route('attendance.index') }}" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10">This week</a>
+                        <a href="{{ route('attendance.index') }}" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25">
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
+                            This week
+                        </a>
                     @endif
-
-                    {{-- Jumping to a far-off week, beside the two controls that
-                         step to a near one. It was behind the "..." with a "Go to
-                         that week" button under it, which is two clicks and a
-                         hunt for something that belongs with the arrows either
-                         side of the dates.
-
-                         No button: picking a date is the whole instruction, and a
-                         second press to confirm a date you have just chosen is a
-                         press that only ever means yes. The form still submits
-                         normally for anyone without JavaScript. --}}
-                    <form method="GET" action="{{ route('attendance.index') }}" class="flex items-center gap-1">
-                        <label class="sr-only" for="attendance-date">Jump to a week</label>
-                        <input id="attendance-date" type="date" name="date" value="{{ $selectedDate }}"
-                               @change="$el.form.submit()"
-                               class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs tabular-nums text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300"
-                               title="Jump to the week containing a date">
-                        {{-- Only reached with scripting off, where the change
-                             handler above never fires. --}}
-                        <noscript><button class="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600">Go</button></noscript>
-                    </form>
-
-                    {{-- Counts as a sentence rather than three chips: the numbers
-                         are the point, so they carry the colour and the weight and
-                         the labels stay out of the way. --}}
-                    <p class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {{-- The room being looked at, when it is not the whole
-                             centre: three numbers that quietly changed meaning
-                             when a filter was clicked would be worse than three
-                             numbers that never moved. --}}
-                        <span x-show="room !== ''" x-cloak class="font-semibold text-slate-700 dark:text-slate-200" x-text="room"></span>
-                        <span><b class="font-bold text-slate-900 dark:text-white" x-text="enrolledCount"></b> enrolled</span>
-                        <span><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount"></b> in</span>
-                        <span><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount"></b> not in</span>
-                    </p>
 
                     {{-- Everything in here is 26px tall and centred on one
                          line. When the row runs out of width it wraps as a
@@ -246,7 +290,8 @@
                             </div>
                         @endif
 
-                        @if($canEditSchedule)
+                        {{-- Parked, not removed: see daycare.schedule_view. --}}
+                        @if($canEditSchedule && config('daycare.schedule_view'))
                             <button type="button" @click="view = view === 'signin' ? 'schedule' : 'signin'; editing = false" :class="view === 'schedule' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition" x-text="view === 'signin' ? 'Schedule' : 'Sign in'"></button>
 
                         @endif
@@ -343,11 +388,11 @@
                          room is answered without filtering to it first. --}}
                     <div class="-mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
                         <button @click="room=''" :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
-                            All <span class="ml-0.5 opacity-60">{{ $totalChildren }}</span>
+                            All <span class="ml-0.5 opacity-60 tabular-nums" x-text="centreIn + '/' + {{ $totalChildren }}" :title="centreIn + ' of {{ $totalChildren }} in'"></span>
                         </button>
                         @foreach($classrooms as $classroom)
                             <button @click="room=@js($classroom)" :class="room === @js($classroom) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
-                            <x-room-icon :room="$classroom" size="text-sm" /> {{ $classroom }} <span class="ml-0.5 opacity-60" x-text="roomCount(@js($classroom))"></span>
+                            <x-room-icon :room="$classroom" size="text-sm" /> {{ $classroom }} <span class="ml-0.5 opacity-60 tabular-nums" x-text="roomIn(@js($classroom)) + '/' + roomCount(@js($classroom))" :title="roomIn(@js($classroom)) + ' of ' + roomCount(@js($classroom)) + ' in'"></span>
                             </button>
                         @endforeach
                     </div>
@@ -360,11 +405,20 @@
                             <span class="grid h-3.5 w-3.5 place-items-center rounded-full border border-current text-[9px] leading-none" aria-hidden="true">i</span>
                             <span x-text="closedCount"></span> <span x-text="closedCount === 1 ? 'day closed' : 'days closed'"></span>
                         </span>
-                        {{-- The key is a strip above the sheet rather than a panel
-                             behind a "?". It is read once on the first morning and
-                             then never again — which is exactly why it has to be
-                             dismissable, and why hiding it is remembered. --}}
-                        <button type="button" @click="toggleKey()" class="text-[11px] font-medium text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300" x-text="showKey ? 'Hide key' : 'Show key'"></button>
+
+                        {{-- Counts as a sentence rather than three chips: the numbers
+                             are the point, so they carry the colour and the weight and
+                             the labels stay out of the way. --}}
+                        <p class="flex shrink-0 items-center gap-x-2.5 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                            {{-- The room being looked at, when it is not the whole
+                                 centre: three numbers that quietly changed meaning
+                                 when a filter was clicked would be worse than three
+                                 numbers that never moved. --}}
+                            <span x-show="room !== ''" x-cloak class="font-semibold text-slate-700 dark:text-slate-200" x-text="room"></span>
+                            <span><b class="font-bold text-slate-900 dark:text-white" x-text="enrolledCount"></b> enrolled</span>
+                            <span><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount"></b> in</span>
+                            <span><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount"></b> not in</span>
+                        </p>
                     </div>
                 </div>
 
@@ -669,6 +723,107 @@
     </div>
 </div>
 <script>
+/**
+ * The month behind the dates in the toolbar.
+ *
+ * Its own island rather than part of attendanceApp: it is chrome for choosing
+ * which week to look at, and it navigates rather than changing anything on the
+ * sheet, so the sheet has no business holding its state.
+ *
+ * Every row of the grid is one Sunday-to-Saturday week, so the seven cells of a
+ * row all resolve to the same Monday — which is what makes "hovering picks a
+ * week" one comparison rather than a range test.
+ */
+function weekPicker() { return {
+    open: false,
+    x: 0,
+    y: 0,
+    hover: null,
+    current: @js($weekStartDate),
+    today: @js($thisWeek),
+    cursor: @js($weekStartDate),
+
+    iso(date) {
+        return date.getFullYear() + '-'
+            + String(date.getMonth() + 1).padStart(2, '0') + '-'
+            + String(date.getDate()).padStart(2, '0');
+    },
+
+    /** The Monday of the week a date falls in. Sunday belongs to the week after it. */
+    mondayOf(date) {
+        const shift = date.getDay() === 0 ? 1 : 1 - date.getDay();
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate() + shift);
+    },
+
+    get monthLabel() {
+        return new Date(this.cursor + 'T00:00:00')
+            .toLocaleDateString(undefined, {month: 'long', year: 'numeric'});
+    },
+
+    get cells() {
+        const base = new Date(this.cursor + 'T00:00:00');
+        const first = new Date(base.getFullYear(), base.getMonth(), 1);
+        const start = new Date(base.getFullYear(), base.getMonth(), 1 - first.getDay());
+        const today = this.iso(new Date());
+        const out = [];
+
+        for (let i = 0; i < 42; i++) {
+            const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+
+            // A last row lying entirely in the next month is a row of nothing.
+            if (i >= 35 && day.getMonth() !== base.getMonth()) { break; }
+
+            out.push({
+                key: this.iso(day),
+                day: day.getDate(),
+                monday: this.iso(this.mondayOf(day)),
+                outside: day.getMonth() !== base.getMonth(),
+                today: this.iso(day) === today,
+                first: i % 7 === 0,
+                last: i % 7 === 6,
+            });
+        }
+
+        return out;
+    },
+
+    /** Lit as a row: the week being pointed at, or the one being looked at. */
+    lit(cell) {
+        return cell.monday === (this.hover || this.current);
+    },
+
+    label(monday) {
+        return new Date(monday + 'T00:00:00')
+            .toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+    },
+
+    step(months) {
+        const base = new Date(this.cursor + 'T00:00:00');
+        this.cursor = this.iso(new Date(base.getFullYear(), base.getMonth() + months, 1));
+    },
+
+    place() {
+        const box = this.$refs.trigger.getBoundingClientRect();
+        // Held off both edges, so it never opens half off-screen.
+        this.x = Math.max(12, Math.min(box.left + box.width / 2 - 152, window.innerWidth - 316));
+        this.y = box.bottom + 8;
+    },
+
+    toggle() {
+        if (this.open) { this.open = false; return; }
+        // Opens on the week being looked at, not on whatever month was left
+        // showing the last time it was used.
+        this.cursor = this.current;
+        this.hover = null;
+        this.place();
+        this.open = true;
+    },
+
+    go(monday) {
+        window.location = @js(route('attendance.index')) + '?date=' + monday;
+    },
+}; }
+
 function attendanceApp() { return {
     search: '',
     room: '',
@@ -818,6 +973,29 @@ function attendanceApp() { return {
     // queried per room. The filter chips carry it, so the size of a room is
     // answered without having to filter to it and read the rows.
     roomCount(room) { return this.childrenData.filter(child => child.classroom === room).length; },
+
+    /**
+     * How many of a room are in, for the "3/6" on its chip.
+     *
+     * Counted off the same attendance the sheet below is drawn from, like the
+     * line at the end of the filters — a chip carrying its own running total
+     * would be a second version of the truth, and the one that drifts is
+     * always the one nobody is looking at.
+     *
+     * The chips do not move with the room filter: they are how a room is
+     * chosen, so a chip that changed when another chip was pressed would be
+     * answering a question about somewhere else.
+     */
+    roomIn(room) {
+        return this.childrenData.filter(
+            child => child.classroom === room && this.hasAnyAttendanceForDate(child.id, this.countDate)
+        ).length;
+    },
+
+    /** The same reading for the whole centre, so the All chip matches the rest. */
+    get centreIn() {
+        return this.childrenData.filter(child => this.hasAnyAttendanceForDate(child.id, this.countDate)).length;
+    },
     // How a column says it has nothing for this child.
     //
     // A dash hugging the left edge of a column whose other rows read "8:00 AM –

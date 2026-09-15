@@ -138,7 +138,7 @@ class AttendanceCellDesignTest extends TestCase
         // Read on the first morning and never again, so it can be put away —
         // and stays away, in a try/catch because a private window throws on the
         // accessor itself and a page that will not render is the worse outcome.
-        $this->assertStringContainsString('Hide key', $html);
+        $this->assertStringContainsString('@attendance-key.window="toggleKey()"', $html);
         $this->assertStringContainsString("localStorage.getItem('attendance.key')", $html);
         $this->assertStringContainsString('catch { return true; }', $html);
     }

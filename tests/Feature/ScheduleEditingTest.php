@@ -84,6 +84,26 @@ class ScheduleEditingTest extends TestCase
         $this->assertSame(5, ScheduleSlot::where('week_start', $nextWeek)->where('is_scheduled', true)->count());
     }
 
+    /**
+     * The banner says where the week came from, and counts nothing.
+     *
+     * It used to report "12 day(s) copied forward" — a true number of the wrong
+     * thing. It counts ticked boxes, which are a child on a weekday for one
+     * session, so three children across a five-day week come to twelve and the
+     * reader is left asking how a week holds twelve days. The provenance is the
+     * part that is not obvious from looking at the sheet; the size of it is
+     * visible on the grid the banner is sitting over.
+     */
+    public function test_the_open_banner_names_the_source_week_without_counting(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        app(WeekSchedule::class)->open(self::MONDAY);
+        ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => true]);
+
+        $this->actingAs($this->admin)
+            ->post(route('attendance.week.open'), ['week_start' => '2026-08-03'])
+            ->assertSessionHas('success', 'Week opened from Jul 27 copy.');
+    }
     /** A finished week is a record. There is nothing left to plan in it. */
     public function test_a_finished_week_cannot_be_opened(): void
     {
@@ -98,6 +118,32 @@ class ScheduleEditingTest extends TestCase
         $this->assertDatabaseMissing('schedule_weeks', ['week_start' => $past]);
     }
 
+    /**
+     * The Schedule view is parked, not deleted.
+     *
+     * A centre that plans its weeks by opening them has no use for a second way
+     * in, and a button leading somewhere nobody was asked to go is a button that
+     * gets pressed by mistake. But the view behind it is built and tested, so it
+     * waits behind one config line — and this checks the line is a switch, which
+     * is the part that quietly stops being true once nothing uses it.
+     */
+    public function test_the_schedule_view_is_parked_behind_a_switch(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        config(['daycare.schedule_view' => false]);
+        $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->assertDontSee("? 'Schedule' : 'Sign in'", false);
+
+        config(['daycare.schedule_view' => true]);
+        $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->assertSee("? 'Schedule' : 'Sign in'", false);
+    }
     public function test_the_page_offers_both_views_and_no_copy_control(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
@@ -107,10 +153,11 @@ class ScheduleEditingTest extends TestCase
             ->get(route('attendance.index', ['date' => self::MONDAY]))
             ->assertOk();
 
-        // The control itself, not the word on it: "Edit" is a common
-        // enough word on a page to pass by accident.
-        $response->assertSee("view = view === 'signin' ? 'schedule' : 'signin'", false);
-        $response->assertSee("? 'Schedule' : 'Sign in'", false);
+        // The Schedule view is parked behind daycare.schedule_view, so the way
+        // into it is not on the page by default. The control itself is checked
+        // rather than the word on it: "Schedule" is a common enough word on
+        // this page to pass by accident.
+        $response->assertDontSee("view = view === 'signin' ? 'schedule' : 'signin'", false);
         // There is no copy control: one button builds a week, and opening
         // is what brings the week before it across.
         $response->assertDontSee('Copy from another week');
@@ -130,7 +177,7 @@ class ScheduleEditingTest extends TestCase
         $response->assertDontSee('First week in the system');
 
         // The key can still be put away and brought back.
-        $response->assertSee('Hide key');
+        $response->assertSee('@attendance-key.window="toggleKey()"', false);
     }
 
     /**
@@ -580,19 +627,20 @@ class ScheduleEditingTest extends TestCase
         $this->assertStringContainsString('scheduled, not in yet', $html);
         $this->assertStringContainsString('not scheduled — tap to sign in anyway', $html);
         $this->assertStringContainsString('x-text="hint"', $html);
-        $this->assertStringContainsString('Hide key', $html);
+        $this->assertStringContainsString('@attendance-key.window="toggleKey()"', $html);
         $this->assertStringContainsString('Not enrolled', $html);
         $this->assertStringContainsString('this week departs from the days on their record', $html);
 
         // And the key for the other view, which has ticks rather than sign-ins.
-        // A strip of its own with its own toggle, sharing one "showKey" state:
-        // somebody who has put the key away has put away the idea of it, not
-        // one page's copy of it.
+        // Both strips are painted, and one "?" in the bar shows and hides the
+        // pair: somebody who has put the key away has put away the idea of it,
+        // not one view's copy of it. So there is exactly one control, and it is
+        // not on the page at all.
         $this->assertStringContainsString('Ticked', $html);
         $this->assertStringContainsString('Centre closed', $html);
         $this->assertStringContainsString('this week departs from the days on their record', $html);
-        $this->assertSame(2, substr_count($html, '@click="toggleKey()"'));
-
+        $this->assertSame(0, substr_count($html, '@click="toggleKey()"'));
+        $this->assertSame(1, substr_count($html, "\$dispatch('attendance-key')"));
         // The popover it replaces is gone, not merely unused.
         $this->assertFileDoesNotExist(resource_path('views/attendance/partials/legend.blade.php'));
     }

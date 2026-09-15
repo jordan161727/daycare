@@ -101,6 +101,27 @@ class LayoutChromeTest extends TestCase
         );
     }
 
+    /**
+     * The "?" in the bar belongs to the attendance sheet and travels no further.
+     *
+     * It shows and hides that sheet's key, and no other page has one — a mark
+     * offering help that does nothing when pressed is worse than no mark, and
+     * the bar is drawn once for every page in the app.
+     */
+    public function test_the_key_mark_is_on_the_attendance_page_only(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'must_change_password' => false]);
+
+        $this->actingAs($admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->assertSee("\$dispatch('attendance-key')", false);
+
+        $this->actingAs($admin)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee("\$dispatch('attendance-key')", false);
+    }
     public function test_reports_hide_the_app_chrome_when_printed(): void
     {
         $css = file_get_contents(resource_path('css/app.css'));

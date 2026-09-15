@@ -223,7 +223,86 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString("Toddler{$q},{$q}sessions{$q}:[{$q}FULL{$q}]", $html);
     }
 
-    /** A cleared date box arrives as null, which used to fail "required" validation. */
+    /**
+     * Each room chip reads "in out of enrolled".
+     *
+     * "Infant 3/6" answers what the morning is actually asking — who is still
+     * to come — for every room at once. Before, the chip carried the roll and
+     * the arrivals were only readable one room at a time, by filtering to it
+     * and looking at the line beside the filters.
+     *
+     * Both halves are counted off the attendance the sheet below is drawn from,
+     * so a chip cannot drift from the grid under it: a sign-in updates the chip
+     * by updating the sheet, with nothing kept in step by hand.
+     */
+    public function test_each_room_chip_counts_who_is_in_against_who_is_enrolled(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString("roomIn('Toddler') + '/' + roomCount('Toddler')", $html);
+
+        // The whole centre reads the same way, or the row is two formats side
+        // by side — a bare number beside a pair of them reads as a third thing.
+        $this->assertStringContainsString("centreIn + '/'", $html);
+
+        // Off the same attendance as the grid, for the same day the counts line
+        // uses, rather than a running total of its own.
+        $this->assertMatchesRegularExpression(
+            '/roomIn\(room\) \{\s*return this\.childrenData\.filter\(\s*child => child\.classroom === room && this\.hasAnyAttendanceForDate\(child\.id, this\.countDate\)/',
+            $html
+        );
+    }
+
+    /**
+     * The dates open a month that picks weeks, not days.
+     *
+     * The control it replaced was a date box: it asked for a day, and then the
+     * page threw six sevenths of the answer away, because a sheet that runs
+     * Monday to Friday is addressed by its Monday. The month says what it means
+     * instead — every cell resolves to the Monday of its row, so hovering lights
+     * seven at once and the footer names the week before the press is made.
+     */
+    public function test_the_dates_open_a_month_that_picks_whole_weeks(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->getContent();
+
+        // The trigger is the dates themselves, not a control beside them.
+        $this->assertStringContainsString('x-data="weekPicker()"', $html);
+        $this->assertStringContainsString('aria-label="Pick a week"', $html);
+
+        // A row at a time: the cell is lit by its Monday, which every cell in a
+        // Sunday-to-Saturday row shares.
+        $this->assertStringContainsString("cell.monday === (this.hover || this.current)", $html);
+        $this->assertStringContainsString("@mouseenter=\"hover = cell.monday\"", $html);
+        $this->assertStringContainsString("'Week of ' + label(hover || current)", $html);
+        $this->assertStringContainsString('Jump to this week', $html);
+
+        // Teleported, because the toolbar is a glass card and a backdrop-blur
+        // clips what hangs out of it.
+        $this->assertMatchesRegularExpression('/x-teleport="body">\s*<div x-show="open"/', $html);
+
+        // And the day box it replaced is gone, not merely hidden.
+        $this->assertStringNotContainsString('id="attendance-date"', $html);
+    }
+
+    /**
+     * A cleared date box arrives as null, which used to fail "required"
+     * validation.
+     *
+     * It was read off the date input echoing the value back; that control is
+     * gone, so it is read off where the page landed instead — on the current
+     * week, which is what falling back to today means.
+     */
     public function test_a_blank_date_falls_back_to_today(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
@@ -231,9 +310,8 @@ class AttendanceSheetTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('attendance.index', ['date' => '']))
             ->assertOk()
-            ->assertSee('name="date" value="'.today()->toDateString().'"', false);
+            ->assertSee('aria-current="date"', false);
     }
-
     public function test_an_unparsable_date_is_rejected(): void
     {
         $this->actingAs($this->admin)
