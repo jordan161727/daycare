@@ -134,13 +134,13 @@ class ChildScheduleDaysTest extends TestCase
      * later week inherited — including a week somebody deliberately cleared.
      */
     /**
-     * A copied week beats the registration.
+     * The week that came before beats the registration.
      *
-     * The record seeds a week when it opens; a copy is somebody choosing
-     * another week's pattern over that, and the choice stands even where the
-     * pattern they chose is emptier than the record.
+     * The record seeds a child the source week says nothing about. For a child
+     * it does know, the source week wins — including a week somebody
+     * deliberately cleared, which is a decision and not the absence of one.
      */
-    public function test_a_copied_week_beats_the_registration(): void
+    public function test_a_week_copied_forward_beats_the_registration(): void
     {
         $child = $this->makeChild(['schedule_days' => [1, 2, 3, 4, 5]]);
 
@@ -148,12 +148,7 @@ class ChildScheduleDaysTest extends TestCase
         // Somebody clears this week by hand.
         ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => false]);
 
-        // Next week opens from the record — five days — and is then made to
-        // match the cleared one on purpose.
         app(WeekSchedule::class)->open('2026-09-21');
-        $this->assertCount(5, $this->ticked($child, '2026-09-21'));
-
-        app(WeekSchedule::class)->copyFrom('2026-09-21', self::MONDAY);
 
         $this->assertSame([], $this->ticked($child, '2026-09-21'));
     }

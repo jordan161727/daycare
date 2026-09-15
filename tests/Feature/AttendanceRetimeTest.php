@@ -192,6 +192,44 @@ class AttendanceRetimeTest extends TestCase
         $this->assertSame('08:00', Attendance::where('child_id', $ada->id)->sole()->signed_in_at->format('H:i'));
     }
 
+    /**
+     * Up and down walk the clock; Shift takes an hour at a stride.
+     *
+     * Typing is the fast way in when somebody knows the time. It is the wrong
+     * way to say "a bit earlier than that", which is the correction actually
+     * being made when a person looks at 9:04 and remembers the child was at
+     * the door before nine.
+     */
+    public function test_the_arrows_move_the_time_in_the_open_field(): void
+    {
+        $this->makeChild();
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('@keydown.up.prevent="nudgeDraft($event.shiftKey ? 60 : 1)"', $html);
+        $this->assertStringContainsString('@keydown.down.prevent="nudgeDraft($event.shiftKey ? -60 : -1)"', $html);
+        $this->assertStringContainsString('@keydown.page-up.prevent="nudgeDraft(60)"', $html);
+        $this->assertStringContainsString('@keydown.page-down.prevent="nudgeDraft(-60)"', $html);
+
+        // It wraps within the day rather than stopping dead at either end, and
+        // the double modulo is what keeps a step below zero from formatting as
+        // "-1:59" — JavaScript's % keeps the sign.
+        $this->assertStringContainsString('const total = ((hours * 60 + mins + minutes) % 1440 + 1440) % 1440;', $html);
+
+        // An empty field starts from the hour the centre opens, not midnight.
+        $this->assertStringContainsString("this.normalizeTime(this.draft) || '07:00'", $html);
+
+        // And the arrows can read their own output back. nudgeDraft() writes
+        // a padded 24-hour string, and without this the "before seven is the
+        // afternoon" rule below turned 06:59 into 18:59 — so a second press
+        // of the down arrow jumped from seven in the morning to nearly seven
+        // at night.
+        $this->assertStringContainsString("if (! match[3] && /^0\d|^1\d|^2[0-3]/.test(match[1]) && match[1].length === 2) {", $html);
+    }
+
     private function makeChild(): Child
     {
         return Child::create([

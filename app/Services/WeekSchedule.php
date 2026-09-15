@@ -21,24 +21,23 @@ use Illuminate\Support\Facades\DB;
 class WeekSchedule
 {
 
-    /** Days ticked in the target week after the last copyFrom(), and the change. */
-    public int $tickedDays = 0;
-
-    public int $tickChange = 0;
 
     /**
      * Return the week, building it the first time it is opened.
      *
-     * Built from each child's own record — the days they are registered for —
-     * and from nothing else. It used to be built from the week before, which
-     * meant the first person to look at a week was handed last week's pattern,
-     * sick days and one-off Tuesdays included, and had to notice what had
-     * arrived before they could plan anything. A week that opens from the
-     * standing arrangement has nothing in it that nobody chose.
+     * Opening copies the week before it forward. That is the whole of how a
+     * week gets built — there is one button, and it brings last week's shape
+     * with it, because a centre's weeks are the same week over and over with
+     * exceptions, and typing the exceptions is less work than typing the rule.
      *
-     * Another week's pattern can still be brought across — copyFrom() — but
-     * as a button pressed on purpose, which is what it always should have
-     * been. copied_from_week_start records that press and only that press.
+     * What travels is the pattern: every day ticked in the source week, and
+     * every day somebody actually arrived on. A drop-in counts — see
+     * patternOf() — and a child the source week says nothing about falls back
+     * to the days on their record, which is how somebody enrolled last
+     * Thursday arrives with a week already shaped.
+     *
+     * What never travels is the attendance itself. Next week is a plan; who
+     * was here is a fact about the week it happened in.
      */
     public function open(string $weekStart, ?User $user = null): ScheduleWeek
     {
@@ -62,13 +61,20 @@ class WeekSchedule
         $existing = ScheduleWeek::firstWhere('week_start', $weekStart);
 
         if ($existing) {
-            // Somebody else built this week first. This opener's rooms get the
-            // same start theirs did: each child's registered days. If the
-            // first opener then copied a week across, that was their rooms'
-            // decision, not this opener's — a pattern nobody in these rooms
-            // chose must not arrive because somebody down the hall pressed a
-            // button.
-            $this->addMissingChildren($weekStart, $childIds);
+            // Somebody else built this week first and this opener's rooms have
+            // no boxes in it. They get the same copy-forward the first opener
+            // got, rather than a blank week nobody chose — addMissingChildren
+            // would hand them empty boxes and lose the pattern.
+            if (! $this->hasSlotsFor($weekStart, $childIds)) {
+                $this->fill(
+                    $weekStart,
+                    $existing->copied_from_week_start?->toDateString() ?? $this->sourceFor($weekStart),
+                    false,
+                    $childIds
+                );
+            } else {
+                $this->addMissingChildren($weekStart, $childIds);
+            }
 
             $this->pruneUnenrolled($weekStart);
 
@@ -81,18 +87,20 @@ class WeekSchedule
 
             if ($week) {
                 // Their rooms, into the week that appeared underneath us.
-                $this->fill($weekStart, null, false, $childIds);
+                $this->fill($weekStart, $week->copied_from_week_start?->toDateString(), false, $childIds);
 
                 return $week;
             }
 
+            $source = $this->sourceFor($weekStart);
+
             $week = ScheduleWeek::create([
                 'week_start' => $weekStart,
-                'copied_from_week_start' => null,
+                'copied_from_week_start' => $source,
                 'created_by' => $user?->id,
             ]);
 
-            $this->fill($weekStart, null, false, $childIds);
+            $this->fill($weekStart, $source, false, $childIds);
 
             return $week;
         });
@@ -118,54 +126,6 @@ class WeekSchedule
         return $this->hasSlotsFor($weekStart, $this->childIdsFor($user));
     }
 
-    /**
-     * Bring another week's pattern into this one.
-     *
-     * The target is rebuilt from the source: it ends up an exact match, and
-     * days ticked here but not there are cleared. That is what "copy the
-     * schedule from another week" means, and offering a gentler second mode
-     * beside it only ever made the dialog longer.
-     *
-     * The pattern travels and nothing else. Sign-ins are a record of what
-     * happened, and reproducing them on another week would write attendance for
-     * days nobody was there.
-     */
-    public function copyFrom(string $weekStart, string $sourceWeekStart, ?User $scopeTo = null): ScheduleWeek
-    {
-        return DB::transaction(function () use ($weekStart, $sourceWeekStart, $scopeTo) {
-            $week = ScheduleWeek::firstOrCreate(['week_start' => $weekStart]);
-            $week->update(['copied_from_week_start' => $sourceWeekStart]);
-
-            /*
-             * Whose week this rewrites.
-             *
-             * Ticking one box is checked room by room — a teacher may only
-             * touch their own. Copying rewrites every box at once, so it has to
-             * answer to the same rule or the small action is guarded and the
-             * large one is not. Replace mode clears the target first, which
-             * made an unscoped copy worse than an overwrite: a Toddler teacher
-             * pressing it deleted the Infant room's week outright.
-             *
-             * Null means the whole centre, which is what an admin gets and what
-             * open() uses — a week coming into being is a centre-wide act and
-             * must not depend on who happened to look at the page first.
-             */
-            $childIds = $this->childIdsFor($scopeTo);
-
-            $before = $this->tickedIn($weekStart, $childIds);
-
-            ScheduleSlot::where('week_start', $weekStart)
-                ->when($childIds !== null, fn ($query) => $query->whereIn('child_id', $childIds))
-                ->delete();
-
-            $this->fill($weekStart, $sourceWeekStart, false, $childIds);
-
-            $this->tickedDays = $this->tickedIn($weekStart, $childIds);
-            $this->tickChange = $this->tickedDays - $before;
-
-            return $week->refresh();
-        });
-    }
 
     /**
      * The children a given person's bulk action may touch, or null for all.
@@ -392,14 +352,6 @@ class WeekSchedule
             ->count();
     }
 
-    /** Weeks that can be used as a copy source, newest first. */
-    public function availableSources(string $exceptWeekStart)
-    {
-        return ScheduleWeek::where('week_start', '!=', $exceptWeekStart)
-            ->orderByDesc('week_start')
-            ->pluck('week_start')
-            ->map(fn ($date) => $date->toDateString());
-    }
 
     /**
      * Write one slot row per child, per weekday, per session.
@@ -413,7 +365,8 @@ class WeekSchedule
         $children = Child::where('status', 'Active')
             ->when($childIds !== null, fn ($query) => $query->whereIn('id', $childIds))
             ->get();
-        $pattern = $sourceWeekStart ? $this->patternOf($sourceWeekStart) : [];
+        // Ticks and arrivals both: see patternOf().
+        $pattern = $sourceWeekStart ? $this->patternOf($sourceWeekStart, attendedCountsAsScheduled: true) : [];
         // Read before writing: these are the ticks an "add" must not lose.
         $existing = $keepExisting ? $this->patternOf($weekStart) : [];
         // A holiday here must not inherit a normal week's ticks. Closure is a
@@ -592,7 +545,7 @@ class WeekSchedule
     }
 
     /** [child_id][weekday offset][session] => bool */
-    private function patternOf(string $weekStart): array
+    private function patternOf(string $weekStart, bool $attendedCountsAsScheduled = false): array
     {
         $monday = Carbon::parse($weekStart);
         $pattern = [];
@@ -600,6 +553,44 @@ class WeekSchedule
         foreach (ScheduleSlot::where('week_start', $weekStart)->get() as $slot) {
             $offset = $monday->diffInDays($slot->slot_date, false);
             $pattern[$slot->child_id][(int) $offset][$slot->session] = (bool) $slot->is_scheduled;
+        }
+
+        if (! $attendedCountsAsScheduled) {
+            return $pattern;
+        }
+
+        /*
+         * A day attended is a day scheduled, when this week is being read as
+         * the shape of the next one.
+         *
+         * A child who turned up on a day nobody had booked was, in the only
+         * sense next week cares about, coming on that day. Leaving the drop-in
+         * out meant the staff re-ticked the same Tuesday every week and a
+         * standing arrangement never became one.
+         *
+         * One-way: it can only turn a day on. An absence does not clear a
+         * ticked day, because a sick Monday is not a change of schedule — that
+         * is the whole reason the plan and the record are separate things.
+         */
+        // datesOf() hands back a plain array, and the bounds are bound as
+        // strings: a Carbon against a DATE column compares as text and drops
+        // the Monday, which is the trap this file documents elsewhere.
+        $dates = ScheduleWeek::datesOf($weekStart);
+
+        $arrivals = Attendance::whereBetween('attendance_date', [
+            $dates[0]->toDateString(),
+            $dates[4]->toDateString(),
+        ])->get();
+
+        foreach ($arrivals as $arrival) {
+            $offset = (int) $monday->diffInDays($arrival->attendance_date, false);
+            $session = $arrival->session ?? 'FULL';
+
+            if ($offset < 0 || $offset > 4) {
+                continue;
+            }
+
+            $pattern[$arrival->child_id][$offset][$session] = true;
         }
 
         return $pattern;

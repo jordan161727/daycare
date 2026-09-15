@@ -116,20 +116,28 @@ class AttendanceSheetTest extends TestCase
     }
 
     /**
-     * The room has a column of its own, third, rather than trailing the name.
+     * LAN, the child, then what the week is staffed and billed against, then
+     * the days.
      *
-     * Beside the name it read as part of it. In a column the rooms stack, and a
-     * child sitting in one nobody else on screen is in stands out — which is
-     * the thing the sheet is grouped and staffed by.
+     * The room is in a column AND under the name, and both earn their place:
+     * read down, the column groups the sheet and a child sitting in a room
+     * nobody else on screen is in stands out; read across, the line under the
+     * name says which room this row is without the eye leaving it.
      */
-    public function test_the_classroom_is_the_third_column(): void
+    public function test_the_sheet_carries_the_facts_a_week_is_staffed_against(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
             ->get(route('attendance.index'))
             ->assertOk()
-            ->assertSeeInOrder(['>LAN</th>', '>Student<', '>Classroom</th>', '>DOB</th>', '>Age</th>'], escape: false);
+            ->assertSeeInOrder(['>LAN</th>', '>Student<', '>Classroom</th>', '>DOB</th>', '>Age</th>', '>Hours</th>'], escape: false);
+
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        // And the room rides under the name as well.
+        $this->assertStringContainsString('<span class="att-room">', $html);
+        $this->assertStringContainsString('x-text="roomLabel(child)"', $html);
     }
 
     public function test_the_week_grid_is_replaced_by_cards_on_small_screens(): void
@@ -162,8 +170,10 @@ class AttendanceSheetTest extends TestCase
 
         // One handler per weekday per layout; the session comes from the child's own
         // list at runtime rather than being hardcoded per room.
-        $this->assertSame(10, substr_count($html, "tapCell(child.id, '"));
-        $this->assertSame(2, substr_count($html, "tapCell(child.id, '".$date."', session)"));
+        // Counted on the click, since the same handler also answers Enter and
+        // Space on the box.
+        $this->assertSame(10, substr_count($html, "@click=\"tapCell(child.id, '"));
+        $this->assertSame(2, substr_count($html, "@click=\"tapCell(child.id, '".$date."', session)\""));
         $this->assertStringContainsString('x-for="session in child.sessions"', $html);
     }
 
@@ -182,7 +192,15 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap', $html);
         // The search box is dropped below sm: on a phone the sheet is scrolled
         // rather than searched, and the box would take the whole line.
-        $this->assertStringContainsString('relative hidden sm:block', $html);
+        $label = substr($html, 0, strpos($html, 'Search name or LAN'));
+        $label = substr($label, strrpos($label, '<label'));
+        $this->assertStringContainsString('hidden', $label);
+        $this->assertStringContainsString('sm:block', $label);
+
+        // And it is the control that gives width back, so the buttons beside
+        // it keep theirs and the row stays on one line for longer.
+        $this->assertStringContainsString('min-w-0', $label);
+        $this->assertStringContainsString('flex-1', $label);
         // Jumping to a far-off week is behind the overflow menu, so the line
         // holds only what is used on every visit.
         $this->assertStringContainsString('aria-label="More"', $html);

@@ -263,7 +263,6 @@ Route::middleware('role:admin,teacher')->group(function () {
     // never creates it.
     Route::post('/attendance/week/open', [AttendanceController::class, 'openWeek'])->name('attendance.week.open');
     Route::post('/attendance/schedule', [ScheduleController::class, 'update'])->name('attendance.schedule.update');
-    Route::post('/attendance/schedule/copy', [ScheduleController::class, 'copy'])->name('attendance.schedule.copy');
     Route::post('/attendance/schedule/closure', [ScheduleController::class, 'closure'])->name('attendance.schedule.closure');
 });
 

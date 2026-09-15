@@ -64,15 +64,12 @@ class ScheduleEditingTest extends TestCase
     }
 
     /**
-     * Opening a later week builds it from the record and copies nothing.
-     *
-     * Last week being fully ticked used to mean this one arrived fully ticked
-     * too — a plan nobody had made. Now the ticks are the child's registered
-     * days, and last week's pattern comes across only through Copy.
+     * Opening a later week copies the week before it forward — which is the
+     * only way a pattern gets from one week to the next now.
      */
-    public function test_opening_a_later_week_builds_it_from_the_record_and_copies_nothing(): void
+    public function test_opening_a_later_week_copies_the_week_before_it_forward(): void
     {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler', ['schedule_days' => [1, 3, 5]]);
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
         app(WeekSchedule::class)->open(self::MONDAY);
         ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => true]);
 
@@ -83,10 +80,8 @@ class ScheduleEditingTest extends TestCase
             ->assertRedirect(route('attendance.index', ['date' => $nextWeek]))
             ->assertSessionHas('success');
 
-        $this->assertDatabaseHas('schedule_weeks', ['week_start' => $nextWeek, 'copied_from_week_start' => null]);
-
-        // Three from the record, not five from last week.
-        $this->assertSame(3, ScheduleSlot::where('week_start', $nextWeek)->where('is_scheduled', true)->count());
+        $this->assertDatabaseHas('schedule_weeks', ['week_start' => $nextWeek, 'copied_from_week_start' => self::MONDAY]);
+        $this->assertSame(5, ScheduleSlot::where('week_start', $nextWeek)->where('is_scheduled', true)->count());
     }
 
     /** A finished week is a record. There is nothing left to plan in it. */
@@ -103,7 +98,7 @@ class ScheduleEditingTest extends TestCase
         $this->assertDatabaseMissing('schedule_weeks', ['week_start' => $past]);
     }
 
-    public function test_the_page_offers_both_views_and_the_copy_control(): void
+    public function test_the_page_offers_both_views_and_no_copy_control(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
         app(WeekSchedule::class)->open('2026-07-20');
@@ -116,16 +111,13 @@ class ScheduleEditingTest extends TestCase
         // enough word on a page to pass by accident.
         $response->assertSee("view = view === 'signin' ? 'schedule' : 'signin'", false);
         $response->assertSee("? 'Schedule' : 'Sign in'", false);
-        $response->assertSee('Copy from another week');
+        // There is no copy control: one button builds a week, and opening
+        // is what brings the week before it across.
+        $response->assertDontSee('Copy from another week');
 
-        // Beside the view switch, and only while the schedule is on screen:
-        // it rewrites the ticks, so it belongs next to them, not over a sheet
-        // of arrivals it cannot touch.
-        $response->assertSee('x-show="view === \'schedule\'" x-cloak @click="$refs.copyWeek.showModal()"', false);
+        $response->assertDontSee('copyWeek');
 
-        // One outcome, said plainly rather than chosen from a list � and the
-        // three controls that used to offer the others are gone, not hidden.
-        $response->assertSee('This week ends up an exact match of the week you choose');
+        $response->assertDontSee('This week ends up an exact match of the week you choose');
         $response->assertDontSee('Add to this week');
         $response->assertDontSee('Replace this week');
         $response->assertDontSee('Also copy the sign-ins');
@@ -142,10 +134,10 @@ class ScheduleEditingTest extends TestCase
     }
 
     /**
-     * Opening a week copies nothing. The prompt says so, and says where the
-     * copy went — a button, pressed on purpose, once the week is open.
+     * The prompt names the week it is about to bring across, and what travels
+     * with it — the ticks and the arrivals both.
      */
-    public function test_the_open_prompt_promises_a_clean_start_and_points_at_copy(): void
+    public function test_the_open_prompt_names_the_week_it_will_copy(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
         app(WeekSchedule::class)->open('2026-07-20');
@@ -154,11 +146,9 @@ class ScheduleEditingTest extends TestCase
             ->get(route('attendance.index', ['date' => '2026-08-10']))
             ->assertOk()
             ->assertSee('has not been set up')
-            ->assertSee('starts from each child', false)
-            ->assertSee('nothing is copied from another week')
-            // Named as the way to bring last week across once it is open.
-            ->assertSee('Copy from another week')
-            ->assertDontSee('Opening it copies the schedule');
+            ->assertSee('Opening it copies the week of')
+            ->assertSee('the days somebody actually arrived on')
+            ->assertDontSee('Copy from another week');
     }
 
     /**
@@ -314,14 +304,15 @@ class ScheduleEditingTest extends TestCase
 
         // Every day, with the permission that ticks the checklist.
         $this->assertStringContainsString('return this.editing && this.canEdit;', $html);
-        $this->assertStringContainsString('if (this.canSetExpected(date)) return this.toggleOne(childId, date, session);', $html);
+        $this->assertStringContainsString('if (this.canSetExpected(date)) this.toggleOne(childId, date, session);', $html);
 
-        // Arrivals: the field, the ✓, and ＋ on a day gone by — never tomorrow.
-        $this->assertStringContainsString('return this.editing && this.canAmend && date <= this.today;', $html);
-        $this->assertStringContainsString('beginArrival(child.id,', $html);
-        $this->assertStringContainsString('commitArrival(child.id,', $html);
-        $this->assertStringContainsString('retime(child.id,', $html);
-        $this->assertStringContainsString('type="time"', $html);
+        // Ahead of today the cycle is the plan only: no step onto "time".
+        $this->assertStringContainsString("if (date > this.today) {\n            if (this.canSetExpected(date)) this.toggleOne(childId, date, session);\n\n            return;", $html);
+
+        // The hour is typed through the pencil, never tomorrow: the field
+        // opens only where an arrival could be recorded.
+        $this->assertStringContainsString('! (this.editing && this.canSignIn(date))', $html);
+        $this->assertStringContainsString('@blur="commitRetime(child.id,', $html);
 
         // And signing in itself still stops at today.
         $this->assertStringContainsString('return this.editing && this.canAmend && date < this.today;', $html);
@@ -422,122 +413,6 @@ class ScheduleEditingTest extends TestCase
 
         $this->assertDatabaseHas('schedule_slots', ['child_id' => $mine->id, 'is_scheduled' => true]);
         $this->assertDatabaseHas('schedule_slots', ['child_id' => $theirs->id, 'is_scheduled' => false]);
-    }
-
-    public function test_copying_a_week_from_the_page_redirects_back_with_the_new_pattern(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        app(WeekSchedule::class)->open('2026-07-20');
-        ScheduleSlot::where('week_start', '2026-07-20')->update(['is_scheduled' => true]);
-        app(WeekSchedule::class)->open(self::MONDAY);
-        ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => false]);
-
-        $this->actingAs($this->admin)->post(route('attendance.schedule.copy'), [
-            'week_start' => self::MONDAY,
-            'source_week_start' => '2026-07-20',
-        ])->assertRedirect(route('attendance.index', ['date' => self::MONDAY]));
-
-        $this->assertSame(5, ScheduleSlot::where('week_start', self::MONDAY)->where('is_scheduled', true)->count());
-    }
-
-    public function test_the_copy_reports_what_it_did_on_the_page(): void
-    {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        app(WeekSchedule::class)->open('2026-07-20');
-        ScheduleSlot::where('week_start', '2026-07-20')->update(['is_scheduled' => true]);
-        app(WeekSchedule::class)->open(self::MONDAY);
-        ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => false]);
-
-        $this->actingAs($this->admin)
-            ->post(route('attendance.schedule.copy'), [
-                'week_start' => self::MONDAY,
-                'source_week_start' => '2026-07-20',
-            ])
-            ->assertSessionHas('success');
-
-        // The banner has to survive the redirect and reach the sheet.
-        $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
-            ->assertOk()
-            ->assertSee('This week now matches it — 5 day(s) ticked');
-    }
-
-    public function test_a_copy_that_changes_nothing_says_so_instead_of_claiming_success(): void
-    {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        // An empty source week: copying it can only ever be a no-op.
-        app(WeekSchedule::class)->open('2026-07-20');
-        app(WeekSchedule::class)->open(self::MONDAY);
-
-        $this->actingAs($this->admin)
-            ->post(route('attendance.schedule.copy'), [
-                'week_start' => self::MONDAY,
-                'source_week_start' => '2026-07-20',
-                'mode' => 'add',
-            ])
-            ->assertSessionHas('warning')
-            ->assertSessionMissing('success');
-
-        $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
-            ->assertSee('has no days ticked');
-    }
-
-    public function test_replacing_a_week_clears_days_the_source_does_not_have(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        app(WeekSchedule::class)->open('2026-07-20');
-        app(WeekSchedule::class)->open(self::MONDAY);
-
-        ScheduleSlot::where('week_start', '2026-07-20')->update(['is_scheduled' => false]);
-        ScheduleSlot::where('week_start', '2026-07-20')->where('slot_date', '2026-07-20')->update(['is_scheduled' => true]);
-
-        ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => false]);
-        ScheduleSlot::where('week_start', self::MONDAY)->where('slot_date', '2026-07-31')->update(['is_scheduled' => true]);
-
-        $this->actingAs($this->admin)->post(route('attendance.schedule.copy'), [
-            'week_start' => self::MONDAY,
-            'source_week_start' => '2026-07-20',
-            'mode' => 'replace',
-        ]);
-
-        $ticked = ScheduleSlot::where('week_start', self::MONDAY)->where('is_scheduled', true)
-            ->pluck('slot_date')->map->toDateString()->all();
-
-        $this->assertSame(['2026-07-27'], $ticked);
-    }
-
-    /**
-     * A copy moves the pattern and nothing else.
-     *
-     * There used to be a box for bringing the source week's arrivals across
-     * too. It wrote attendance for days nobody was there — sample data, on the
-     * record DSS bills from — and it is gone along with the box.
-     */
-    public function test_copying_never_touches_the_sign_ins(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        app(WeekSchedule::class)->open('2026-07-20');
-        ScheduleSlot::where('week_start', '2026-07-20')->update(['is_scheduled' => true]);
-        app(WeekSchedule::class)->open(self::MONDAY);
-
-        Attendance::create([
-            'child_id' => $child->id,
-            'attendance_date' => '2026-07-22',
-            'session' => 'FULL',
-            'signed_in_at' => '2026-07-22 08:15:00',
-        ]);
-
-        // Asked for outright, the way the removed box used to ask: the
-        // parameter is not a parameter any more, so it does nothing.
-        $this->actingAs($this->admin)->post(route('attendance.schedule.copy'), [
-            'week_start' => self::MONDAY,
-            'source_week_start' => '2026-07-20',
-            'with_sign_ins' => '1',
-        ]);
-
-        $this->assertSame(5, ScheduleSlot::where('week_start', self::MONDAY)->where('is_scheduled', true)->count());
-        $this->assertSame(1, Attendance::count());
     }
 
     public function test_a_new_last_day_takes_the_later_boxes_away(): void
@@ -667,50 +542,6 @@ class ScheduleEditingTest extends TestCase
         $this->assertStringNotContainsString('Hopper', $html);
     }
 
-    public function test_the_picker_shows_how_busy_each_week_was(): void
-    {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
-
-        // A normal week…
-        app(WeekSchedule::class)->open('2026-07-13');
-        ScheduleSlot::where('week_start', '2026-07-13')->update(['is_scheduled' => true]);
-
-        // …and one thinned out by a holiday.
-        app(WeekSchedule::class)->open('2026-07-20');
-        ScheduleSlot::where('week_start', '2026-07-20')->update(['is_scheduled' => true]);
-        app(WeekSchedule::class)->setClosure('2026-07-22', true, 'Holiday');
-
-        app(WeekSchedule::class)->open(self::MONDAY);
-
-        $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
-            ->assertOk()
-            ->getContent();
-
-        // Choosing "a normal week" means being able to tell them apart.
-        $this->assertStringContainsString('5 days ticked', $html);
-        $this->assertStringContainsString('4 days ticked', $html);
-        $this->assertStringContainsString('1 closed day', $html);
-    }
-
-    public function test_the_copy_control_offers_last_week_first(): void
-    {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        app(WeekSchedule::class)->open('2026-07-13');
-        app(WeekSchedule::class)->open('2026-07-20');
-        // A week later than the one being viewed must not steal the default.
-        app(WeekSchedule::class)->open('2026-08-03');
-
-        $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
-            ->assertOk()
-            ->getContent();
-
-        // The week just gone leads the picker and is the checked radio.
-        $this->assertStringContainsString('value="2026-07-20" checked', $html);
-        $this->assertStringNotContainsString('value="2026-08-03" checked', $html);
-    }
-
     public function test_the_grid_marks_an_unscheduled_sign_in_differently(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
@@ -723,10 +554,10 @@ class ScheduleEditingTest extends TestCase
 
         // Four states are all expressible from the front end.
         $this->assertStringContainsString('Not enrolled on this date', $html);             // nothing
-        $this->assertStringContainsString('border-dashed border-sky-400', $html);        // scheduled, not in yet
-        $this->assertStringContainsString('border-transparent bg-transparent', $html);     // not scheduled
-        $this->assertStringContainsString('border-emerald-300 bg-emerald-50', $html);      // signed in
-        $this->assertStringContainsString('border-amber-400 bg-amber-50', $html);          // signed in off-schedule
+        $this->assertStringContainsString("classes.push('att-expected')", $html);   // scheduled, not in yet
+        $this->assertStringContainsString("classes.push('att-none')", $html);       // not scheduled
+        $this->assertStringContainsString("classes.push('att-time')", $html);       // signed in
+        $this->assertStringContainsString("classes.push('att-unplanned')", $html);  // signed in off-schedule
     }
 
     public function test_the_sheet_carries_a_key_to_its_own_colours(): void
@@ -748,7 +579,7 @@ class ScheduleEditingTest extends TestCase
         $this->assertStringContainsString('unplanned, still billable', $html);
         $this->assertStringContainsString('scheduled, not in yet', $html);
         $this->assertStringContainsString('not scheduled — tap to sign in anyway', $html);
-        $this->assertStringContainsString('Tap any cell to sign in or out', $html);
+        $this->assertStringContainsString('x-text="hint"', $html);
         $this->assertStringContainsString('Hide key', $html);
         $this->assertStringContainsString('Not enrolled', $html);
         $this->assertStringContainsString('this week departs from the days on their record', $html);
@@ -821,24 +652,6 @@ class ScheduleEditingTest extends TestCase
         $this->assertSame(0, ScheduleSlot::where('week_start', $past)->where('is_scheduled', true)->count());
     }
 
-    public function test_a_finished_week_cannot_be_copied_into(): void
-    {
-        $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $past = '2026-07-20';
-        app(WeekSchedule::class)->open($past);
-        app(WeekSchedule::class)->open(self::MONDAY);
-        ScheduleSlot::where('week_start', self::MONDAY)->update(['is_scheduled' => true]);
-
-        $this->actingAs($this->admin)
-            ->post(route('attendance.schedule.copy'), [
-                'week_start' => $past,
-                'source_week_start' => self::MONDAY,
-            ])
-            ->assertSessionHas('warning');
-
-        $this->assertSame(0, ScheduleSlot::where('week_start', $past)->where('is_scheduled', true)->count());
-    }
-
     public function test_the_locked_week_hides_the_schedule_controls(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
@@ -891,7 +704,7 @@ class ScheduleEditingTest extends TestCase
         $this->assertFalse((bool) ScheduleSlot::where('slot_date', $wednesday)->value('is_scheduled'));
     }
 
-    public function test_a_holiday_stays_gray_however_the_pattern_arrives(): void
+    public function test_a_holiday_stays_gray_when_the_pattern_copies_forward(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler', ['schedule_days' => [1, 2, 3, 4, 5]]);
         app(WeekSchedule::class)->open(self::MONDAY);
@@ -900,13 +713,10 @@ class ScheduleEditingTest extends TestCase
         // Next week's Wednesday is a holiday before that week is ever opened.
         app(WeekSchedule::class)->setClosure('2026-08-05', true, 'Holiday');
 
-        // From the record, on open…
+        // Copied forward from a week where that Wednesday was ticked: the
+        // closure is a fact about the date and wins over whatever arrives.
         app(WeekSchedule::class)->open('2026-08-03');
-        $this->assertFalse((bool) ScheduleSlot::where('slot_date', '2026-08-05')->value('is_scheduled'));
-        $this->assertTrue((bool) ScheduleSlot::where('slot_date', '2026-08-04')->value('is_scheduled'));
 
-        // …and from a copy of a week where that Wednesday was ticked.
-        app(WeekSchedule::class)->copyFrom('2026-08-03', self::MONDAY);
         $this->assertFalse((bool) ScheduleSlot::where('slot_date', '2026-08-05')->value('is_scheduled'));
         $this->assertTrue((bool) ScheduleSlot::where('slot_date', '2026-08-04')->value('is_scheduled'));
     }

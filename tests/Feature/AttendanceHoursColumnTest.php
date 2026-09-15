@@ -56,8 +56,9 @@ class AttendanceHoursColumnTest extends TestCase
     }
 
     /**
-     * Both readings of the same week carry it. The set-schedule view already
-     * mirrors the sheet's DOB and Age columns for exactly this reason.
+     * Both readings of the same week carry it. The set-schedule view mirrors
+     * the sheet's DOB, Age and Hours columns for exactly this reason — a week
+     * is planned against the same facts it is signed in against.
      */
     public function test_the_set_schedule_view_shows_them_too(): void
     {
@@ -69,6 +70,10 @@ class AttendanceHoursColumnTest extends TestCase
             ->getContent();
 
         $this->assertSame(2, substr_count($html, '>Hours</th>'));
+
+        // And on the sheet the name's hover says it too, for the reader who is
+        // scanning names rather than running down the column.
+        $this->assertStringContainsString("' — here ' + child.schedule_hours", $html);
     }
 
     public function test_a_child_with_no_hours_agreed_reads_as_a_dash(): void

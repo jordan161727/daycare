@@ -46,48 +46,67 @@ class WeekScheduleTest extends TestCase
     }
 
     /**
-     * A week opens from each child's registered days and from nothing else.
+     * Opening a week copies the week before it forward, weekday by weekday.
      *
-     * It used to copy the week before it forward, which handed the first
-     * person to look at a week last week's pattern — one-off Tuesdays and all
-     * — as a plan nobody had made. Now the ticks come from the record, and
-     * another week's pattern arrives only when somebody presses Copy.
+     * That is the whole of how a week gets built: one button, and last week's
+     * shape comes with it. A centre's weeks are the same week over and over
+     * with exceptions, and typing the exceptions is less work than typing the
+     * rule every Monday.
      */
-    public function test_opening_a_week_starts_from_the_registered_days_not_the_week_before(): void
+    public function test_opening_a_week_copies_the_pattern_forward_by_weekday(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $child->forceFill(['schedule_days' => [1, 3, 5]])->save();   // Mon / Wed / Fri on the record
-
         $this->weeks->open(self::WEEK_1);
-        $this->schedule($child, ['2026-07-28', '2026-07-30']);        // but last week was Tue / Thu
+        $this->schedule($child, ['2026-07-27', '2026-07-29', '2026-07-31']);   // Mon / Wed / Fri
 
         $week = $this->weeks->open(self::WEEK_2);
 
-        // Nothing was copied, and the week says so.
-        $this->assertNull($week->copied_from_week_start);
-
+        $this->assertSame(self::WEEK_1, $week->copied_from_week_start->toDateString());
         $this->assertTrue($this->scheduled($child, '2026-08-03'));   // Mon
-        $this->assertFalse($this->scheduled($child, '2026-08-04'));  // Tue — last week's, not the record's
+        $this->assertFalse($this->scheduled($child, '2026-08-04'));  // Tue
         $this->assertTrue($this->scheduled($child, '2026-08-05'));   // Wed
         $this->assertFalse($this->scheduled($child, '2026-08-06'));  // Thu
         $this->assertTrue($this->scheduled($child, '2026-08-07'));   // Fri
     }
 
-    /** A child whose record has never named a pattern opens unticked. */
-    public function test_a_child_with_no_registered_days_opens_unticked_whatever_last_week_was(): void
+    /**
+     * The registered days seed a child the source week says nothing about.
+     *
+     * Somebody enrolled last Thursday has nothing to inherit, and used to
+     * arrive with a blank week that a person had to notice and tick by hand. A
+     * record saying Tue/Thu has already asked for those days.
+     *
+     * Per child, and that distinction is load bearing: a child who IS in the
+     * source week carries it forward untouched, including a week somebody
+     * deliberately cleared. The registration seeds a first week; it never
+     * overrules a later decision.
+     */
+    public function test_a_child_the_source_week_never_saw_falls_back_to_their_record(): void
     {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
         $this->weeks->open(self::WEEK_1);
-        $this->schedule($child, ['2026-07-27', '2026-07-29', '2026-07-31']);
+
+        $late = $this->makeChild('Turing', 'Alan', 'Toddler');
+        $late->forceFill(['schedule_days' => [2, 4]])->save();   // Tue / Thu
 
         $this->weeks->open(self::WEEK_2);
 
-        $this->assertSame(5, ScheduleSlot::where('child_id', $child->id)->where('week_start', self::WEEK_2)->count());
-        $this->assertSame(0, ScheduleSlot::where('child_id', $child->id)->where('week_start', self::WEEK_2)->where('is_scheduled', true)->count());
+        $this->assertFalse($this->scheduled($late, '2026-08-03'));  // Mon
+        $this->assertTrue($this->scheduled($late, '2026-08-04'));   // Tue
+        $this->assertTrue($this->scheduled($late, '2026-08-06'));   // Thu
     }
 
-    /** The whole point: a sick day must not become next week's schedule. */
-    public function test_attendance_never_copies_forward(): void
+    /**
+     * A day attended is a day scheduled; a day missed is still scheduled.
+     *
+     * Both halves matter and they are not symmetrical. A child who turned up
+     * on a day nobody booked was, in the only sense next week cares about,
+     * coming on that day — and leaving the drop-in out meant the staff
+     * re-ticked the same Tuesday every week and a standing arrangement never
+     * became one. But an absence must not clear a ticked day: a sick Monday is
+     * not a change of schedule, which is the whole reason the plan and the
+     * record are separate things.
+     */
+    public function test_a_day_attended_carries_forward_but_a_day_missed_is_not_cleared(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
         $this->weeks->open(self::WEEK_1);
@@ -98,9 +117,21 @@ class WeekScheduleTest extends TestCase
 
         $this->weeks->open(self::WEEK_2);
 
-        // Neither the tick nor the arrival crosses into the new week on its own.
-        $this->assertFalse($this->scheduled($child, '2026-08-03'), 'last week\'s tick is not this week\'s plan');
-        $this->assertFalse($this->scheduled($child, '2026-08-04'), 'the unscheduled Tuesday attendance must not become a schedule');
+        $this->assertTrue($this->scheduled($child, '2026-08-03'), 'a missed Monday is still a scheduled Monday');
+        $this->assertTrue($this->scheduled($child, '2026-08-04'), 'the Tuesday they actually came on carries forward');
+    }
+
+    /** The arrivals themselves never travel: next week is a plan, not a record. */
+    public function test_the_attendance_itself_is_never_copied(): void
+    {
+        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
+        $this->weeks->open(self::WEEK_1);
+        Attendance::create(['child_id' => $child->id, 'attendance_date' => '2026-07-28', 'session' => 'FULL', 'signed_in_at' => now()]);
+
+        $this->weeks->open(self::WEEK_2);
+
+        $this->assertSame(1, Attendance::count());
+        $this->assertSame('2026-07-28', Attendance::sole()->attendance_date->toDateString());
     }
 
     public function test_a_week_is_independent_once_built(): void
@@ -109,7 +140,6 @@ class WeekScheduleTest extends TestCase
         $this->weeks->open(self::WEEK_1);
         $this->schedule($child, ['2026-07-27']);
         $this->weeks->open(self::WEEK_2);
-        $this->weeks->copyFrom(self::WEEK_2, self::WEEK_1);
 
         // Change week 1 after week 2 already exists.
         $this->schedule($child, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);
@@ -130,7 +160,7 @@ class WeekScheduleTest extends TestCase
         $this->assertTrue($this->scheduled($child, '2026-07-27'), 're-opening must not wipe the hand-corrected pattern');
     }
 
-    public function test_a_skipped_week_opens_clean_and_offers_the_newest_week_to_copy(): void
+    public function test_a_skipped_week_copies_from_the_newest_week_that_exists(): void
     {
         $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
         $this->weeks->open(self::WEEK_1);
@@ -139,11 +169,8 @@ class WeekScheduleTest extends TestCase
         // Jump straight to week 3 without ever opening week 2.
         $week3 = $this->weeks->open(self::WEEK_3);
 
-        $this->assertNull($week3->copied_from_week_start);
-        $this->assertFalse($this->scheduled($child, '2026-08-10'));
-
-        // The week before it is the one the copy dialog leads with.
-        $this->assertSame(self::WEEK_1, $this->weeks->sourceFor(self::WEEK_3));
+        $this->assertSame(self::WEEK_1, $week3->copied_from_week_start->toDateString());
+        $this->assertTrue($this->scheduled($child, '2026-08-10'));
     }
 
     public function test_a_child_gets_no_slots_outside_their_enrolment_dates(): void
@@ -171,9 +198,7 @@ class WeekScheduleTest extends TestCase
         $this->assertSame(5, ScheduleSlot::where('child_id', $newcomer->id)->count());
         $this->assertSame(0, ScheduleSlot::where('child_id', $newcomer->id)->where('is_scheduled', true)->count());
 
-        // Nobody inherits: the existing child's five ticks were last week's
-        // plan, and this week starts from the record, which for them is silent.
-        $this->assertFalse($this->scheduled($existing, '2026-08-03'), 'last week\'s ticks are not this week\'s plan');
+        $this->assertTrue($this->scheduled($existing, '2026-08-03'), 'the existing child still inherits');
     }
 
     public function test_school_age_children_get_a_slot_per_session(): void
@@ -186,34 +211,16 @@ class WeekScheduleTest extends TestCase
             ->where('slot_date', '2026-07-27')->orderBy('session')->pluck('session')->all());
     }
 
-    public function test_am_and_pm_copy_across_independently(): void
+    public function test_am_and_pm_copy_forward_independently(): void
     {
         $schoolAge = $this->makeChild('Allen', 'Mark', 'School Age');
         $this->weeks->open(self::WEEK_1);
         ScheduleSlot::where('child_id', $schoolAge->id)->where('session', 'PM')->update(['is_scheduled' => true]);
 
         $this->weeks->open(self::WEEK_2);
-        $this->weeks->copyFrom(self::WEEK_2, self::WEEK_1);
 
         $this->assertTrue($this->scheduled($schoolAge, '2026-08-03', 'PM'));
         $this->assertFalse($this->scheduled($schoolAge, '2026-08-03', 'AM'), 'an afternoon-only child stays afternoon-only');
-    }
-
-    public function test_copying_from_a_chosen_week_replaces_the_pattern_but_keeps_sign_ins(): void
-    {
-        $child = $this->makeChild('Lovelace', 'Ada', 'Toddler');
-        $this->weeks->open(self::WEEK_1);
-        $this->schedule($child, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);
-
-        $this->weeks->open(self::WEEK_2);
-        ScheduleSlot::where('week_start', self::WEEK_2)->update(['is_scheduled' => false]);
-        Attendance::create(['child_id' => $child->id, 'attendance_date' => '2026-08-03', 'session' => 'FULL', 'signed_in_at' => now()]);
-
-        $this->weeks->copyFrom(self::WEEK_2, self::WEEK_1);
-
-        $this->assertSame(5, ScheduleSlot::where('week_start', self::WEEK_2)->where('is_scheduled', true)->count());
-        $this->assertDatabaseHas('attendances', ['child_id' => $child->id, 'attendance_date' => '2026-08-03']);
-        $this->assertSame(self::WEEK_1, ScheduleWeek::firstWhere('week_start', self::WEEK_2)->copied_from_week_start->toDateString());
     }
 
     public function test_inactive_children_are_left_out_of_the_schedule(): void

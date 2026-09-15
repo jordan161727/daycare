@@ -179,55 +179,9 @@ class AttendanceController extends Controller
             // one. See RoomCover, which reads the relationship RoomDemand built.
             $roomCover = app(RoomCover::class)->forWeek($weekStartDate, $children);
 
-            // "Copy" almost always means "same as last week", so the week just
-            // gone is offered on its own button and leads the picker.
-            // Also what the "open this week" prompt names, so the offer says which
+            // What the "open this week" prompt names, so the offer says which
             // week it is about to copy forward before it is accepted.
             $previousWeekStart = $canEditSchedule || $canOpenWeek ? $weeks->sourceFor($weekStartDate) : null;
-            $available = $canEditSchedule ? $weeks->availableSources($weekStartDate) : collect();
-
-            $sourceList = $available->filter(fn ($week) => $week < $weekStartDate)
-                // Earlier weeks newest first; later weeks after them, nearest
-                // first, for the occasional copy backwards.
-                ->concat($available->filter(fn ($week) => $week > $weekStartDate)->reverse())
-                ->take(12)
-                ->values();
-
-            // Rebuilding from "a normal week" means being able to spot one. A
-            // week thinned out by holidays reads as a low count and a closure
-            // flag, so the choice is made from the list rather than by opening
-            // each week in turn.
-            /*
-             * Counted over the rooms this reader holds, because that is what a
-             * copy would actually move.
-             *
-             * The copy itself is scoped — a teacher copies their own rooms
-             * forward and an admin copies the centre — so a centre-wide count
-             * beside it was a number from a different question. A Toddler
-             * teacher choosing "62 days ticked" and getting ten was being shown
-             * the whole building's week to decide their own room's by.
-             *
-             * The closed-day count below is deliberately not scoped: a closure
-             * is a fact about the centre, and it thins everybody's week equally.
-             */
-            $sourceChildIds = $user->isAdmin() ? null : Child::visibleTo($user)->pluck('id')->all();
-
-            $sourceTicks = ScheduleSlot::whereIn('week_start', $sourceList)
-                ->where('is_scheduled', true)
-                ->when($sourceChildIds !== null, fn ($query) => $query->whereIn('child_id', $sourceChildIds))
-                ->selectRaw('week_start, count(*) as total')
-                ->groupBy('week_start')
-                ->pluck('total', 'week_start');
-
-            $sourceClosures = $sourceList->mapWithKeys(fn ($week) => [$week => count(ClosureDay::inWeek($week))]);
-
-            $sourceWeeks = $sourceList->map(fn ($week) => [
-                'value' => $week,
-                'label' => Carbon::parse($week)->format('M j').' – '.Carbon::parse($week)->addDays(4)->format('M j, Y'),
-                'is_previous' => $week === $previousWeekStart,
-                'ticked' => (int) ($sourceTicks[$week] ?? $sourceTicks[$week.' 00:00:00'] ?? 0),
-                'closures' => $sourceClosures[$week],
-            ]);
 
             return view('attendance.index', compact(
                 'children',
@@ -245,7 +199,6 @@ class AttendanceController extends Controller
                 'canEditSchedule',
                 'canOpenWeek',
                 'weekIsOpen',
-                'sourceWeeks',
                 'previousWeekStart',
                 'weekIsFrozen',
                 'closedDays',
@@ -474,7 +427,7 @@ class AttendanceController extends Controller
             ->route('attendance.index', ['date' => $weekStart])
             ->with('success', $source
                 ? 'Week of '.Carbon::parse($weekStart)->format('M j').' opened — '.$weeks->tickedIn($weekStart).' day(s) copied forward from the week of '.$source->format('M j').'.'
-                : 'Week of '.Carbon::parse($weekStart)->format('M j').' opened. Nothing came before it, so the days start empty.');
+                : 'Week of '.Carbon::parse($weekStart)->format('M j').' opened. Nothing came before it, so the days start from each child\'s record.');
     }
 
     public function signIn(Request $request)

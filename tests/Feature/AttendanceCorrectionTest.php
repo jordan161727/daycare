@@ -261,7 +261,12 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertSame(1, Attendance::count());
     }
 
-    public function test_the_sheet_offers_the_mode_and_says_you_are_in_it(): void
+    /**
+     * Live or Edit, as a switch. The mode is a state the whole sheet is in —
+     * every column changes with it — and a switch says "in it" or "not" the
+     * way a button labelled Edit never quite did.
+     */
+    public function test_the_sheet_offers_the_mode_as_a_switch_and_says_which_it_is_in(): void
     {
         $this->makeChild();
         app(WeekSchedule::class)->open('2026-09-14');
@@ -271,24 +276,16 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // A mode you can see you are in: past columns take taps in it and do
-        // not outside it, and nothing else on screen changes enough to notice.
-        $this->assertStringContainsString('@click="editing = ! editing; retiming = null; drafting = null"', $html);
-        $this->assertStringContainsString('Editing', $html);
+        $this->assertStringContainsString('role="switch" class="att-switch"', $html);
+        $this->assertStringContainsString('@click="editing = ! editing; cancelRetime()"', $html);
+        $this->assertStringContainsString("x-text=\"editing ? 'Edit mode' : 'Live mode'\"", $html);
 
-        // The banner says what each mark does in this mode: an empty cell is
-        // the plan and flips, an arrival is its time and can be retyped or
-        // taken off, and a day gone by takes a new arrival.
-        $this->assertStringContainsString('box means expected, dot means not', $html);
-        $this->assertStringContainsString('retype it, or press ✓ to take it off', $html);
-        $this->assertStringContainsString('＋ puts an arrival on', $html);
+        // Locked columns say so in their header rather than by being grey.
+        $this->assertStringContainsString('class="att-lock" x-html="icons.lock"', $html);
 
-        // Removing is the half that can lose something, and is asked about.
-        $this->assertStringContainsString('Taking anything off asks first.', $html);
-        $this->assertStringContainsString('askBeforeTapping(childId, date, session, time = null)', $html);
-        $this->assertStringContainsString('canRemove(childId, date, session)', $html);
+        // And the hint under the sheet says what a tap does in this mode.
+        $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time', $html);
     }
-
     /**
      * A week nobody ever opened has no cells in it, so the mode is not offered
      * — there is nothing it could unlock.
@@ -325,18 +322,16 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertStringContainsString('the schedule is locked', $html);
 
         // The record of what happened in it is not.
-        $this->assertStringContainsString('@click="editing = ! editing; retiming = null; drafting = null"', $html);
+        $this->assertStringContainsString('@click="editing = ! editing; cancelRetime()"', $html);
     }
 
     /**
-     * Every tap in Edit asks first, and the question names the condition.
-     *
-     * The shape of the question is deliberately the same every time — somebody
-     * correcting a fortnight-old week is reading these to catch the tap they
-     * did not mean, and a dialog whose shape moves about is one that gets
-     * clicked through rather than read. Only the lines inside it change.
+     * A tap moves the box one step along, and a tap that can be tapped again
+     * is its own undo — so nothing asks first. The reference design has no
+     * dialogs, and sixty confirmations a fortnight of corrections is a dialog
+     * nobody reads.
      */
-    public function test_every_condition_gets_the_same_question_worded_for_it(): void
+    public function test_a_tap_cycles_the_box_and_nothing_asks_first(): void
     {
         $this->makeChild();
         app(WeekSchedule::class)->open('2026-09-14');
@@ -346,29 +341,22 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // Expected, not expected, closed, and a day already gone — one branch
-        // each, all feeding the one dialog.
-        $this->assertStringContainsString("' was expected'", $html);
-        $this->assertStringContainsString('was not scheduled on', $html);
-        $this->assertStringContainsString('this counts as unplanned, and is still billable', $html);
-        $this->assertStringContainsString('The centre was closed: ', $html);
-        $this->assertStringContainsString('has already gone', $html);
+        // Ahead: plan only. Today or gone: dot → expected → time → dot.
+        $this->assertStringContainsString('return this.cycle(childId, date, session);', $html);
+        $this->assertStringContainsString('if (date > this.today) {', $html);
+        $this->assertStringContainsString('this.removeSignIn(childId, date, session);', $html);
+        $this->assertStringContainsString('if (this.canSignIn(date)) this.signIn(childId, date, session);', $html);
 
-        // Taking one off is the destructive half and says what it costs.
-        $this->assertStringContainsString('Take this arrival off?', $html);
-        $this->assertStringContainsString('removes that day from what the centre bills for', $html);
-
-        // Cancel is a real way out, and Escape is another.
-        $this->assertStringContainsString('@click="confirming = null"', $html);
-        $this->assertStringContainsString('@keydown.escape.window="confirming = null"', $html);
+        // No dialog left on the page, in markup or in script.
+        $this->assertStringNotContainsString('confirming', $html);
+        $this->assertStringNotContainsString('askBeforeTapping', $html);
     }
-
     /**
-     * At the door a tap is a child standing in front of you and the answer is
-     * always yes. Sixty confirmations a morning is a dialog nobody reads, and a
-     * dialog nobody reads is worse than none.
+     * At the door a tap is a child standing in front of you: today, an
+     * arrival, nothing else. A recorded arrival is left alone on the live
+     * sheet, so a passing elbow cannot delete a morning.
      */
-    public function test_the_live_sheet_does_not_ask(): void
+    public function test_the_live_sheet_only_ever_signs_in_today(): void
     {
         $this->makeChild();
         app(WeekSchedule::class)->open('2026-09-14');
@@ -378,13 +366,35 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // The branch, not the absence of the dialog: it is on the page either
-        // way, and what matters is that only Edit routes through it.
-        // In Edit a tap is the plan for the day, not an arrival; arrivals are
-        // made and unmade through the field and the ✓, both of which ask.
-        $this->assertStringContainsString('if (this.editing) {', $html);
-        $this->assertStringContainsString('if (this.canSetExpected(date)) return this.toggleOne(childId, date, session);', $html);
-        $this->assertStringContainsString('confirming: null,', $html);
+        $this->assertStringContainsString("if (date === this.today && ! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);", $html);
+        $this->assertStringContainsString('if (! this.editing) {', $html);
+    }
+    /**
+     * A time in Edit carries a pencil; press it, or E, and the hour is typed.
+     * Enter or leaving saves, Escape puts it back, and an empty field changes
+     * nothing — a blur with nothing in it is a change of mind, not an order.
+     */
+    public function test_the_pencil_types_the_exact_hour(): void
+    {
+        $this->makeChild();
+        app(WeekSchedule::class)->open('2026-09-14');
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('class="att-pencil" @click.stop="beginRetime(child.id,', $html);
+        $this->assertStringContainsString('@keydown.e.prevent="beginRetime(child.id,', $html);
+        $this->assertStringContainsString('@blur="commitRetime(child.id,', $html);
+        $this->assertStringContainsString('@keydown.escape.prevent="cancelRetime()"', $html);
+        $this->assertStringContainsString("if (! value) return;", $html);
+
+        // Whatever was typed becomes HH:MM; a time on a recorded arrival moves
+        // it, a time on an empty cell records one.
+        $this->assertStringContainsString("/^(\\d{1,2})[:.]?(\\d{2})?(a|p|am|pm)?$/", $html);
+        $this->assertStringContainsString('? this.retime(childId, date, session, value)', $html);
+        $this->assertStringContainsString(': this.signIn(childId, date, session, value);', $html);
     }
 
     private function arrive(Child $child, string $date): Attendance

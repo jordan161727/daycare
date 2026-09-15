@@ -76,12 +76,18 @@ class AttendanceCellDesignTest extends TestCase
         // because the outline already says so sixty times down the sheet. A
         // day nobody booked is the quietest mark there is, because it is the
         // commonest cell.
-        $this->assertStringContainsString("? '' : '·'", $html);
-        $this->assertStringNotContainsString("? 'expected' : '·'", $html);
-        $this->assertStringContainsString('border-dashed border-sky-400', $html);
-        $this->assertStringContainsString('border-transparent bg-transparent', $html);
-        $this->assertStringContainsString('border-emerald-300 bg-emerald-50', $html);
-        $this->assertStringContainsString('border-amber-400 bg-amber-50', $html);
+        // One box, and component classes for what it is — see "The attendance
+        // cell" in app.css. The grid and the key are painted from the same
+        // names, so a chip above cannot disagree with a cell below.
+        $this->assertStringContainsString("classes.push('att-expected')", $html);
+        $this->assertStringContainsString("classes.push('att-none')", $html);
+        $this->assertStringContainsString("classes.push('att-time')", $html);
+        $this->assertStringContainsString("classes.push('att-unplanned')", $html);
+        $this->assertStringContainsString('class="att-dot"', $html);
+
+        // A day gone by reads quieter; a column this mode cannot touch, quieter still.
+        $this->assertStringContainsString("classes.push('att-history')", $html);
+        $this->assertStringContainsString("classes.push('att-locked')", $html);
 
         // The old wording is gone: a cell says the time or says it is expected.
         $this->assertStringNotContainsString(">Present<", $html);
@@ -101,8 +107,12 @@ class AttendanceCellDesignTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString("if (session !== 'FULL') return session;", $html);
-        $this->assertStringContainsString("session === 'FULL' ? ' min-w-[74px]' : ' min-w-[48px]'", $html);
+        $this->assertStringContainsString("classes.push('att-half')", $html);
+        $this->assertStringContainsString('class="att-tag" x-text="session"', $html);
+        $this->assertStringContainsString("child.sessions.length > 1 ? 'att-stack' : ''", $html);
+
+        // And its time is the compact form, because it shares the cell.
+        $this->assertStringContainsString("if (! short || session !== 'FULL') return short;", $html);
     }
 
     public function test_the_key_is_a_strip_above_the_sheet_that_can_be_put_away(): void
@@ -120,7 +130,10 @@ class AttendanceCellDesignTest extends TestCase
             $this->assertStringContainsString($phrase, $html);
         }
 
-        $this->assertStringContainsString('Tap any cell to sign in or out', $html);
+        // What a tap does, in the mode you are in, from one place.
+        $this->assertStringContainsString('x-text="hint"', $html);
+        $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time. The pencil types an exact time.', $html);
+        $this->assertStringContainsString("'Only ' + this.todayLabel + ' can be changed.'", $html);
 
         // Read on the first morning and never again, so it can be put away —
         // and stays away, in a try/catch because a private window throws on the
@@ -200,13 +213,12 @@ class AttendanceCellDesignTest extends TestCase
         // A rule of its own, ahead of booked-or-not, and in the same rose the
         // header's closure chip uses.
         $this->assertStringContainsString("if (this.isClosed(date)) return '—';", $html);
-        $this->assertStringContainsString('this.boxStates.closed.classes', $html);
-        $this->assertStringContainsString('text-rose-300', $html);
+        $this->assertStringContainsString("classes.push('att-closed')", $html);
         $this->assertStringContainsString('centre closed', $html);
 
         // The whole column reads as one shut block — painted from Alpine, since
         // a day is closed and reopened without the page reloading.
-        $this->assertStringContainsString("isClosed('".self::MONDAY."') ? 'bg-rose-50/60", $html);
+        $this->assertStringContainsString("isClosed('".self::MONDAY."') ? 'att-closed-col'", $html);
 
         // And the reason sits on every cell, because a row read across never
         // passes the header that carries it once.
@@ -261,10 +273,72 @@ class AttendanceCellDesignTest extends TestCase
         // One rule, so a blank reads the same in every column it can appear in.
         $this->assertStringContainsString("blankClass(value) { return value ? '' : 'text-center text-slate-300", $html);
 
-        foreach (['child.lan', 'child.birth_date', 'child.age', 'child.schedule_hours'] as $field) {
+        foreach (['child.birth_date', 'child.age', 'child.schedule_hours'] as $field) {
             $this->assertStringContainsString('blankClass('.$field.')', $html);
         }
     }
+    /**
+     * Every method the cells call is a method the component has.
+     *
+     * Alpine answers a missing one by logging to the console and producing
+     * nothing — so a :class that calls it silently yields no classes, the cell
+     * renders unstyled, and the page looks precisely as it did before whatever
+     * change dropped the method. Nothing fails. It simply does not happen, and
+     * the only signal is a console nobody has open.
+     *
+     * This reads the cell partial, collects what it calls, and checks the
+     * component defines each one.
+     */
+    public function test_every_method_the_cells_call_is_one_the_component_has(): void
+    {
+        $markup = file_get_contents(resource_path('views/attendance/partials/day-buttons.blade.php'));
+
+        // Prose is not code: the comment at the top of that file explains the
+        // states in English, and "a dot (not attending)" is not a call.
+        $markup = preg_replace('/\{\{--.*?--\}\}/s', '', $markup);
+
+        // Blade echoes are PHP, evaluated on the server long before Alpine
+        // reads what is left. Removing them leaves the JavaScript behind.
+        $markup = preg_replace('/\{\{.*?\}\}/s', '', $markup);
+
+        // And @php / @foreach lines, which are PHP too. Named rather than
+        // "every line starting with @", because @click= lines are exactly the
+        // ones carrying the calls this is here to check.
+        $markup = preg_replace('/^\s*@(?:php|endphp|foreach|endforeach|if|endif|else|isset|endisset)\b[^
+]*$/m', '', $markup);
+        $component = file_get_contents(resource_path('views/attendance/index.blade.php'));
+
+        // Bare calls inside Alpine expressions: "cellClass(", "canTap(" and so
+        // on. Anything reached through a dot is somebody else's object.
+        preg_match_all('/(?<![\w.$])([a-z][A-Za-z0-9]*)\s*\(/', $markup, $found);
+
+        // Blade, JavaScript and DOM words that are never component methods.
+        $ignore = [
+            'if', 'for', 'return', 'function', 'typeof', 'in', 'of', 'new', 'catch',
+            'includes', 'trim', 'split', 'join', 'map', 'filter', 'exec', 'focus', 'select',
+            'blur', 'preventDefault', 'route', 'asset', 'config', 'auth', 'trans', 'js',
+            // Blade directives, which are compiled away before Alpine sees them.
+            'php', 'endphp', 'foreach', 'endforeach', 'class', 'checked', 'disabled',
+        ];
+
+        $called = array_values(array_unique(array_diff($found[1], $ignore)));
+
+        // The partial is not empty of calls, or this test proves nothing.
+        $this->assertNotEmpty($called);
+        $this->assertContains('canTap', $called, 'the locked-column check is what went missing before');
+        $this->assertContains('cellClass', $called);
+
+        foreach ($called as $method) {
+            $defined = preg_match('/(?:^|\s)(?:get\s+)?'.preg_quote($method, '/').'\s*\([^)]*\)\s*\{/m', $component) === 1
+                || preg_match('/(?:^|\s)'.preg_quote($method, '/').':\s*(?:function|\()/m', $component) === 1;
+
+            $this->assertTrue(
+                $defined,
+                "The cells call {$method}() but attendanceApp does not define it. Alpine will log to the console and render nothing — the cell will silently lose its classes."
+            );
+        }
+    }
+
     private function makeChild(array $attributes = []): Child
     {
         return Child::create($attributes + [

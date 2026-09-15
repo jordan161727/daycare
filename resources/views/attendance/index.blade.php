@@ -21,49 +21,40 @@
      * sixty rows deep, and anything louder would shout over the sign-ins.
      */
     $boxStates = [
+        // Component classes (resources/css/app.css, "The attendance cell"),
+        // shared by the grid and this key so the two cannot disagree.
         'present' => [
             'label' => 'signed in',
-            'swatch' => '8:42a',
-            'classes' => 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200',
+            'swatch' => '8:42 AM',
+            'classes' => 'att-time',
         ],
         'unplanned' => [
             'label' => 'unplanned, still billable',
-            'swatch' => '9:05a',
-            'classes' => 'border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100',
+            'swatch' => '9:05 AM',
+            'classes' => 'att-time att-unplanned',
         ],
         'scheduled' => [
             'label' => 'scheduled, not in yet',
             // An empty box. The word came off the cells: the box is the mark.
             'swatch' => '',
-            // Sky, like today's column: a promise of the day, drawn in the
-            // colour the sheet already uses for the day it is about.
-            'classes' => 'border-dashed border-sky-400 bg-white text-slate-500 hover:border-sky-600 hover:text-sky-700 dark:border-sky-500/70 dark:bg-transparent dark:text-slate-400 dark:hover:border-sky-400',
+            'classes' => 'att-expected',
         ],
         'off' => [
             'label' => 'not scheduled — tap to sign in anyway',
             'swatch' => '·',
-            'classes' => 'border-transparent bg-transparent text-slate-300 hover:text-indigo-500 dark:text-slate-600 dark:hover:text-indigo-300',
+            'classes' => 'att-none',
         ],
         /*
-         * A day the centre was shut.
-         *
-         * It used to draw the same dot as "nobody booked this day", so two
-         * columns that mean entirely different things — nobody was expected,
-         * and nobody could have come — read identically down the sheet. The
-         * header said LABOUR DAY and the two hundred cells under it said
-         * nothing at all.
-         *
-         * A rule rather than a dot, in the same rose the header's closure chip
-         * uses, so the mark and the reason for it are visibly the same fact.
-         * Still a button: a closed day that somebody did open takes a sign-in,
+         * A day the centre was shut. A rule rather than a dot, in rose, so the
+         * mark and the reason for it in the header are visibly the same fact.
+         * Still tappable: a closed day that somebody did open takes a sign-in,
          * and the record has to be able to say so.
          */
         'closed' => [
             'label' => 'centre closed',
             'swatch' => '—',
-            'classes' => 'border-transparent bg-transparent text-rose-300 hover:text-rose-500 dark:text-rose-500/50 dark:hover:text-rose-300',
-        ],
-    ];
+            'classes' => 'att-closed',
+        ],    ];
 @endphp
 <div x-data="attendanceApp()" @keydown.escape.window="recentOpen = false" @pointermove.window="paintAt($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()">
     {{-- What the last copy did. Without this the page redirects back looking
@@ -152,12 +143,18 @@
                         <span><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount"></b> not in</span>
                     </p>
 
-                    <div class="ml-auto flex items-center gap-1.5">
+                    {{-- Everything in here is 26px tall and centred on one
+                         line. When the row runs out of width it wraps as a
+                         block, still flush right, rather than breaking up. --}}
+                    <div class="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1.5">
                         {{-- Searching is the way a big roll is used, so the box is on
                              the top line rather than below the filters. --}}
-                        <label x-show="view === 'signin'" class="relative hidden sm:block">
+                        {{-- The elastic one. Everything else in this row has a
+                             width it needs; a search box has none, so it takes
+                             what the buttons leave and gives it back first. --}}
+                        <label x-show="view === 'signin'" class="relative hidden min-w-0 flex-1 basis-40 sm:block sm:max-w-[13rem]">
                             <svg class="pointer-events-none absolute left-2.5 top-1.5 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg>
-                            <input x-model="search" class="w-44 rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-3 text-xs transition focus:w-56 focus:ring-2 focus:ring-indigo-500 lg:w-56 dark:border-white/10 dark:bg-slate-800" placeholder="Search name or LAN">
+                            <input x-model="search" class="w-full rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-3 text-xs transition focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800" placeholder="Search name or LAN">
                         </label>
 
                         {{-- The week for the clipboard. Only once the week exists:
@@ -193,9 +190,13 @@
                                 @scroll.window="menu = false"
                                 class="relative shrink-0"
                             >
-                                <button type="button" x-ref="printer" @click.stop="menu ? menu = false : open()" :aria-expanded="menu" aria-haspopup="true" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10" title="Print the register — landscape Letter">
+                                {{-- "Print" on the button, "Print attendance" as
+                                     its name: the printer icon carries the rest,
+                                     and the row needed the sixty pixels more than
+                                     the label did. --}}
+                                <button type="button" x-ref="printer" @click.stop="menu ? menu = false : open()" :aria-expanded="menu" aria-haspopup="true" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10" aria-label="Print attendance" title="Print attendance — landscape Letter">
                                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9V4h12v5M6 18H4a1 1 0 01-1-1v-6a1 1 0 011-1h16a1 1 0 011 1v6a1 1 0 01-1 1h-2M6 14h12v6H6z"/></svg>
-                                    Print attendance
+                                    Print
                                 </button>
 
                                 <template x-teleport="body">
@@ -233,31 +234,21 @@
                              mistake on a five-column grid is the column next to
                              the one you meant. --}}
                         @if($canAmendAttendance || $canEditSchedule)
-                            <button type="button" x-show="view === 'signin'" @click="editing = ! editing; retiming = null; drafting = null"
-                                    :class="editing ? 'bg-amber-500 text-white hover:bg-amber-600' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10'"
-                                    class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition"
-                                    :title="editing ? 'Stop editing — the sheet goes back to today only' : 'Correct a day gone, or set who is expected on one still to come'"
-                                    x-text="editing ? 'Done' : 'Edit'"></button>
+                            {{-- Live or Edit, as a switch. The mode is a state the
+                                 whole sheet is in — every column changes with it —
+                                 and a switch says "in it" or "not" the way a button
+                                 labelled Edit never quite did. --}}
+                            <div x-show="view === 'signin'" class="att-mode" :data-edit="editing ? 'true' : 'false'">
+                                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : 'Live mode'" @click="editing = ! editing; cancelRetime()">
+                                    <span class="att-knob" x-html="editing ? icons.edit : icons.lock"></span>
+                                </button>
+                                <span class="att-mode-name" x-text="editing ? 'Edit mode' : 'Live mode'"></span>
+                            </div>
                         @endif
 
                         @if($canEditSchedule)
                             <button type="button" @click="view = view === 'signin' ? 'schedule' : 'signin'; editing = false" :class="view === 'schedule' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition" x-text="view === 'signin' ? 'Schedule' : 'Sign in'"></button>
 
-                            {{-- Bringing another week's pattern across. Beside the
-                                 view switch rather than in a strip over the grid,
-                                 because it is a control on the week, not a note
-                                 about it. A week opens from each child's own
-                                 registered days; this is the one way another
-                                 week's ticks get in, and its hover says where
-                                 this week's came from if it has been pressed. --}}
-                            @if($sourceWeeks->isNotEmpty())
-                                {{-- Only while the schedule is on screen: it rewrites the
-                                     ticks, and belongs next to them rather than over a
-                                     sheet of arrivals it cannot touch. --}}
-                                <button type="button" x-show="view === 'schedule'" x-cloak @click="$refs.copyWeek.showModal()"
-                                        class="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
-                                        title="@if($scheduleWeek?->copied_from_week_start)Copied from {{ $scheduleWeek->copied_from_week_start->format('M j') }} – {{ $scheduleWeek->copied_from_week_start->copy()->addDays(4)->format('M j') }}, and independent since@else Bring another week's pattern into this one @endif">Copy from another week</button>
-                            @endif
                         @endif
 
                         {{-- The rarely-wanted controls, kept but not on show.
@@ -298,7 +289,7 @@
                             @resize.window="menu && place()"
                             class="relative shrink-0"
                         >
-                            <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="menu" aria-haspopup="true" class="grid h-6 w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
+                            <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="menu" aria-haspopup="true" class="grid h-[26px] w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
                             <template x-teleport="body">
                             <div x-show="menu" x-cloak x-transition @click.outside="menu = false" :style="`top: ${y}px; left: ${x}px`" class="fixed z-50 w-56 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
                                 {{-- How names read on this reader's own screens.
@@ -333,15 +324,6 @@
                             </template>
                         </div>
                     </div>
-                </div>
-
-                {{-- An unlocked sheet has to look unlocked. Past columns take
-                     taps in this mode and they do not in the other, and nothing
-                     else on screen changes enough to notice. --}}
-                <div x-show="editing" x-cloak class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-                    <span class="font-bold">Editing</span>
-                    <span>Tap an empty cell to flip it &mdash; box means expected, dot means not. An arrival shows its time: retype it, or press ✓ to take it off. On a day gone by, ＋ puts an arrival on. Taking anything off asks first.</span>
-                    <button type="button" @click="editing = false" class="ml-auto shrink-0 rounded-md px-1.5 font-semibold underline-offset-2 hover:underline">Done</button>
                 </div>
 
                 {{-- A finished week is a record. Say so plainly instead of showing
@@ -396,7 +378,7 @@
                             {{ $state['label'] }}
                         </span>
                     @endforeach
-                    <span class="ml-auto hidden lg:inline">Tap any cell to sign in or out</span>
+                    <span class="ml-auto hidden lg:inline" x-text="hint"></span>
                 </div>
             </div>
             @if($weekIsOpen)
@@ -411,99 +393,101 @@
                 <div class="glass-card overflow-hidden rounded-2xl">
                     {{-- Week grid: needs the width, so it only appears from md up. --}}
                     <div class="hidden overflow-x-auto md:block">
-                        <table class="sheet-grid w-full min-w-[1040px] border-collapse text-left">
+                        <table class="att-table w-full min-w-[1280px]">
                             <thead>
-                                <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
-                                    {{-- The LAN, not a row number. A count of
-                                         where a child happens to fall in today's
-                                         sort answers nothing — it changes when
-                                         the sort flips or a room is filtered —
-                                         whereas the LAN is what the paper
-                                         register, the invoice and the phone call
-                                         from the office all name a child by. --}}
-                                    <th scope="col" class="sticky left-0 z-20 w-[60px] bg-slate-50 px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-400 dark:bg-slate-900" title="Learner account number">LAN</th>
-                                    <th scope="col" :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'" class="sticky left-[60px] z-20 border-r border-slate-200 bg-slate-50 px-3 py-2.5 text-left dark:border-white/10 dark:bg-slate-900">
-                                        <button type="button" @click="toggleSort" class="group inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300" :title="sortDirection === 'asc' ? 'Sorted A–Z, click for Z–A' : 'Sorted Z–A, click for A–Z'">
+                                <tr>
+                                    {{-- The LAN, not a row number: it is what the paper
+                                         register, the invoice and the office all name a
+                                         child by. Frozen with the name against a sideways
+                                         scroll on a tablet. --}}
+                                    <th scope="col" class="att-th att-col-lan sticky left-0 z-20 bg-white dark:bg-night-900" title="Learner account number">LAN</th>
+                                    <th scope="col" :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'" class="att-th att-col-student sticky left-[60px] z-20 bg-white dark:bg-night-900">
+                                        <button type="button" @click="toggleSort" class="group inline-flex items-center gap-1.5 transition hover:text-indigo-600 dark:hover:text-indigo-300" :title="sortDirection === 'asc' ? 'Sorted A–Z, click for Z–A' : 'Sorted Z–A, click for A–Z'">
                                             <span>Student</span>
-                                            <span class="text-[11px] leading-none text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-300" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
+                                            <span class="text-[11px] leading-none opacity-60" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
                                         </button>
                                     </th>
-                                    {{-- Their own columns rather than more lines under the name:
-                                         read down a column these compare at a glance, and the
-                                         name cell was already carrying the room, the hours and
-                                         the cover. The date is the fact on file; the age is what
-                                         the room and the ratio are actually judged on, so both
-                                         are here rather than one standing for the other. --}}
-                                    <th scope="col" class="w-px px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Classroom</th>
-                                    <th scope="col" class="w-px px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" title="Date of birth, year/month/day">DOB</th>
-                                    <th scope="col" class="w-px px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Age</th>
-                                    {{-- The hours this child is contracted for, set
-                                         on their record at registration. Beside the
-                                         boxes rather than behind a click: the sheet
-                                         is read at drop-off and at pick-up, and
-                                         "when is this one due?" is the question
-                                         being asked at both. The day columns say
-                                         which days; this says the hours of them. --}}
-                                    <th scope="col" class="w-px px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" title="The hours agreed on the child's record">Hours</th>
+                                    {{-- Read down a column these compare at a glance, which
+                                         is what they are for: the room the ratio is staffed
+                                         by, the age it is judged on, and the hours the day
+                                         was agreed for. The room is under the name too — the
+                                         column is what the eye runs down, the line under the
+                                         name is what it reads in place. --}}
+                                    <th scope="col" class="att-th att-meta att-w-room">Classroom</th>
+                                    <th scope="col" class="att-th att-meta att-w-dob" title="Date of birth, year/month/day">DOB</th>
+                                    <th scope="col" class="att-th att-meta att-w-age">Age</th>
+                                    <th scope="col" class="att-th att-meta att-w-hours" title="The hours agreed on the child's record">Hours</th>
                                     @foreach($weekDates as $date)
-                                        {{-- Today is the column being worked in, so it is picked
-                                             out of the five rather than counted along to. --}}
-                                        {{-- Sky, not the brand blue: the brand scale is so pale
-                                             that its tints read as white beside white and today
-                                             was not picked out at all. Sky is the one colour on
-                                             the sheet nothing else uses — the boxes are green,
-                                             amber, indigo and grey — so the column is found
-                                             without reading a date. Header a shade deeper than
-                                             the cells, so the column has a top. --}}
-                                        <th scope="col" class="px-2 py-2 text-center {{ $date->isToday() ? 'rounded-t-lg bg-sky-200 dark:bg-sky-500/25' : '' }}">
-                                            <span class="block text-[11px] uppercase tracking-wide {{ $date->isToday() ? 'font-semibold text-sky-700 dark:text-sky-300' : 'text-slate-400' }}">{{ $date->format('D') }}</span>
-                                            <span class="block text-xs font-semibold {{ $date->isToday() ? 'text-sky-900 dark:text-sky-100' : 'text-slate-700 dark:text-slate-200' }}">{{ $date->format('M d') }}</span>
-                                            {{-- A closed day still takes sign-ins, so the column stays live — it just says why it is all gray. --}}
-                                            <span x-show="isClosed('{{ $date->toDateString() }}')" x-cloak class="mt-0.5 block rounded-md bg-rose-50 px-1 text-[10px] font-semibold uppercase text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" x-text="closureReason('{{ $date->toDateString() }}')"></span>
+                                        @php($iso = $date->toDateString())
+                                        {{-- Today is the column being worked in, so it is
+                                             picked out of the five rather than counted along
+                                             to. A pill, not a tint the width of the column:
+                                             sky is the one colour the sheet does not use
+                                             elsewhere — the boxes are green, amber, blue and
+                                             grey — so the day is found without reading a
+                                             date. --}}
+                                        <th scope="col" class="att-th att-day {{ $date->isToday() ? 'att-today' : '' }}">
+                                            <span class="{{ $date->isToday() ? 'att-dayhead att-dayhead-today' : 'att-dayhead' }}">
+                                            <span class="block">{{ $date->format('D') }}</span>
+                                            <span class="block">
+                                                {{ $date->format('M j') }}
+                                                {{-- Locked: nothing in this column takes a tap in
+                                                     the mode the sheet is in. --}}
+                                                <span x-show="! canTap('{{ $iso }}')" x-cloak class="att-lock" x-html="icons.lock" title="Locked — switch to Edit mode to change this day"></span>
+                                            </span>
+                                            {{-- A closed day still takes sign-ins, so the column
+                                                 stays live — it just says why it is all dashes. --}}
+                                            </span>
+                                            <span x-show="isClosed('{{ $iso }}')" x-cloak class="mt-0.5 block rounded-md bg-rose-50 px-1 text-[10px] font-semibold uppercase text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" x-text="closureReason('{{ $iso }}')"></span>
                                         </th>
                                     @endforeach
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100 dark:divide-white/10">
                                 <template x-for="child in filteredChildren" :key="child.id">
-                                    <tr class="transition hover:bg-slate-50 dark:hover:bg-white/5">
-                                        <td class="sticky left-0 z-10 w-[60px] bg-white px-3 py-1.5 text-center text-sm tabular-nums text-slate-400 dark:bg-night-900" :class="blankClass(child.lan)" x-text="child.lan || '—'"></td>
-                                        <td class="sticky left-[60px] z-10 border-r border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-night-900">
-                                            <div class="flex items-center gap-2.5">
-                                                <span class="h-8 w-8 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
-                                                <div class="min-w-0">
-                                                    {{-- The name opens the child record: the numbers to ring
-                                                         and the enrolment dates that decide whether a box
-                                                         exists at all. --}}
-                                                    <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100" x-text="child.name" :title="'Open ' + child.first_name + '\'s record'"></a>
-                                                    <span x-show="! canOpenProfile" class="block truncate text-sm font-semibold" x-text="child.name"></span>
-                                                </div>
+                                    <tr class="transition hover:bg-slate-50/60 dark:hover:bg-white/5">
+                                        <td class="att-td att-lan sticky left-0 z-10 bg-white dark:bg-night-900" x-text="child.lan || '—'"></td>
+                                        <td class="att-td att-student sticky left-[60px] z-10 bg-white dark:bg-night-900">
+                                            <div class="att-person">
+                                                <span class="att-avatar" x-html="child.avatar"></span>
+                                                <span class="min-w-0">
+                                                    {{-- The name opens the child record: the numbers to
+                                                         ring and the enrolment dates that decide whether
+                                                         a box exists at all. Its hover carries the hours
+                                                         they are contracted for, which used to be a
+                                                         column of their own. --}}
+                                                    <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="att-name truncate underline-offset-2 hover:text-indigo-600 hover:underline dark:hover:text-indigo-300" x-text="child.name" :title="'Open ' + child.first_name + '\'s record' + (child.schedule_hours ? ' — here ' + child.schedule_hours : '')"></a>
+                                                    <span x-show="! canOpenProfile" class="att-name truncate" x-text="child.name" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : ''"></span>
+                                                    {{-- The room, under the name as the reference draws
+                                                         it. A hand-set room keeps its own colour and
+                                                         mark, so it never passes for an automatic one. --}}
+                                                    <span class="att-room">
+                                                        <span :class="roomClass(child)" :title="roomTitle(child)">
+                                                            <span x-text="roomLabel(child)"></span>
+                                                            <span x-show="child.classroom_override" x-cloak x-text="child.override_stale ? ' ⚠' : ' ✎'"></span>
+                                                        </span>
+                                                    </span>
+                                                </span>
                                             </div>
                                         </td>
-                                        {{-- The room, in a column of its own rather than trailing the
-                                             name. It is the thing the sheet is grouped and staffed by,
-                                             and beside the name it was read as part of the name — down
-                                             a column of its own the rooms stack, and a child sitting in
-                                             one nobody else on screen is in stands out.
-
-                                             The brand blue is close enough to gray that a hand-set room
-                                             read as an automatic one, so the mark says which it is
-                                             without relying on the colour. --}}
-                                        <td class="w-px whitespace-nowrap px-2 py-1.5 text-center text-sm">
+                                        {{-- The brand blue is close enough to grey that a
+                                             hand-set room read as an automatic one, so the
+                                             mark says which it is without relying on colour. --}}
+                                        <td class="att-td att-meta att-w-room">
                                             <span class="inline-flex items-center gap-0.5" :class="roomClass(child)" :title="roomTitle(child)">
                                                 <span x-text="roomLabel(child)"></span>
                                                 <span x-show="child.classroom_override" x-cloak x-text="child.override_stale ? '⚠' : '✎'"></span>
                                             </span>
                                         </td>
-                                        <td class="w-px whitespace-nowrap px-2 py-1.5 text-center text-sm tabular-nums text-slate-500 dark:text-slate-400" :class="blankClass(child.birth_date)" x-text="child.birth_date || '—'"></td>
-                                        <td class="w-px whitespace-nowrap px-2 py-1.5 text-center text-sm tabular-nums text-slate-500 dark:text-slate-400" :class="blankClass(child.age)" x-text="child.age || '—'"></td>
-                                        <td class="w-px whitespace-nowrap px-2 py-1.5 text-center text-sm tabular-nums text-slate-500 dark:text-slate-400" :class="blankClass(child.schedule_hours)" x-text="child.schedule_hours || '—'" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : 'No hours agreed yet'"></td>
+                                        <td class="att-td att-meta att-w-dob" :class="blankClass(child.birth_date)" x-text="child.birth_date || '—'"></td>
+                                        <td class="att-td att-meta att-w-age" :class="blankClass(child.age)" x-text="child.age || '—'"></td>
+                                        <td class="att-td att-meta att-w-hours" :class="blankClass(child.schedule_hours)" x-text="child.schedule_hours || '—'" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : 'No hours agreed yet'"></td>
                                         @foreach($weekDates as $date)
                                             {{-- Closure is painted from Alpine rather than Blade
                                                  because a day is closed and reopened without the
                                                  page reloading, and it wins over today's sky: a
                                                  shut Monday is shut whether or not it is today. --}}
-                                            <td class="px-2 py-1.5 text-center align-middle" :class="isClosed('{{ $date->toDateString() }}') ? 'bg-rose-50/60 dark:bg-rose-500/5' : '{{ $date->isToday() ? 'bg-sky-100 dark:bg-sky-500/10' : '' }}'">
+                                            <td class="att-td att-day" :class="isClosed('{{ $date->toDateString() }}') ? 'att-closed-col' : '{{ $date->isToday() ? 'att-today' : '' }}'">
                                                 @include('attendance.partials.day-buttons', ['date' => $date, 'variant' => 'table'])
                                             </td>
                                         @endforeach
@@ -550,6 +534,8 @@
                     <p x-show="filteredCount === 0" class="p-8 text-center text-sm text-slate-500">No children match this search.</p>
                     <div x-show="filteredCount > 0" class="border-t border-slate-200 px-4 py-2.5 text-sm text-slate-500 dark:border-white/10">
                         Showing all <span class="font-medium text-slate-700 dark:text-slate-200" x-text="filteredCount"></span> children
+                        {{-- What a tap does, in the mode you are in. --}}
+                        <span class="att-hint ml-2" x-text="hint"></span>
                     </div>
                 </div>
             </div>
@@ -566,10 +552,12 @@
                     </h2>
                     @if($canOpenWeek)
                         <p class="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400">
-                            Opening it starts from each child's registered days &mdash; nothing is copied from another week.
                             @if($previousWeekStart)
-                                Once it is open, <b>Copy from another week</b> can bring the week of
-                                <b>{{ \Illuminate\Support\Carbon::parse($previousWeekStart)->format('M j') }}</b> across if you want it.
+                                Opening it copies the week of
+                                <b>{{ \Illuminate\Support\Carbon::parse($previousWeekStart)->format('M j') }}</b> forward &mdash; the days
+                                ticked there, and the days somebody actually arrived on. Nothing is copied until you do.
+                            @else
+                                Nothing came before it, so the days start from each child's registered days.
                             @endif
                         </p>
                         <form method="POST" action="{{ route('attendance.week.open') }}" class="mt-4">
@@ -667,103 +655,7 @@
         </div>
     </template>
 
-    @if($canEditSchedule && $sourceWeeks->isNotEmpty())
-        <dialog x-ref="copyWeek" class="w-[min(26rem,calc(100%-2rem))] rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 backdrop:bg-slate-900/50 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100">
-            <form method="POST" action="{{ route('attendance.schedule.copy') }}">
-                @csrf
-                <input type="hidden" name="week_start" value="{{ $weekStartDate }}">
-                <div class="flex flex-col gap-3 p-5">
-                    <h2 class="text-base font-bold">Copy the schedule from another week</h2>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">Choose the week to copy from.</p>
-                    <div class="flex flex-col gap-1.5">
-                        @foreach($sourceWeeks as $index => $week)
-                            <label class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 px-3 py-2 text-sm has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50 dark:border-white/10 dark:has-[:checked]:bg-indigo-500/10">
-                                {{-- Last week is the default; failing that, whatever is nearest. --}}
-                                <input type="radio" name="source_week_start" value="{{ $week['value'] }}" @checked($week['is_previous'] || (! $previousWeekStart && $index === 0)) required>
-                                <span class="min-w-0 flex-1">
-                                    <span class="block">{{ $week['label'] }}</span>
-                                    {{-- How busy that week was, so a holiday week is
-                                         obvious without opening it. --}}
-                                    <span class="block text-[11px] text-slate-500 dark:text-slate-400">
-                                        {{ $week['ticked'] }} day{{ $week['ticked'] === 1 ? '' : 's' }} ticked
-                                        @if($week['closures'] > 0)
-                                            · <span class="font-semibold text-rose-600 dark:text-rose-300">{{ $week['closures'] }} closed day{{ $week['closures'] === 1 ? '' : 's' }}</span>
-                                        @endif
-                                    </span>
-                                </span>
-                                @if($week['is_previous'])
-                                    <span class="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">Last week</span>
-                                @endif
-                            </label>
-                        @endforeach
-                    </div>
 
-                    {{-- One outcome, said plainly rather than chosen from a
-                         list. "Copy the schedule from another week" means this
-                         week ends up looking like that one — the part worth
-                         warning about is what it clears, so that is the
-                         sentence rather than a radio nobody read. --}}
-                    <p class="border-t border-slate-200/70 pt-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
-                        This week ends up an exact match of the week you choose. Days ticked here but not there are cleared.
-                        Only the pattern is copied &mdash; sign-ins already recorded are never touched.
-                    </p>
-
-                </div>
-                <div class="flex flex-wrap justify-end gap-2 border-t border-slate-200/70 px-5 py-3 dark:border-white/10">
-                    <button type="button" @click="$refs.copyWeek.close()" class="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
-                    <button class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-700">Copy schedule</button>
-                </div>
-            </form>
-        </dialog>
-    @endif
-
-    {{--
-        What a tap is about to do, asked before it does it.
-
-        Only while correcting. On the live sheet a tap is a child standing at the
-        door and the answer is always yes — sixty confirmations a morning is a
-        dialog nobody reads, and a dialog nobody reads is worse than none.
-
-        In Edit the tap means something else every time: a day that has already
-        gone, a day nobody booked, a day the centre was shut, an arrival being
-        taken off. So the question names the child, the day, and which of those
-        it is — the condition changes, the shape of the question does not.
-    --}}
-    <div
-        x-show="confirming"
-        x-cloak
-        x-transition.opacity
-        @keydown.escape.window="confirming = null"
-        class="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 p-4"
-        role="alertdialog"
-        aria-modal="true"
-    >
-        <div @click.outside="confirming = null" class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-slate-900">
-            <span class="grid h-11 w-11 place-items-center rounded-full text-xl font-bold"
-                  :class="confirming?.destructive
-                      ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300'
-                      : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'"
-                  aria-hidden="true" x-text="confirming?.destructive ? '×' : '?'"></span>
-
-            <h2 class="mt-3 text-base font-bold text-slate-900 dark:text-white" x-text="confirming?.title"></h2>
-
-            {{-- One line per thing that makes this tap unusual, rather than a
-                 paragraph: the reader is deciding, not reading. --}}
-            <ul class="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
-                <template x-for="line in (confirming?.lines ?? [])" :key="line">
-                    <li class="flex gap-2"><span class="text-slate-300 dark:text-slate-600" aria-hidden="true">•</span><span x-text="line"></span></li>
-                </template>
-            </ul>
-
-            <div class="mt-5 flex gap-2">
-                <button type="button" @click="confirming = null" class="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10">Cancel</button>
-                <button type="button" @click="confirmTap()" x-ref="confirmYes"
-                        :class="confirming?.destructive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-500 hover:bg-amber-600'"
-                        class="flex-1 rounded-lg px-3 py-2 text-sm font-semibold text-white transition"
-                        x-text="confirming?.verb"></button>
-            </div>
-        </div>
-    </div>
     {{-- Why a sign-in was refused, centred on the sheet rather than dropped from
          the top of the browser by alert(). --}}
     <div
@@ -791,8 +683,20 @@ function attendanceApp() { return {
     view: 'signin',
     recentOpen: false,
     editing: false,
-    confirming: null,
     canAmend: @js($canAmendAttendance),
+
+    /* Inline, because they are painted from Alpine into cells that re-render. */
+    icons: {
+        pencil: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>',
+        lock: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+        edit: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/></svg>',
+    },
+
+    get hint() {
+        return this.editing
+            ? 'Tap a cell to cycle not attending → expected → time. The pencil types an exact time.'
+            : 'Only ' + this.todayLabel + ' can be changed.';
+    },
     // Which cells in this week were put right by hand rather than tapped on
     // the day. Keyed child|date|session, the same shape the attendance map is.
     amended: @js((object) $amendmentMap),
@@ -1222,15 +1126,15 @@ function attendanceApp() { return {
     },
 
     /**
-     * Whether an arrival can be put onto this day by hand, at a typed time.
+     * Whether this column does anything at all when it is tapped.
      *
-     * Today and the days behind it: the same boundary signing in has always
-     * had, because an arrival that has not happened is a guess. In Edit the
-     * tap on an empty cell is taken by the expected/not-expected toggle, so
-     * this gets a mark of its own beside the box.
+     * The one predicate the whole sheet reads: the box takes its locked look
+     * from it, the header draws its padlock from it, and tapCell() refuses on
+     * it. Live, that is today alone; in Edit it is every day the reader has
+     * the power over — which is the difference the mode switch is announcing.
      */
-    canAddArrival(date) {
-        return this.editing && this.canAmend && date <= this.today;
+    canTap(date) {
+        return this.canSignIn(date) || this.canSetExpected(date);
     },
 
     /** Whether the time on a recorded arrival is open to being retyped. */
@@ -1238,94 +1142,185 @@ function attendanceApp() { return {
         return this.editing && this.canAmend && date <= this.today && this.isPresent(childId, date, session);
     },
 
-    /* ---- the arrival being typed, if any ---- */
-    drafting: null,   // 'child|date|session' of the cell showing a time field
-    draft: '',        // the HH:MM in it
-
-    /* ---- the recorded time being retyped, if any ---- */
-    retiming: null,   // 'child|date|session' whose pill has opened its field
-
-    isRetiming(childId, date, session) {
-        return this.retiming === this.cellKey(childId, date, session);
-    },
-    beginRetime(childId, date, session) {
-        if (! this.canRetime(childId, date, session)) return;
-
-        this.retiming = this.cellKey(childId, date, session);
-    },
-    endRetime() {
-        this.retiming = null;
-    },
+    /* ---- the hour being typed, if any ---- */
+    retiming: null,   // 'child|date|session' of the cell that is a field right now
+    draft: '',        // what has been typed into it
 
     cellKey(childId, date, session) {
         return childId + '|' + date + '|' + session;
     },
-    isDrafting(childId, date, session) {
-        return this.drafting === this.cellKey(childId, date, session);
+    isRetiming(childId, date, session) {
+        return this.retiming === this.cellKey(childId, date, session);
     },
 
     /**
-     * "9:04a" as a time field wants it: "09:04". The sheet stores the short
-     * form because that is what it prints; the field is the one place the
-     * other is needed.
+     * Open the field. From the pencil on a time, or E on any cell in Edit
+     * that could take an arrival — which then records one at the typed hour.
      */
-    timeValue(short) {
-        const match = /^(\d{1,2}):(\d{2})([ap])$/.exec(short || '');
+    beginRetime(childId, date, session) {
+        const present = this.isPresent(childId, date, session);
+
+        if (present ? ! this.canRetime(childId, date, session) : ! (this.editing && this.canSignIn(date))) return;
+
+        this.draft = present ? this.displayTime(childId, date, session) : '';
+        this.retiming = this.cellKey(childId, date, session);
+    },
+    cancelRetime() {
+        this.retiming = null;
+        this.draft = '';
+    },
+    endRetime() { this.cancelRetime(); },
+
+    /**
+     * Enter, or leaving the field. An empty field changes nothing — a blur
+     * with nothing in it is somebody changing their mind, not an instruction.
+     */
+    commitRetime(childId, date, session) {
+        if (! this.isRetiming(childId, date, session)) return;
+
+        const value = this.normalizeTime(this.draft);
+        this.cancelRetime();
+
+        if (! value) return;
+
+        return this.isPresent(childId, date, session)
+            ? this.retime(childId, date, session, value)
+            : this.signIn(childId, date, session, value);
+    },
+
+    /**
+     * Whatever was typed, as HH:MM for the server. "8", "8:15", "815",
+     * "8.15a", "3p", "15:05", "8:15 AM" all land. Before seven with no
+     * suffix is read as afternoon, since no child arrives at three in the
+     * morning and plenty leave at three.
+     */
+    normalizeTime(raw) {
+        const text = String(raw || '').trim().toLowerCase().replace(/\s+/g, '');
+        const match = /^(\d{1,2})[:.]?(\d{2})?(a|p|am|pm)?$/.exec(text);
 
         if (! match) return '';
 
+        let hours = parseInt(match[1], 10);
+        const minutes = Math.min(match[2] ? parseInt(match[2], 10) : 0, 59);
+
+        if (hours > 23) return '';
+
+        /*
+         * A padded hour with no am/pm is already a 24-hour one, and is taken
+         * as it stands. That is the form this component writes — nudgeDraft()
+         * hands back "06:59" — so without this the arrows read their own
+         * output back through the afternoon rule below and a second press
+         * jumped from seven in the morning to nearly seven at night.
+         *
+         * It is also the form a person uses when they mean to be unambiguous:
+         * "06:30" is half past six in the morning to anybody who writes the
+         * nought.
+         */
+        if (! match[3] && /^0\d|^1\d|^2[0-3]/.test(match[1]) && match[1].length === 2) {
+            return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+        }
+
+        // Otherwise it is shorthand somebody typed, and an hour before seven
+        // is the afternoon: no child arrives at three in the morning, and
+        // plenty leave at three.
+        const suffix = match[3] ? match[3][0] : (hours < 7 || hours === 12 ? 'p' : 'a');
+
+        if (hours <= 12) {
+            if (suffix === 'p' && hours !== 12) hours += 12;
+            if (suffix === 'a' && hours === 12) hours = 0;
+        }
+
+        return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    },
+
+    /**
+     * Move the time in the open field by so many minutes.
+     *
+     * Wraps within the day rather than running off either end: a drop-off at
+     * seven and a pick-up at six are both a couple of presses from anywhere,
+     * and an arrow that stopped dead at midnight would only ever be a dead key.
+     *
+     * An empty field starts from the hour the centre opens, so the first press
+     * lands near the morning it is about to record rather than at midnight.
+     */
+    nudgeDraft(minutes) {
+        const from = this.normalizeTime(this.draft) || @js(\App\Models\Child::DAY_OPENS_AT);
+        const [hours, mins] = from.split(':').map(Number);
+
+        // Modulo twice: JavaScript's % keeps the sign, so a step below zero
+        // would come back negative and format as "-1:59".
+        const total = ((hours * 60 + mins + minutes) % 1440 + 1440) % 1440;
+
+        this.draft = String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+    },
+
+    /** "9:04a" as the field wants it: "09:04". */
+    timeValue(short) {
+        const match = /^(\d{1,2}):(\d{2})([ap])$/.exec(short || '');
+        if (! match) return '';
         let hours = Number(match[1]) % 12;
         if (match[3] === 'p') hours += 12;
-
         return String(hours).padStart(2, '0') + ':' + match[2];
     },
 
-    /** "09:04" back to "9:04a", for the line in the dialog. */
-    timeShort(value) {
-        const match = /^(\d{2}):(\d{2})$/.exec(value || '');
+    /**
+     * What the cell shows. A whole day has room for "8:04 AM"; a half day
+     * shares the cell with its twin and shows "8:04a", as the reference does.
+     */
+    displayTime(childId, date, session) {
+        const short = this.sessionTime(childId, date, session);
+        if (! short || session !== 'FULL') return short;
 
-        if (! match) return value || '';
-
-        const hours = Number(match[1]);
-
-        return ((hours % 12) || 12) + ':' + match[2] + (hours < 12 ? 'a' : 'p');
+        const match = /^(\d{1,2}:\d{2})([ap])$/.exec(short);
+        return match ? match[1] + ' ' + (match[2] === 'a' ? 'AM' : 'PM') : short;
     },
 
-    /** The moment, as a time field wants it, for an arrival added today. */
-    nowValue() {
-        const at = new Date();
-
-        return String(at.getHours()).padStart(2, '0') + ':' + String(at.getMinutes()).padStart(2, '0');
+    /* ---- the box itself ---- */
+    sessionsById: null,
+    sessionCount(childId) {
+        if (this.sessionsById === null) {
+            this.sessionsById = {};
+            this.childrenData.forEach(child => { this.sessionsById[child.id] = (child.sessions || ['FULL']).length; });
+        }
+        return this.sessionsById[childId] ?? 1;
     },
 
-    beginArrival(childId, date, session) {
-        if (! this.canAddArrival(date)) return;
+    /**
+     * The classes for one box — see "The attendance cell" in app.css.
+     * State first, then the two things that quieten it: a day gone by, and a
+     * column this mode cannot touch.
+     */
+    cellClass(childId, date, session) {
+        const classes = ['att-cell'];
+        const present = this.isPresent(childId, date, session);
 
-        const child = this.childrenData.find(candidate => candidate.id === childId);
+        if (this.sessionCount(childId) > 1) classes.push('att-half');
 
-        // Today starts from now, the same as a tap at the door would. A day
-        // gone starts from the hour agreed for it — their drop-off, or when
-        // the centre opens — which is what the server would stamp unasked.
-        this.draft = date === this.today ? this.nowValue() : (child?.drop_off || '07:00');
-        this.drafting = this.cellKey(childId, date, session);
+        if (present) {
+            classes.push('att-time');
+            if (this.isUnplanned(childId, date, session)) classes.push('att-unplanned');
+        } else if (this.isClosed(date)) {
+            classes.push('att-closed');
+        } else if (this.isScheduled(childId, date, session)) {
+            classes.push('att-expected');
+        } else {
+            classes.push('att-none');
+        }
+
+        if (present && date < this.today && this.sessionCount(childId) === 1) classes.push('att-history');
+        if (! this.canTap(date)) classes.push('att-locked');
+        if (this.amendment(childId, date, session)) classes.push('att-amended');
+
+        return classes.join(' ');
     },
-    cancelArrival() {
-        this.drafting = null;
-        this.draft = '';
-    },
-    commitArrival(childId, date, session) {
-        if (! this.isDrafting(childId, date, session) || ! this.draft) return;
 
-        const time = this.draft;
-        this.cancelArrival();
+    cellLabel(child, date, session) {
+        const state = this.isPresent(child.id, date, session)
+            ? this.displayTime(child.id, date, session)
+            : (this.isClosed(date) ? 'centre closed' : (this.isScheduled(child.id, date, session) ? 'expected' : 'not attending'));
+        const half = session === 'FULL' ? '' : ' ' + this.sessionLabel(session);
 
-        // Asked about like every other tap in this mode, with the hour in it.
-        this.askBeforeTapping(childId, date, session, time);
-    },
-
-    /** Whether this cell does anything at all when it is tapped. */
-    canTap(date) {
-        return this.canSignIn(date) || this.canSetExpected(date);
+        return child.name + ' ' + this.dayLabel(date) + half + ': ' + state + (this.canTap(date) ? '' : ', locked');
     },
     /*
      * Whether this cell was put right by hand, and by whom.
@@ -1415,7 +1410,7 @@ function attendanceApp() { return {
         }
         // In the mode where taps undo things, say so on the cell that will.
         if (this.canRemove(childId, date, session)) {
-            return 'Signed in ' + this.sessionTime(childId, date, session) + ' — tap to take this arrival off';
+            return 'Signed in ' + this.displayTime(childId, date, session) + ' — tap: not attending. Pencil: type the exact time.';
         }
 
         // The reason the column is empty, on every cell in it — the header
@@ -1426,9 +1421,15 @@ function attendanceApp() { return {
 
         // In Edit an empty cell is the plan for the day, and the tap flips it.
         if (this.canSetExpected(date)) {
+            if (date > this.today) {
+                return this.isScheduled(childId, date, session)
+                    ? 'Expected. Tap: not attending.'
+                    : 'Not attending. Tap: expected.';
+            }
+
             return this.isScheduled(childId, date, session)
-                ? 'Expected. Tap to make it a day off; ＋ to put an arrival on it.'
-                : 'Not expected. Tap to expect them; ＋ to put an arrival on it.';
+                ? 'Expected. Tap: record an arrival. E: type the hour.'
+                : 'Not attending. Tap: expected.';
         }
 
         // Say which day can be signed in, on the box that cannot: the sheet
@@ -1635,30 +1636,63 @@ function attendanceApp() { return {
             this.saving = false;
         }
     },
-    // What a tap means depends on what is already in the cell. Adding and
-    // taking back are the same gesture, which is what makes a correction feel
-    // like fixing a sheet rather than operating a form.
-    //
-    // At the door it happens on the tap. While correcting it is asked about
-    // first — see askBeforeTapping for why the two differ.
+    // What a tap means depends on what is already in the cell and on the mode.
+    // Live: an arrival at the door, and nothing else. Edit: the box moves one
+    // step along its cycle — see cycle() — and a tap that can be tapped again
+    // is its own undo, which is why nothing here asks first.
     tapCell(childId, date, session) {
-        // In Edit an empty cell is the plan for that day, and the tap flips
-        // it — box to dot, dot to box — the way a tick on the checklist does,
-        // and as directly: it is the same act on the same slot. The arrival
-        // on a filled cell is handled by the field and the ✓ beside it, so a
-        // tap there is nothing.
-        if (this.editing) {
-            if (this.isPresent(childId, date, session)) return;
-            if (this.canSetExpected(date)) return this.toggleOne(childId, date, session);
+        if (! this.canTap(date)) return;
+
+        // Live: today, at the door. A tap is an arrival and nothing else — a
+        // recorded one is left alone, so a passing elbow cannot delete a
+        // morning.
+        if (! this.editing) {
+            if (date === this.today && ! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);
 
             return;
         }
 
-        return this.canRemove(childId, date, session)
-            ? this.removeSignIn(childId, date, session)
-            : this.signIn(childId, date, session);
+        return this.cycle(childId, date, session);
     },
 
+    /**
+     * Move the box along.
+     *
+     *   ahead of today   dot ↔ expected             (the plan)
+     *   today or gone    dot → expected → time → dot (the plan, then the fact)
+     *
+     * The step onto "time" records an arrival: now if it is today, the hour
+     * the day was agreed for if it has gone. The step off it takes the
+     * arrival back and clears the tick with it — a dot means not attending,
+     * and a day not attended was not, in the end, expected either.
+     */
+    cycle(childId, date, session) {
+        const present = this.isPresent(childId, date, session);
+        const expected = this.isScheduled(childId, date, session);
+
+        if (date > this.today) {
+            if (this.canSetExpected(date)) this.toggleOne(childId, date, session);
+
+            return;
+        }
+
+        if (present) {
+            if (! this.canRemove(childId, date, session)) return;
+
+            this.removeSignIn(childId, date, session);
+            if (expected && this.canSetExpected(date)) this.toggleOne(childId, date, session);
+
+            return;
+        }
+
+        if (! expected && this.canSetExpected(date)) {
+            this.toggleOne(childId, date, session);
+
+            return;
+        }
+
+        if (this.canSignIn(date)) this.signIn(childId, date, session);
+    },
     /** "Monday, Sep 14" — the sheet shows five columns, so a day needs naming. */
     dayLabel(date) {
         return new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
@@ -1666,73 +1700,6 @@ function attendanceApp() { return {
         });
     },
 
-    /*
-     * Say what this tap is about to do, and wait.
-     *
-     * Every condition gets the same question in the same shape; only what makes
-     * the tap unusual changes. That matters more than the wording: somebody
-     * correcting a fortnight-old week is reading these to catch the tap they
-     * did not mean, and a dialog whose shape moves about is one that gets
-     * clicked through rather than read.
-     */
-    askBeforeTapping(childId, date, session, time = null) {
-        const child = this.childrenData.find(candidate => candidate.id === childId);
-        const name = child?.name ?? 'this child';
-        const day = this.dayLabel(date);
-        const half = session === 'FULL' ? '' : (session === 'AM' ? ' (morning)' : ' (afternoon)');
-        const lines = [];
-
-        // Taking one off is the destructive half, and the only one that can
-        // lose something already recorded.
-        if (this.canRemove(childId, date, session)) {
-            lines.push(name + ' is recorded as arriving at ' + this.sessionTime(childId, date, session) + ' on ' + day + half + '.');
-            lines.push('Taking it off removes that day from what the centre bills for.');
-
-            this.confirming = {
-                title: 'Take this arrival off?',
-                lines,
-                verb: 'Take it off',
-                destructive: true,
-                childId, date, session,
-            };
-
-            return;
-        }
-
-        // The hour, when one was typed: that is the thing being confirmed.
-        const at = time ? ' at ' + this.timeShort(time) : '';
-
-        lines.push(date === this.today
-            ? name + ' will be recorded as arriving ' + (time ? 'at ' + this.timeShort(time) : 'now') + '.'
-            : day + ' has already gone — ' + name + ' will be recorded as here that day' + at + '.');
-
-        if (this.isClosed(date)) {
-            lines.push('The centre was closed: ' + this.closureReason(date) + '.');
-        } else if (this.isScheduled(childId, date, session)) {
-            lines.push(name + ' was expected' + (half ? half.trim() : '') + ' on ' + day + '.');
-        } else {
-            lines.push(name + ' was not scheduled on ' + day + ' — this counts as unplanned, and is still billable.');
-        }
-
-        this.confirming = {
-            title: 'Sign ' + name + ' in?',
-            lines,
-            verb: 'Sign in',
-            destructive: false,
-            childId, date, session, time,
-        };
-    },
-
-    confirmTap() {
-        const asked = this.confirming;
-        this.confirming = null;
-
-        if (! asked) return;
-
-        return asked.destructive
-            ? this.removeSignIn(asked.childId, asked.date, asked.session)
-            : this.signIn(asked.childId, asked.date, asked.session, asked.time);
-    },
     /**
      * Move the hour on an arrival already recorded.
      *

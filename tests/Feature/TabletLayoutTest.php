@@ -45,21 +45,22 @@ class TabletLayoutTest extends TestCase
             ->getContent();
 
         // LAN against the edge, Student parked against LAN's width.
-        $this->assertStringContainsString('sticky left-0 z-20 w-[60px]', $html);
-        $this->assertStringContainsString('sticky left-[60px] z-20', $html);
-        $this->assertStringContainsString('sticky left-0 z-10 w-[60px]', $html);
-        $this->assertStringContainsString('sticky left-[60px] z-10', $html);
+        $this->assertStringContainsString('att-col-lan sticky left-0 z-20', $html);
+        $this->assertStringContainsString('att-col-student sticky left-[60px] z-20', $html);
+        $this->assertStringContainsString('att-lan sticky left-0 z-10', $html);
+        $this->assertStringContainsString('att-student sticky left-[60px] z-10', $html);
 
         // A frozen cell needs an opaque ground, or the row scrolling under it
         // shows straight through the name. The card around the table is glass,
         // so the cells cannot inherit one.
-        $this->assertStringContainsString('bg-white px-3 py-1.5 text-center text-sm tabular-nums', $html);
-        $this->assertStringContainsString('border-r border-slate-200 bg-white px-3 py-1.5', $html);
+        $this->assertStringContainsString('att-lan sticky left-0 z-10 bg-white dark:bg-night-900', $html);
+        $this->assertStringContainsString('att-student sticky left-[60px] z-10 bg-white dark:bg-night-900', $html);
 
-        // And the table declares a width that matches what it now holds: an
-        // understated one lets the browser squeeze the day boxes rather than
-        // scroll, which is the thing the frozen columns are there to make safe.
-        $this->assertStringContainsString('min-w-[1040px]', $html);
+        // And the table declares a width that matches what it now holds — two
+        // frozen columns and five fixed 116px days — so the browser scrolls
+        // rather than squeezing the boxes, which is the thing the frozen
+        // columns are there to make safe.
+        $this->assertStringContainsString('min-w-[1280px]', $html);
     }
 
     public function test_the_roster_freezes_the_same_two_columns(): void

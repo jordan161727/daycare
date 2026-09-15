@@ -88,35 +88,27 @@ class WeekOpenScopeTest extends TestCase
     }
 
     /**
-     * Opening second gives your rooms the same start as opening first: the
-     * children's registered days. What the first opener did to THEIR rooms
-     * afterwards — copying a week across, say — stays in their rooms. A
-     * pattern nobody in these rooms chose must not arrive because somebody
-     * down the hall pressed a button.
+     * Opening second must not be worse than opening first. The pattern the
+     * first opener copied forward is the pattern the second one gets, or
+     * whoever got there last would be handed a blank week nobody chose.
      */
-    public function test_opening_second_starts_your_rooms_from_the_record_not_from_the_first_openers_copy(): void
+    public function test_opening_second_still_copies_the_week_before_forward(): void
     {
         $infant = $this->makeChild('Infant', '2026-02-10');
-        $infant->forceFill(['schedule_days' => [1, 2, 3]])->save();   // Mon–Wed on the record
-        $toddler = $this->makeChild('Toddler', '2024-02-10');
+        $this->makeChild('Toddler', '2024-02-10');
 
         // Last week, ticked for everybody.
         app(WeekSchedule::class)->open(self::THIS_WEEK);
         ScheduleSlot::where('week_start', self::THIS_WEEK)->update(['is_scheduled' => true]);
 
-        // The Toddler teacher opens next week and copies last week into it.
+        // The Toddler teacher opens next week first; the Infant teacher follows.
         app(WeekSchedule::class)->open(self::NEXT_WEEK, $this->toddlerTeacher);
-        app(WeekSchedule::class)->copyFrom(self::NEXT_WEEK, self::THIS_WEEK, $this->toddlerTeacher);
-
-        // The Infant teacher follows.
         app(WeekSchedule::class)->open(self::NEXT_WEEK, $this->infantTeacher);
 
-        // Toddler: the five days they copied. Infant: the three on the record.
-        $ticked = fn ($child) => ScheduleSlot::where('week_start', self::NEXT_WEEK)
-            ->where('child_id', $child->id)->where('is_scheduled', true)->count();
-
-        $this->assertSame(5, $ticked($toddler));
-        $this->assertSame(3, $ticked($infant));
+        $this->assertSame(5, ScheduleSlot::where('week_start', self::NEXT_WEEK)
+            ->where('child_id', $infant->id)
+            ->where('is_scheduled', true)
+            ->count());
     }
 
     public function test_an_admin_opens_the_whole_centre(): void
