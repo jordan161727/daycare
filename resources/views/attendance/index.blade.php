@@ -179,9 +179,9 @@
                          stepped to and forgotten. The arrow belongs only to the
                          first — there is nowhere to return to from today. --}}
                     @if($weekStartDate === $thisWeek)
-                        <span class="rounded-full bg-sky-100 px-3.5 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-400/15 dark:text-sky-300" aria-current="date">This week</span>
+                        <span class="rounded-full bg-sky-100 px-4 py-1.5 text-xs font-semibold text-sky-700 dark:bg-sky-400/15 dark:text-sky-300" aria-current="date">This week</span>
                     @else
-                        <a href="{{ route('attendance.index') }}" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25">
+                        <a href="{{ route('attendance.index') }}" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-4 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25">
                             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
                             This week
                         </a>
