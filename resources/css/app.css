@@ -231,7 +231,14 @@
     .att-th { font-size: 11px; font-weight: 500; padding-bottom: 10px !important; @apply text-slate-500 dark:text-slate-400; }
     .att-col-lan, .att-lan { width: 60px; }
     .att-col-student, .att-student { width: 186px; }
-    .att-person { display: flex; align-items: center; gap: 9px; text-align: left; justify-content: center; }
+    /* An element and two classes, to outrank the centring on `.att-table th,
+       .att-table td` — a class and an element, which a bare class loses to. */
+    .att-table th.att-col-student, .att-table td.att-student { text-align: left; }
+    /* From the left. Centred, the block floated — a long name pushed its
+       avatar right and a short one pulled it left, so the column of faces
+       zig-zagged instead of making a line, and a column of names is scanned
+       down the edge they start at. */
+    .att-person { display: flex; align-items: center; gap: 9px; text-align: left; justify-content: flex-start; }
     .att-day { width: 116px; }
     .att-today { @apply bg-sky-100 dark:bg-sky-500/10; }
     .att-closed-col { @apply bg-rose-50/60 dark:bg-rose-500/5; }
@@ -239,7 +246,6 @@
     .att-avatar { width: 26px; height: 26px; flex: none; border-radius: 50%; overflow: hidden; font-size: 10px; }
     .att-avatar > * { width: 100% !important; height: 100% !important; font-size: 10px !important; }
     .att-name { display: block; font-size: 13px; font-weight: 500; @apply text-slate-800 dark:text-slate-100; }
-    .att-room { display: block; font-size: 11px; @apply text-slate-500 dark:text-slate-400; }
 
     /* One width apiece, measured against the longest real value. Clipped as
        well as sized: table-layout is fixed, so anything that does not fit is
@@ -248,7 +254,11 @@
        happening; the clip stops it mattering when a longer room name arrives. */
     .att-meta { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; @apply text-slate-500 dark:text-slate-400; }
     .att-th.att-meta { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; @apply text-slate-400 dark:text-slate-500; }
-    .att-w-room { width: 118px; }    /* "🐘 School Age ✎" */
+    /* Read down its left edge: the rooms run from four characters to ten and
+       carry an icon, so centred they landed in six different places. The
+       gutter keeps the icon off the frozen name column that ends beside it. */
+    .att-w-room { width: 122px; }   /* "🐘 School Age ✎" */
+    .att-table th.att-w-room, .att-table td.att-w-room { text-align: left; padding-left: 12px; }
     .att-w-dob { width: 104px; }     /* "2018/09/18" */
     .att-w-age { width: 74px; }      /* "10y 11m" */
     .att-w-hours { width: 152px; }   /* "8:00 AM – 5:30 PM" */

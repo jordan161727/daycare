@@ -119,10 +119,8 @@ class AttendanceSheetTest extends TestCase
      * LAN, the child, then what the week is staffed and billed against, then
      * the days.
      *
-     * The room is in a column AND under the name, and both earn their place:
-     * read down, the column groups the sheet and a child sitting in a room
-     * nobody else on screen is in stands out; read across, the line under the
-     * name says which room this row is without the eye leaving it.
+     * The room is a column and only a column: read down it groups the sheet,
+     * and a child sitting in a room nobody else on screen is in stands out.
      */
     public function test_the_sheet_carries_the_facts_a_week_is_staffed_against(): void
     {
@@ -135,9 +133,11 @@ class AttendanceSheetTest extends TestCase
 
         $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
 
-        // And the room rides under the name as well.
-        $this->assertStringContainsString('<span class="att-room">', $html);
-        $this->assertStringContainsString('x-text="roomLabel(child)"', $html);
+        // On the sheet the room is its column and nothing else. The page also
+        // carries the checklist, which has a room control of its own for
+        // setting it — a different view, and not a second copy of this one.
+        $this->assertStringNotContainsString('att-room', $html);
+        $this->assertStringContainsString('att-th att-meta att-w-room', $html);
     }
 
     public function test_the_week_grid_is_replaced_by_cards_on_small_screens(): void

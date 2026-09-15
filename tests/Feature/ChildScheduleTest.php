@@ -80,6 +80,44 @@ class ChildScheduleTest extends TestCase
     }
 
     /**
+     * The roster draws a child the way the sheet does: a round avatar and the
+     * name, in the same classes.
+     *
+     * The two tables list the same children and are read one after the other,
+     * so a row that looks different on each is a row the eye has to learn
+     * twice. They share the classes, which is what stops them drifting.
+     *
+     * Left-aligned on both. Centred, the block floated — a long name pushed
+     * its avatar right and a short one pulled it left — and a column of names
+     * is scanned down the edge they start at.
+     */
+    public function test_the_roster_draws_the_child_the_way_the_sheet_does(): void
+    {
+        $this->makeChild(['birth_date' => '2023-03-15', 'first_name' => 'Ada', 'classroom' => 'Toddler']);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $roster = $this->actingAs($admin)->get(route('children.index'))->assertOk()->getContent();
+        $sheet = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        foreach (['att-person', 'att-avatar', 'att-name'] as $class) {
+            $this->assertStringContainsString($class, $roster, "the roster does not use {$class}");
+            $this->assertStringContainsString($class, $sheet, "the sheet does not use {$class}");
+        }
+
+        // Neither repeats the room under the name: both give it a column, and
+        // a row that says the same thing twice is a row saying it twice.
+        $this->assertStringNotContainsString('att-room', $roster);
+        $this->assertStringNotContainsString('att-room', $sheet);
+        $this->assertStringContainsString('>Classroom', $roster);
+        $this->assertStringContainsString('>Classroom</th>', $sheet);
+
+        // Both read from the left, which is the only alignment either uses —
+        // so there is no modifier asking for it on one and not the other.
+        $this->assertStringNotContainsString('att-person-start', $roster);
+        $this->assertStringNotContainsString('att-person-start', $sheet);
+    }
+
+    /**
      * The roster and the attendance sheet list the same children and are read
      * one after the other. A column that sits in a different place on each is
      * one the eye has to hunt for every time it changes screen.

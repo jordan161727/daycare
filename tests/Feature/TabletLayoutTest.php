@@ -60,7 +60,7 @@ class TabletLayoutTest extends TestCase
         // frozen columns and five fixed 116px days — so the browser scrolls
         // rather than squeezing the boxes, which is the thing the frozen
         // columns are there to make safe.
-        $this->assertStringContainsString('min-w-[1280px]', $html);
+        $this->assertStringContainsString('min-w-[1290px]', $html);
     }
 
     public function test_the_roster_freezes_the_same_two_columns(): void
@@ -121,6 +121,84 @@ class TabletLayoutTest extends TestCase
         );
     }
 
+    /**
+     * A rule that means to override the table's own must outrank it.
+     *
+     * `.att-table th, .att-table td` is an element and a class — specificity
+     * (0,1,1) — and it sets text-align, padding and vertical-align for every
+     * cell. A bare `.att-w-room { text-align: left }` is (0,1,0), so it loses,
+     * and CSS says so by quietly doing nothing: the Classroom column stayed
+     * centred through two rounds of "still not aligned" because the
+     * declaration was there, correct, and outranked.
+     *
+     * Only a class that actually lands on a th or a td is in that contest —
+     * `.att-cell` is a div inside the cell and the base rule never reaches it
+     * — so the set is read from the markup rather than listed here, and stays
+     * right when a column is added.
+     */
+    public function test_a_cell_override_outranks_the_table_rule_it_means_to_beat(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+        $markup = file_get_contents(resource_path('views/attendance/index.blade.php'));
+
+        // What the base rule claims for every cell.
+        $this->assertMatchesRegularExpression(
+            '/\.att-table th, \.att-table td \{[^}]*text-align: center/',
+            $css,
+            'the base cell rule moved; this guard is reading the wrong thing'
+        );
+
+        // Every att- class that appears on a th or a td.
+        preg_match_all('/<t[hd]\b[^>]*\bclass="([^"]*)"/', $markup, $cells);
+        $onCells = [];
+        foreach ($cells[1] as $classList) {
+            foreach (preg_split('/\s+/', $classList) as $class) {
+                if (str_starts_with($class, 'att-')) {
+                    $onCells[$class] = true;
+                }
+            }
+        }
+
+        $this->assertNotEmpty($onCells, 'no att- classes found on any cell; the markup moved');
+        $this->assertArrayHasKey('att-w-room', $onCells);
+
+        $contested = ['text-align', 'padding-left', 'padding-right', 'padding', 'vertical-align'];
+
+        preg_match_all('/^ {4}(\.att-[^{]*?) \{([^}]*)\}/m', $css, $rules, PREG_SET_ORDER);
+        $this->assertNotEmpty($rules);
+
+        foreach ($rules as [, $selector, $body]) {
+            // Already scoped to beat it, or shouting over it on purpose.
+            if (str_contains($selector, '.att-table th.') || str_contains($selector, '.att-table td.')) {
+                continue;
+            }
+            if (str_contains($body, '!important')) {
+                continue;
+            }
+
+            // Does this rule target a class that lands on a cell?
+            preg_match_all('/\.(att-[\w-]+)/', $selector, $named);
+            $touchesCell = (bool) array_intersect($named[1], array_keys($onCells));
+
+            if (! $touchesCell) {
+                continue;
+            }
+
+            foreach ($contested as $property) {
+                if (! preg_match('/(?:^|;|\s)'.preg_quote($property, '/').'\s*:/', $body)) {
+                    continue;
+                }
+
+                $this->fail(
+                    "`{$selector}` sets {$property} on a class that lands on a th or td, which "
+                    ."`.att-table th, .att-table td` also sets at a higher specificity — so it will be "
+                    ."ignored. Scope it as `.att-table th.x, .att-table td.x`."
+                );
+            }
+        }
+
+        $this->assertTrue(true);
+    }
     private function makeChild(array $attributes = []): Child
     {
         return Child::create($attributes + [

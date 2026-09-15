@@ -73,11 +73,19 @@
                                  off-screen is a row about nobody. --}}
                             <td class="sticky left-0 z-10 w-[60px] bg-white px-3 py-2 text-sm tabular-nums text-slate-400 dark:bg-night-900 dark:text-slate-500">{{ $child->lan }}</td>
                             <td class="sticky left-[60px] z-10 border-r border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-night-900">
-                                {{-- The room has a column of its own on both tables, so
-                                     the name stands alone here. --}}
-                                <div class="flex items-center gap-3">
-                                    <x-child-avatar :child="$child" />
-                                    <a href="{{ route('children.show', $child) }}" class="truncate text-sm font-semibold text-slate-800 underline-offset-2 hover:text-indigo-600 hover:underline dark:text-slate-100">{{ $child->displayName() }}</a>
+                                {{-- The same avatar and name the attendance sheet draws,
+                                     in the same classes, so the two tables cannot drift.
+
+                                     The room is not repeated under the name here: it has
+                                     a column of its own a few pixels to the right, and a
+                                     list read straight down does not need the same fact
+                                     twice in one row. The sheet says it under the name
+                                     because a row there is eleven columns wide and the
+                                     room would be off to the left of wherever the eye
+                                     has got to. --}}
+                                <div class="att-person">
+                                    <span class="att-avatar"><x-child-avatar :child="$child" /></span>
+                                    <a href="{{ route('children.show', $child) }}" class="att-name truncate underline-offset-2 hover:text-indigo-600 hover:underline dark:hover:text-indigo-300">{{ $child->displayName() }}</a>
                                 </div>
                             </td>
                             <td class="whitespace-nowrap px-3 py-2 text-sm"><x-room-icon :room="$child->classroom" size="text-sm" /> {{ $child->classroom }}</td>

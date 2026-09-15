@@ -393,7 +393,7 @@
                 <div class="glass-card overflow-hidden rounded-2xl">
                     {{-- Week grid: needs the width, so it only appears from md up. --}}
                     <div class="hidden overflow-x-auto md:block">
-                        <table class="att-table w-full min-w-[1280px]">
+                        <table class="att-table w-full min-w-[1290px]">
                             <thead>
                                 <tr>
                                     {{-- The LAN, not a row number: it is what the paper
@@ -458,15 +458,8 @@
                                                          column of their own. --}}
                                                     <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="att-name truncate underline-offset-2 hover:text-indigo-600 hover:underline dark:hover:text-indigo-300" x-text="child.name" :title="'Open ' + child.first_name + '\'s record' + (child.schedule_hours ? ' — here ' + child.schedule_hours : '')"></a>
                                                     <span x-show="! canOpenProfile" class="att-name truncate" x-text="child.name" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : ''"></span>
-                                                    {{-- The room, under the name as the reference draws
-                                                         it. A hand-set room keeps its own colour and
-                                                         mark, so it never passes for an automatic one. --}}
-                                                    <span class="att-room">
-                                                        <span :class="roomClass(child)" :title="roomTitle(child)">
-                                                            <span x-text="roomLabel(child)"></span>
-                                                            <span x-show="child.classroom_override" x-cloak x-text="child.override_stale ? ' ⚠' : ' ✎'"></span>
-                                                        </span>
-                                                    </span>
+                                                    {{-- No room here: it has a column of its own three
+                                                         along, and a row does not need to say it twice. --}}
                                                 </span>
                                             </div>
                                         </td>
