@@ -72,6 +72,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:var(--ink);margin:0;background
 table.grid{width:100%;border-collapse:collapse;table-layout:fixed;}
 .grid th,.grid td{border:0.5px solid var(--line);padding:0;text-align:center;font-size:9px;height:19px;}
 .grid td.nm,.grid th.nm{text-align:left;padding-left:4px;font-size:9.5px;width:35%;border-left:none;}
+.hrs{color:var(--ink-soft);font-weight:normal;font-variant-numeric:tabular-nums;}
 .wide .grid td.nm,.wide .grid th.nm{width:26%;}
 tr.dh th{font-size:8px;color:var(--ink-soft);font-weight:bold;padding:1px 0;line-height:1.05;}
 th.d .dt{display:block;font-size:7px;color:var(--ink-faint);font-weight:normal;}
@@ -192,7 +193,7 @@ tr.vf td{height:17px;} tr.vf td.nm{color:var(--ink-faint);font-size:8.5px;}
         </tr>
         @foreach($room['rows'] as $row)
             <tr>
-                <td class="nm">{{ $row['name'] }}</td>
+                <td class="nm">{{ $row['name'] }}@if($row['hours'] ?? null) <span class="hrs">{{ $row['hours'] }}</span>@endif</td>
                 @foreach($page['dates'] as $date)
                     @php($boxes = $row['cells'][$date->toDateString()])
                     @if($boxes === null)

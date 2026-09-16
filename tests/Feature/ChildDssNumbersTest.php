@@ -37,7 +37,7 @@ class ChildDssNumbersTest extends TestCase
             ->assertOk()
             // Beside the centre's own number, not three sections down: all
             // three are numbers that name this child.
-            ->assertSeeInOrder(['name="lan"', 'DSS Case No', 'DSS CIN'], escape: false)
+            ->assertSeeInOrder(['LAN', 'DSS Case No', 'DSS CIN'], escape: false)
             ->assertSee('name="dss_case_no" value="S1177706D"', false)
             ->assertSee('name="dss_cin" value="HB14137F"', false);
     }

@@ -18,6 +18,7 @@
             <p class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                 <span><b class="font-bold text-slate-900 dark:text-white">{{ $children->count() }}</b> on the roll</span>
                 <span><b class="font-bold text-emerald-600 dark:text-emerald-400">{{ $activeCount }}</b> active</span>
+                @if($pendingCount > 0)<span><b class="font-bold text-amber-600 dark:text-amber-400">{{ $pendingCount }}</b> pending</span>@endif
             </p>
 
             <div class="ml-auto flex items-center gap-1.5">
@@ -49,8 +50,8 @@
                 <thead>
                     <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
                         @php($head = 'px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400')
-                                                <th scope="col" class="{{ $head }} sticky left-0 z-20 w-[60px] bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{{ $arrow('lan') }}</a></th>
-                        <th scope="col" class="{{ $head }} sticky left-[60px] z-20 border-r border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
+                                                <th scope="col" class="{{ $head }} sticky left-0 z-20 w-[4rem] bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{{ $arrow('lan') }}</a></th>
+                        <th scope="col" class="{{ $head }} sticky left-[4rem] z-20 border-r border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
                         {{-- Third, as on the attendance sheet. The two tables list
                              the same children and are read one after the other, so a
                              column that sits in a different place on each is one the
@@ -61,6 +62,10 @@
                         <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('age') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Date of birth, year/month/day">DOB{{ $arrow('age') }}</a></th>
                         <th scope="col" class="{{ $head }}">Age</th>
                         <th scope="col" class="{{ $head }}">Schedule</th>
+                        {{-- Before Status, because it is the column that changes
+                             what a teacher does this morning and Status is the one
+                             that says whether they are here at all. --}}
+                        <th scope="col" class="{{ $head }}">Alerts</th>
                         <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('status') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Status{{ $arrow('status') }}</a></th>
                         <th scope="col" class="{{ $head }} text-right">Actions</th>
                     </tr>
@@ -71,8 +76,8 @@
                                                         {{-- Frozen against a sideways scroll: on a tablet the roll is
                                  wider than the screen, and a row read with the name
                                  off-screen is a row about nobody. --}}
-                            <td class="sticky left-0 z-10 w-[60px] bg-white px-3 py-2 text-sm tabular-nums text-slate-400 dark:bg-night-900 dark:text-slate-500">{{ $child->lan }}</td>
-                            <td class="sticky left-[60px] z-10 border-r border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-night-900">
+                            <td class="sticky left-0 z-10 w-[4rem] bg-white px-3 py-2 text-sm tabular-nums text-slate-400 dark:bg-night-900 dark:text-slate-500">{{ $child->lan }}</td>
+                            <td class="sticky left-[4rem] z-10 border-r border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-night-900">
                                 {{-- The same avatar and name the attendance sheet draws,
                                      in the same classes, so the two tables cannot drift.
 
@@ -95,8 +100,29 @@
                                  width down the column. --}}
                             <td class="whitespace-nowrap px-3 py-2 text-sm tabular-nums text-slate-500 dark:text-slate-400">{{ $child->ageInWords() ?? '—' }}</td>
                             <td class="px-3 py-2 text-sm">@include('children.partials.schedule')</td>
+                            {{-- One under another rather than in a row: two chips
+                                 side by side make a line of text to be read, and
+                                 these are meant to be counted and their colours
+                                 taken in without reading. --}}
                             <td class="px-3 py-2">
-                                <span class="rounded-md px-2 py-0.5 text-[11px] font-semibold {{ $child->status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' }}">{{ $child->status }}</span>
+                                @forelse($child->alertList() as $alert)
+                                    <span class="mb-1 mr-1 inline-flex max-w-[16rem] items-center gap-1.5 truncate rounded-full px-2 py-0.5 text-[0.7333rem] font-semibold {{ $alert['classes'] }}" title="{{ $alert['label'] }}: {{ $alert['text'] }}">
+                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" aria-hidden="true"></span>
+                                        <span class="truncate">{{ $alert['label'] }}: {{ $alert['text'] }}</span>
+                                    </span>
+                                @empty
+                                    <span class="text-sm text-slate-300 dark:text-slate-600">&mdash;</span>
+                                @endforelse
+                            </td>
+                            <td class="px-3 py-2">
+                                @php($statusClasses = [
+                                    'Active' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+                                    'Pending' => 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
+                                ])
+                                {{-- Pending is amber because it is a place held
+                                     rather than a place taken: not here yet, and
+                                     not the grey of somebody who has left. --}}
+                                <span class="rounded-md px-2 py-0.5 text-[0.7333rem] font-semibold {{ $statusClasses[$child->status] ?? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' }}">{{ $child->status }}</span>
                             </td>
                             <td class="whitespace-nowrap px-3 py-2 text-right">
                                 {{-- The roster is already filtered to what this
@@ -106,7 +132,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="8" class="px-3 py-12 text-center text-sm text-slate-500">No children have been added yet.</td></tr>
+                        <tr><td colspan="9" class="px-3 py-12 text-center text-sm text-slate-500">No children have been added yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

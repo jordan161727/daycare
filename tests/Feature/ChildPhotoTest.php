@@ -108,7 +108,8 @@ class ChildPhotoTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertNotNull(Child::firstWhere('lan', '2002')->photo_path);
+        // Found by name: the LAN posted above is ignored and one issued.
+        $this->assertNotNull(Child::firstWhere('first_name', 'Grace')->photo_path);
     }
 
     public function test_the_photo_is_served_to_staff_who_may_see_the_child(): void

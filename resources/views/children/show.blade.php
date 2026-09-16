@@ -144,7 +144,10 @@
             </div>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-            <a href="{{ route('children.index') }}" class="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold ring-1 ring-white/25 transition hover:bg-white/20">← Roster</a>
+            {{-- Back to wherever this record was opened from, not to one named
+                 page: it is reached from the roster, from the attendance sheet
+                 and from a search, and only one of those was ever the roster. --}}
+            <a href="{{ $back }}" class="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold ring-1 ring-white/25 transition hover:bg-white/20">← Back</a>
             {{-- Whoever may read this record may keep it up to date. A teacher
                  gets the contact details, the pick-up list and the notes; what
                  decides rooms, enrolment and billing stays the director's, and
@@ -179,6 +182,19 @@
 
 {{-- The line that changes what somebody does in the next five minutes, above
      everything it would otherwise be scrolled past for. --}}
+{{-- The alerts above the paragraph they summarise, because a relief teacher
+     reads down this page and the chips are what they came for. --}}
+@if($child->alertList())
+    <div class="mt-4 flex flex-wrap gap-2">
+        @foreach($child->alertList() as $alert)
+            <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold {{ $alert['classes'] }}">
+                <span class="h-1.5 w-1.5 rounded-full bg-current opacity-60" aria-hidden="true"></span>
+                {{ $alert['label'] }}: {{ $alert['text'] }}
+            </span>
+        @endforeach
+    </div>
+@endif
+
 @if(filled($child->important_notes))
     <div class="mt-6 flex gap-4 rounded-2xl border border-amber-300/70 bg-amber-50 p-5 dark:border-amber-400/30 dark:bg-amber-500/10">
         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400/25 text-lg">⚠</span>

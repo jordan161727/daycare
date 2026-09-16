@@ -94,7 +94,7 @@ class KidIconTest extends TestCase
         // the whole of what a signed-in box shows, so there is no second mark
         // to read and no second mark to keep in step.
         $this->assertStringContainsString('x-text="displayTime(child.id,', $html, 'the cell no longer shows the arrival time');
-        $this->assertStringContainsString('const short = this.sessionTime(childId, date, session);', $html);
+        $this->assertStringContainsString('return this.sessionTime(childId, date, session);', $html);
     }
 
     public function test_the_rows_name_the_room_by_its_animal(): void

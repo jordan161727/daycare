@@ -65,6 +65,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:var(--ink);margin:0;background
 table.grid{width:100%;border-collapse:collapse;table-layout:fixed;}
 .grid th,.grid td{border:0.5px solid var(--line);padding:0;text-align:center;font-size:8px;height:15px;}
 .grid .nm{text-align:left;padding-left:4px;font-size:8.5px;width:15%;border-left:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hrs{color:var(--ink-soft);font-weight:normal;font-variant-numeric:tabular-nums;}
 
 /* The week band. A date is found by counting along a row, and the band is what
    stops that count starting from the far left of the month every time. */
@@ -181,7 +182,8 @@ tr.vf td.nm{color:var(--ink-faint);font-size:7.5px;}
             <tr>
                 {{-- A split room writes the name once and lets the second row
                      carry the half alone, so a pair reads as one child. --}}
-                <td class="nm">@if($row['repeat'])<span class="half">{{ $row['session'] }}</span>@else{{ $row['name'] }}@if($row['session']) <span class="half">{{ $row['session'] }}</span>@endif @endif</td>
+                <td class="nm">@if($row['repeat'])<span class="half">{{ $row['session'] }}</span>@else{{ $row['name'] }}@if($row['hours'] ?? null) <span class="hrs">{{ $row['hours'] }}</span>@endif
+                    @if($row['session']) <span class="half">{{ $row['session'] }}</span>@endif @endif</td>
                 @foreach($days as $day)
                     @php($state = $row['cells'][$day->toDateString()])
                     @if($state === 'closed' || $state === 'out')

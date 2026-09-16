@@ -26,6 +26,68 @@ class ChildProfileTest extends TestCase
             ->assertSee(route('children.show', $child), escape: false);
     }
 
+    /**
+     * Back goes where the reader came from, not to one named page.
+     *
+     * The record is opened from the roster, from the attendance sheet, and from
+     * a search. The link said "Roster", so anyone arriving from the sheet
+     * pressed it and landed somewhere they had not been, having lost the week
+     * they had open.
+     */
+    public function test_back_returns_to_the_page_the_record_was_opened_from(): void
+    {
+        $child = $this->child();
+        $sheet = route('attendance.index', ['date' => '2026-09-14']);
+
+        $this->actingAs($this->admin())
+            ->get(route('children.show', $child), ['referer' => $sheet])
+            ->assertOk()
+            ->assertSee('← Back')
+            ->assertSee($sheet, escape: false);
+    }
+
+    /** With nowhere to go back to, the roster is the place a record belongs to. */
+    public function test_back_falls_to_the_roster_when_there_is_no_previous_page(): void
+    {
+        $child = $this->child();
+
+        $this->actingAs($this->admin())
+            ->get(route('children.show', $child))
+            ->assertOk()
+            ->assertSee(route('children.index'), escape: false);
+    }
+
+    /**
+     * And never back to the record itself.
+     *
+     * Saving an edit lands here from the edit form, so honouring the referer
+     * would make Back return to the form just left — and a reader who reloads
+     * the record would get a Back that reloads the page it is on.
+     */
+    public function test_back_does_not_point_at_the_record_or_its_own_form(): void
+    {
+        $child = $this->child();
+
+        foreach ([route('children.show', $child), route('children.edit', $child)] as $own) {
+            $html = $this->actingAs($this->admin())
+                ->get(route('children.show', $child), ['referer' => $own])
+                ->assertOk()
+                ->getContent();
+
+            $this->assertStringContainsString('href="'.route('children.index').'" class="rounded-xl bg-white/10', $html);
+        }
+    }
+
+    /** A Back button is not a way off this site. */
+    public function test_back_refuses_an_outside_referer(): void
+    {
+        $child = $this->child();
+
+        $this->actingAs($this->admin())
+            ->get(route('children.show', $child), ['referer' => 'https://example.com/somewhere'])
+            ->assertOk()
+            ->assertDontSee('https://example.com/somewhere', escape: false);
+    }
     public function test_the_record_shows_what_is_on_file(): void
     {
         $child = $this->child([

@@ -46,21 +46,26 @@ class TabletLayoutTest extends TestCase
 
         // LAN against the edge, Student parked against LAN's width.
         $this->assertStringContainsString('att-col-lan sticky left-0 z-20', $html);
-        $this->assertStringContainsString('att-col-student sticky left-[60px] z-20', $html);
+        $this->assertStringContainsString('att-col-student sticky left-[4rem] z-20', $html);
         $this->assertStringContainsString('att-lan sticky left-0 z-10', $html);
-        $this->assertStringContainsString('att-student sticky left-[60px] z-10', $html);
+        $this->assertStringContainsString('att-student sticky left-[4rem] z-10', $html);
 
         // A frozen cell needs an opaque ground, or the row scrolling under it
         // shows straight through the name. The card around the table is glass,
         // so the cells cannot inherit one.
         $this->assertStringContainsString('att-lan sticky left-0 z-10 bg-white dark:bg-night-900', $html);
-        $this->assertStringContainsString('att-student sticky left-[60px] z-10 bg-white dark:bg-night-900', $html);
+        $this->assertStringContainsString('att-student sticky left-[4rem] z-10 bg-white dark:bg-night-900', $html);
 
         // And the table declares a width that matches what it now holds — two
-        // frozen columns and five fixed 116px days — so the browser scrolls
+        // frozen columns and five fixed day columns — so the browser scrolls
         // rather than squeezing the boxes, which is the thing the frozen
         // columns are there to make safe.
-        $this->assertStringContainsString('min-w-[1290px]', $html);
+        //
+        // In rem, like every width in the grid, so the table grows with the
+        // text rather than holding 1290 pixels while the words inside it get
+        // bigger. 86rem is the same 1290px at the 15px root.
+        $this->assertStringContainsString('min-w-[86rem]', $html);
+        $this->assertStringNotContainsString('min-w-[1290px]', $html);
     }
 
     public function test_the_roster_freezes_the_same_two_columns(): void
@@ -72,8 +77,8 @@ class TabletLayoutTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString('sticky left-0 z-20 w-[60px]', $html);
-        $this->assertStringContainsString('sticky left-[60px] z-20', $html);
+        $this->assertStringContainsString('sticky left-0 z-20 w-[4rem]', $html);
+        $this->assertStringContainsString('sticky left-[4rem] z-20', $html);
     }
 
     /**

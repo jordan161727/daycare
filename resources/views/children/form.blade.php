@@ -50,7 +50,7 @@
      whole form rather than the easy two thirds of it. --}}
 @php($identityFields = ['lan', 'dss_case_no', 'dss_cin', 'child_name', 'first_name', 'last_name', 'birth_date', 'gender'])
 @php($enrollmentFields = ['classroom_override', 'classroom_override_from', 'status', 'enrolled_on', 'withdrawn_on', 'schedule_days', 'expected_hours_per_week', 'drop_off_time', 'pick_up_time'])
-@php($noteFields = ['other_notes', 'important_notes'])
+@php($noteFields = ['other_notes', 'important_notes', 'alerts'])
 
 @php($steps = [
     ['label' => 'Basics', 'blurb' => 'Who the child is, and how their place at the centre is set up.', 'fields' => array_merge(['photo'], $identityFields, $enrollmentFields)],
@@ -170,10 +170,15 @@
                         </div>
                         <div class="cs-grid">
                             <label>
-                                <span class="cs-label">LAN <span class="cs-req">*</span>@if(! $child && isset($nextLan))<span class="cs-badge">Auto</span>@endif</span>
-                                <input name="lan" value="{{ old('lan', $child?->lan ?? ($nextLan ?? '')) }}" class="cs-input" required>
-                                <x-input-error :messages="$errors->get('lan')" />
-                                @if(! $child && isset($nextLan))<span class="cs-help">Next number in sequence — change it if the paper record uses another.</span>@endif
+                                <span class="cs-label">LAN @if(! $child)<span class="cs-badge">Auto</span>@endif</span>
+                                {{-- Read-only, and issued on the server whatever
+                                     arrives here: it is a unique key, and a
+                                     typeable one meant two people adding
+                                     children at once both took the number they
+                                     were shown, the second finding out only
+                                     when the finished form was refused. --}}
+                                <input value="{{ $child?->lan ?? ($nextLan ?? '') }}" class="cs-input" readonly tabindex="-1" aria-readonly="true">
+                                <span class="cs-help">{{ $child ? 'Issued when this record was created. It does not change.' : 'The next number in sequence, issued when this record is saved.' }}</span>
                             </label>
                             {{-- The two numbers the state knows a subsidised child
                                  by, beside the one the centre knows them by. The
@@ -287,8 +292,9 @@
                             </label>
                             <label>
                                 <span class="cs-label">Status <span class="cs-req">*</span></span>
-                                <select name="status" class="cs-input">@foreach(['Active', 'Inactive'] as $status)<option value="{{ $status }}" @selected(old('status', $child?->status ?? 'Active') === $status)>{{ $status }}</option>@endforeach</select>
+                                <select name="status" class="cs-input">@foreach(\App\Models\Child::STATUSES as $status)<option value="{{ $status }}" @selected(old('status', $child?->status ?? 'Active') === $status)>{{ $status }}</option>@endforeach</select>
                                 <x-input-error :messages="$errors->get('status')" />
+                                <span class="cs-help">Pending is a place agreed and not yet started: on the roll, not counted as here.</span>
                             </label>
                             <label>
                                 <span class="cs-label">Enrolled on</span>
@@ -429,6 +435,48 @@
                     </section>
                     <section class="cs-card">
                         <div class="cs-card-head"><h3 class="cs-card-title">Important notes</h3></div>
+
+                        {{-- The short form of what is below, so it can be read
+                             at a glance down a roll of sixty. A kind and a line
+                             apiece: the kind colours the chip, which is how a
+                             court order gets noticed without being read.
+
+                             Above the paragraph rather than instead of it — an
+                             allergy needs more said about it than fits on a
+                             chip, and the paragraph is where that goes. --}}
+                        <div
+                            x-data="{
+                                rows: @js(old('alerts', $child?->alerts ?? ($extracted['alerts'] ?? []))),
+                                examples: @js(collect(\App\Models\Child::ALERT_TYPES)->map->example),
+                                add() { this.rows.push({type: 'allergy', text: ''}); },
+                                remove(index) { this.rows.splice(index, 1); },
+                            }"
+                            class="cs-alerts"
+                        >
+                            <span class="cs-label">Alerts</span>
+
+                            {{-- The hidden empty value keeps "cleared" and
+                                 "untouched" apart, the same way the day boxes
+                                 do: without it, removing the last alert posts
+                                 nothing at all and reads as never asked. --}}
+                            <input type="hidden" name="alerts" value="">
+
+                            <template x-for="(row, index) in rows" :key="index">
+                                <div class="cs-alert-row">
+                                    <select :name="`alerts[${index}][type]`" x-model="row.type" class="cs-input cs-alert-type">
+                                        @foreach(\App\Models\Child::ALERT_TYPES as $value => $type)
+                                            <option value="{{ $value }}">{{ $type['label'] }}</option>
+                                        @endforeach
+                                    </select>
+                                    <input :name="`alerts[${index}][text]`" x-model="row.text" :placeholder="examples[row.type]" maxlength="120" class="cs-input">
+                                    <button type="button" @click="remove(index)" class="cs-alert-drop" aria-label="Remove this alert">&times;</button>
+                                </div>
+                            </template>
+
+                            <button type="button" @click="add()" class="cs-alert-add">+ Add alert</button>
+                            <span class="cs-help">Shown as a chip on the roll and at the top of the record. Keep it to the line a relief teacher needs before the day starts.</span>
+                        </div>
+
                         <label>
                             <span class="cs-label">Allergies, medication, court orders{!! $fromDocument('important_notes') ? $documentBadge : '' !!}</span>
                             <textarea name="important_notes" rows="4" class="{{ $fieldClass('important_notes') }}">{{ old('important_notes', $child?->important_notes ?? ($extracted['important_notes'] ?? '')) }}</textarea>

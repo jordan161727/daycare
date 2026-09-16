@@ -111,8 +111,11 @@ class AttendanceCellDesignTest extends TestCase
         $this->assertStringContainsString('class="att-tag" x-text="session"', $html);
         $this->assertStringContainsString("child.sessions.length > 1 ? 'att-stack' : ''", $html);
 
-        // And its time is the compact form, because it shares the cell.
-        $this->assertStringContainsString("if (! short || session !== 'FULL') return short;", $html);
+        // And its time is the compact form, because it shares the cell —
+        // which is now the only form, so a whole day and a half day are the
+        // same shape down one column.
+        $this->assertStringContainsString('displayTime(childId, date, session) {'."
+".'        return this.sessionTime(childId, date, session);', $html);
     }
 
     public function test_the_key_is_a_strip_above_the_sheet_that_can_be_put_away(): void
@@ -135,12 +138,13 @@ class AttendanceCellDesignTest extends TestCase
         $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time. The pencil types an exact time.', $html);
         $this->assertStringContainsString("'Only ' + this.todayLabel + ' can be changed.'", $html);
 
-        // Read on the first morning and never again, so it can be put away —
-        // and stays away, in a try/catch because a private window throws on the
-        // accessor itself and a page that will not render is the worse outcome.
+        // Read on the first morning and never again, so the sheet does not open
+        // carrying it: away by default, a press of the "?" away, and remembered
+        // once asked for. In a try/catch because a private window throws on the
+        // accessor itself, and a page that will not render is the worse outcome.
         $this->assertStringContainsString('@attendance-key.window="toggleKey()"', $html);
-        $this->assertStringContainsString("localStorage.getItem('attendance.key')", $html);
-        $this->assertStringContainsString('catch { return true; }', $html);
+        $this->assertStringContainsString("localStorage.getItem('attendance.key') === 'shown'", $html);
+        $this->assertStringContainsString('catch { return false; }', $html);
     }
 
     public function test_the_closed_day_chip_says_which_days_and_why(): void

@@ -102,6 +102,24 @@
      */
     html { font-size: 15px; }
 
+    /* A bigger screen reads the same page at the same pixel sizes across far
+       more glass, so the text climbs with the room available. 15px was chosen
+       for a tablet; on a desk monitor it is what the centre was answering with
+       browser zoom.
+
+       The attendance grid grows with it and will want scrolling sideways on
+       the narrower of these — which is what its frozen LAN and Student columns
+       are for, and what zooming was already doing.
+
+       Viewport widths are CSS pixels, so zoom is already counted: at 125% a
+       1920 screen reports 1536 and the smaller step applies. This is meant to
+       replace that zoom, not to stack with it. */
+    @media (min-width: 1280px) { html { font-size: 16px; } }
+    @media (min-width: 1440px) { html { font-size: 17.5px; } }
+    @media (min-width: 1600px) { html { font-size: 19px; } }
+    @media (min-width: 1920px) { html { font-size: 20.5px; } }
+    @media (min-width: 2200px) { html { font-size: 22px; } }
+
     body { font-family: Inter, 'Instrument Sans', ui-sans-serif, system-ui, sans-serif; }
     [x-cloak] { display: none !important; }
 }
@@ -143,24 +161,29 @@
        @apply rather than hex, so dark mode comes from Tailwind's own variant.
        The hand-written .dark rules this replaces were a second palette to
        keep in step, and the first thing to fall out of it. */
-    .att-stack { display: flex; flex-direction: column; gap: 3px; align-items: center; }
+    .att-stack { display: flex; flex-direction: column; gap: 0.2rem; align-items: center; }
     .att-cell {
-        width: 96px; height: 26px; margin: 0 auto;
+        width: 6.4rem; height: 1.7333rem; margin: 0 auto;
         display: flex; align-items: center;
-        border-radius: 8px; border: 1px solid transparent;
-        font-size: 11px; font-variant-numeric: tabular-nums; color: inherit;
+        border-radius: 0.5333rem; border: 1px solid transparent;
+        font-size: 0.7333rem; font-variant-numeric: tabular-nums; color: inherit;
         background: transparent; cursor: pointer; overflow: hidden; padding: 0;
         transition: background-color .12s ease, border-color .12s ease;
     }
-    .att-cell.att-half { height: 23px; }
+    .att-cell.att-half { height: 1.5333rem; }
     .att-cell:focus-visible { @apply outline-2 outline-offset-1 outline-indigo-500; }
     .att-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
-    .att-tag { width: 15px; flex: none; padding-left: 4px; font-size: 10px; text-align: left; @apply text-slate-400 dark:text-slate-500; }
-    .att-pad { width: 15px; flex: none; }
-    .att-dot { width: 7px; height: 7px; border-radius: 50%; @apply bg-slate-300 dark:bg-slate-600; }
+    .att-tag { width: 1rem; flex: none; padding-left: 0.2667rem; font-size: 0.6667rem; text-align: left; @apply text-slate-400 dark:text-slate-500; }
+    .att-pad { width: 1rem; flex: none; }
+    .att-dot { width: 0.4667rem; height: 0.4667rem; border-radius: 50%; @apply bg-slate-300 dark:bg-slate-600; }
 
     /* The four marks, in the sheet's own colours. */
-    .att-expected { @apply border-dashed border-sky-400 bg-white hover:border-sky-600 dark:border-sky-500/70 dark:bg-transparent dark:hover:border-sky-400; }
+    /* Two pixels, not one: a single dashed pixel in sky-400 is a few pixels
+       of colour spread over a gap, and at arm's length on a bright screen it
+       read as an empty cell — which is the one thing it must not, because an
+       empty cell means the child is not expected. Dashed either way: that is
+       what separates "expected" from the solid box of an arrival. */
+    .att-expected { border-width: 2px; @apply border-dashed border-sky-500 bg-white hover:border-sky-600 dark:border-sky-400/80 dark:bg-transparent dark:hover:border-sky-300; }
     .att-none { @apply border-transparent bg-transparent text-slate-300 hover:text-indigo-500 dark:text-slate-600 dark:hover:text-indigo-300; }
     .att-time { @apply border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
     .att-time .att-tag { @apply text-emerald-700 dark:text-emerald-200; }
@@ -187,7 +210,7 @@
     /* The strip on the right of a time, in Edit: press it to type the exact
        hour. It takes the box's own colour so it reads as part of the box. */
     .att-pencil {
-        width: 26px; height: 100%; flex: none;
+        width: 1.7333rem; height: 100%; flex: none;
         display: flex; align-items: center; justify-content: center;
         padding: 0; border: 0; border-left-width: 1px; border-left-style: solid; border-radius: 0;
         background: transparent; cursor: pointer;
@@ -198,10 +221,10 @@
     .att-pencil:hover { @apply bg-slate-900/5 dark:bg-white/10; }
     .att-pencil:focus-visible { @apply outline-2 -outline-offset-2 outline-indigo-500; }
 
-    .att-cell.att-editing { padding: 0 4px; cursor: text; @apply border-dashed border-emerald-400 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-500/15; }
+    .att-cell.att-editing { padding: 0 0.2667rem; cursor: text; @apply border-dashed border-emerald-400 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-500/15; }
     .att-cell.att-editing input {
         flex: 1; min-width: 0; border: 0; background: transparent;
-        font: inherit; font-size: 11px; text-align: center; outline: none;
+        font: inherit; font-size: 0.7333rem; text-align: center; outline: none;
         @apply text-emerald-800 dark:text-emerald-100;
     }
 
@@ -209,28 +232,28 @@
        a switch says "in" or "out" the way a button labelled Edit does not.
        Amber for Edit, which is the colour this app has always used for the
        mode where taps change things that already happened. */
-    .att-mode { display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px 0 3px; border-radius: 999px; border-width: 1px; @apply border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-slate-800; }
+    .att-mode { display: flex; align-items: center; gap: 0.4667rem; height: 1.7333rem; padding: 0 0.6667rem 0 0.2rem; border-radius: 66.6rem; border-width: 1px; @apply border-slate-200 bg-slate-100 dark:border-white/10 dark:bg-slate-800; }
     .att-mode[data-edit="true"] { @apply border-amber-400 bg-amber-50 dark:border-amber-400/50 dark:bg-amber-500/10; box-shadow: inset 0 0 0 1px rgb(251 191 36 / .5); }
-    .att-mode-name { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; @apply text-slate-600 dark:text-slate-300; }
+    .att-mode-name { font-size: 0.8rem; font-weight: 600; line-height: 1; white-space: nowrap; @apply text-slate-600 dark:text-slate-300; }
     .att-mode[data-edit="true"] .att-mode-name { @apply text-amber-900 dark:text-amber-200; }
-    .att-switch { position: relative; width: 34px; height: 18px; flex: none; padding: 0; border-radius: 999px; border-width: 1px; cursor: pointer; @apply border-slate-300 bg-white dark:border-white/20 dark:bg-slate-900; }
+    .att-switch { position: relative; width: 2.2667rem; height: 1.2rem; flex: none; padding: 0; border-radius: 66.6rem; border-width: 1px; cursor: pointer; @apply border-slate-300 bg-white dark:border-white/20 dark:bg-slate-900; }
     .att-switch[aria-checked="true"] { @apply border-transparent bg-amber-500; }
-    .att-knob { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; border-width: 1px; display: flex; align-items: center; justify-content: center; transition: left .16s ease; @apply border-slate-200 bg-white text-slate-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400; }
-    .att-switch[aria-checked="true"] .att-knob { left: 17px; @apply border-transparent bg-white text-amber-600; }
-    .att-knob svg { width: 9px; height: 9px; }
+    .att-knob { position: absolute; top: 1px; left: 1px; width: 0.9333rem; height: 0.9333rem; border-radius: 50%; border-width: 1px; display: flex; align-items: center; justify-content: center; transition: left .16s ease; @apply border-slate-200 bg-white text-slate-500 dark:border-white/10 dark:bg-slate-800 dark:text-slate-400; }
+    .att-switch[aria-checked="true"] .att-knob { left: 1.1333rem; @apply border-transparent bg-white text-amber-600; }
+    .att-knob svg { width: 0.6rem; height: 0.6rem; }
     .att-knob svg, .att-pencil svg, .att-lock svg { display: block; }
     .att-lock { display: inline-flex; vertical-align: -1px; @apply text-slate-400 dark:text-slate-500; }
 
-    .att-hint { font-size: 12px; @apply text-slate-400 dark:text-slate-500; }
+    .att-hint { font-size: 0.8rem; @apply text-slate-400 dark:text-slate-500; }
 
     /* The grid around the cells: fixed day columns, one rule under each row,
        today in the sky the sheet has always used for it. Left cells stay
        frozen for the tablet, so they carry their own opaque ground. */
     .att-table { border-collapse: collapse; table-layout: fixed; }
-    .att-table th, .att-table td { padding: 8px 4px; text-align: center; vertical-align: middle; @apply border-b border-slate-100 dark:border-white/5; }
-    .att-th { font-size: 11px; font-weight: 500; padding-bottom: 10px !important; @apply text-slate-500 dark:text-slate-400; }
-    .att-col-lan, .att-lan { width: 60px; }
-    .att-col-student, .att-student { width: 186px; }
+    .att-table th, .att-table td { padding: 0.5333rem 0.2667rem; text-align: center; vertical-align: middle; @apply border-b border-slate-100 dark:border-white/5; }
+    .att-th { font-size: 0.7333rem; font-weight: 500; padding-bottom: 0.6667rem !important; @apply text-slate-500 dark:text-slate-400; }
+    .att-col-lan, .att-lan { width: 4rem; }
+    .att-col-student, .att-student { width: 12.4rem; }
     /* An element and two classes, to outrank the centring on `.att-table th,
        .att-table td` — a class and an element, which a bare class loses to. */
     .att-table th.att-col-student, .att-table td.att-student { text-align: left; }
@@ -238,43 +261,43 @@
        avatar right and a short one pulled it left, so the column of faces
        zig-zagged instead of making a line, and a column of names is scanned
        down the edge they start at. */
-    .att-person { display: flex; align-items: center; gap: 9px; text-align: left; justify-content: flex-start; }
-    .att-day { width: 116px; }
+    .att-person { display: flex; align-items: center; gap: 0.6rem; text-align: left; justify-content: flex-start; }
+    .att-day { width: 7.7333rem; }
     .att-today { @apply bg-sky-100 dark:bg-sky-500/10; }
     .att-closed-col { @apply bg-rose-50/60 dark:bg-rose-500/5; }
-    .att-lan { font-size: 11px; font-variant-numeric: tabular-nums; @apply text-slate-400 dark:text-slate-500; }
-    .att-avatar { width: 26px; height: 26px; flex: none; border-radius: 50%; overflow: hidden; font-size: 10px; }
-    .att-avatar > * { width: 100% !important; height: 100% !important; font-size: 10px !important; }
-    .att-name { display: block; font-size: 13px; font-weight: 500; @apply text-slate-800 dark:text-slate-100; }
+    .att-lan { font-size: 0.7333rem; font-variant-numeric: tabular-nums; @apply text-slate-400 dark:text-slate-500; }
+    .att-avatar { width: 1.7333rem; height: 1.7333rem; flex: none; border-radius: 50%; overflow: hidden; font-size: 0.6667rem; }
+    .att-avatar > * { width: 100% !important; height: 100% !important; font-size: 0.6667rem !important; }
+    .att-name { display: block; font-size: 0.8667rem; font-weight: 500; @apply text-slate-800 dark:text-slate-100; }
 
     /* One width apiece, measured against the longest real value. Clipped as
        well as sized: table-layout is fixed, so anything that does not fit is
        drawn outside the cell and over the next column rather than wrapped —
        and centred text spills both ways at once. The widths stop that
        happening; the clip stops it mattering when a longer room name arrives. */
-    .att-meta { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; @apply text-slate-500 dark:text-slate-400; }
-    .att-th.att-meta { font-size: 11px; text-transform: uppercase; letter-spacing: .02em; @apply text-slate-400 dark:text-slate-500; }
+    .att-meta { font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; @apply text-slate-500 dark:text-slate-400; }
+    .att-th.att-meta { font-size: 0.7333rem; text-transform: uppercase; letter-spacing: .02em; @apply text-slate-400 dark:text-slate-500; }
     /* Read down its left edge: the rooms run from four characters to ten and
        carry an icon, so centred they landed in six different places. The
        gutter keeps the icon off the frozen name column that ends beside it. */
-    .att-w-room { width: 122px; }   /* "🐘 School Age ✎" */
-    .att-table th.att-w-room, .att-table td.att-w-room { text-align: left; padding-left: 12px; }
-    .att-w-dob { width: 104px; }     /* "2018/09/18" */
-    .att-w-age { width: 74px; }      /* "10y 11m" */
-    .att-w-hours { width: 152px; }   /* "8:00 AM – 5:30 PM" */
+    .att-w-room { width: 8.1333rem; }   /* "🐘 School Age ✎" */
+    .att-table th.att-w-room, .att-table td.att-w-room { text-align: left; padding-left: 0.8rem; }
+    .att-w-dob { width: 6.9333rem; }     /* "2018/09/18" */
+    .att-w-age { width: 4.9333rem; }      /* "10y 11m" */
+    .att-w-hours { width: 10.1333rem; }   /* "8:00 AM – 5:30 PM" */
 
     /* Today, as a pill rather than a tint the width of the column. Sky is the
        one colour the sheet does not use elsewhere — the boxes are green,
        amber, sky-outlined and grey — so the day is found without reading a
        date. */
-    .att-dayhead { display: block; border-radius: 8px; padding: 4px 6px; }
-    .att-dayhead > span:first-child { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; @apply text-slate-400 dark:text-slate-500; }
-    .att-dayhead > span:last-child { font-size: 12px; font-weight: 600; @apply text-slate-700 dark:text-slate-200; }
+    .att-dayhead { display: block; border-radius: 0.5333rem; padding: 0.2667rem 0.4rem; }
+    .att-dayhead > span:first-child { font-size: 0.7333rem; text-transform: uppercase; letter-spacing: .04em; @apply text-slate-400 dark:text-slate-500; }
+    .att-dayhead > span:last-child { font-size: 0.8rem; font-weight: 600; @apply text-slate-700 dark:text-slate-200; }
     .att-dayhead-today { @apply bg-sky-200 dark:bg-sky-500/25; }
     .att-dayhead-today > span:first-child { font-weight: 600; @apply text-sky-700 dark:text-sky-300; }
     .att-dayhead-today > span:last-child { @apply text-sky-900 dark:text-sky-100; }
 
-    @media (max-width: 820px) { .att-col-student, .att-student { width: 160px; } .att-day { width: 100px; } }
+    @media (max-width: 820px) { .att-col-student, .att-student { width: 10.6667rem; } .att-day { width: 6.6667rem; } }
     /* The scrollbar the nav gets when the links outrun the screen: present when
        it is needed, and not a grey slab down the side of the brand colour. */
     .sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.75) transparent; }
@@ -448,6 +471,18 @@
         letter-spacing: 0.04em;
     }
 
+    /* Issued by the system rather than typed. It reads as settled — the
+       same ground as a disabled field, and the pointer says so before the
+       click does. Dragging across it still selects, so the number can be read
+       off and copied onto paper. */
+    .cs-input[readonly] {
+        background: rgb(0 0 0 / 0.03);
+        color: var(--cs-help);
+        cursor: not-allowed;
+    }
+    .dark .cs-input[readonly] { background: rgb(255 255 255 / 0.04); }
+    .cs-input[readonly]:focus { border-color: var(--cs-field-border); box-shadow: none; }
+
     .cs-input:disabled,
     .cs-day input:disabled + span {
         background: rgb(0 0 0 / 0.03);
@@ -459,6 +494,26 @@
     .cs-day input:disabled:checked + span { border-color: var(--cs-field-border); }
     .cs-btn:disabled { opacity: .45; cursor: not-allowed; }
 
+    /* The alert rows: a kind, a line, and a way to take the row back off.
+       The kind is narrow and fixed so the lines below it start in the same
+       place, which is what makes a stack of them readable. */
+    .cs-alerts { display: block; margin-bottom: 14px; }
+    /* Stops where the line does. Stretched across the panel, the × ended up
+       a hand's width from the words it removes, and these are short: "Banana",
+       "Inhaler in office". A chip is a line, so the field is sized like one. */
+    .cs-alert-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; max-width: 34rem; }
+    .cs-alert-type { width: 118px; flex: none; }
+    .cs-alert-drop {
+        width: 28px; height: 30px; flex: none; border-radius: 8px;
+        font-size: 17px; line-height: 1; color: var(--cs-help);
+        background: transparent; border: 1px solid transparent; cursor: pointer;
+    }
+    .cs-alert-drop:hover { background: rgb(0 0 0 / 0.05); color: var(--cs-ink); }
+    .cs-alert-add {
+        font-size: 12px; font-weight: 600; color: var(--cs-primary);
+        background: transparent; border: 0; padding: 2px 0; cursor: pointer;
+    }
+    .cs-alert-add:hover { text-decoration: underline; }
     /* Read-only, and says so by not looking like something you can type in. */
     .cs-readout { border: 1px solid var(--cs-field-border); border-radius: 9px; background: var(--cs-card); padding: 7px 10px; }
 

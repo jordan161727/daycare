@@ -135,7 +135,7 @@
                                     {{-- Sunday first, because that is how a wall
                                          calendar reads, even though the sheet
                                          itself starts on the Monday beside it. --}}
-                                    <div class="mt-2 grid grid-cols-7 text-center text-[11px] font-semibold text-slate-400">
+                                    <div class="mt-2 grid grid-cols-7 text-center text-[0.7333rem] font-semibold text-slate-400">
                                         <template x-for="(name, index) in ['S','M','T','W','T','F','S']" :key="index"><span x-text="name" class="py-1"></span></template>
                                     </div>
 
@@ -244,15 +244,15 @@
                                 </button>
 
                                 <template x-teleport="body">
-                                <div x-show="menu" x-cloak x-transition @click.outside="menu = false" :style="`top: ${y}px; left: ${x}px`" class="fixed z-50 w-[200px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-white/10 dark:bg-slate-900">
+                                <div x-show="menu" x-cloak x-transition @click.outside="menu = false" :style="`top: ${y}px; left: ${x}px`" class="fixed z-50 w-[13.3333rem] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-white/10 dark:bg-slate-900">
                                     @php($printMonth = \Illuminate\Support\Carbon::parse($weekStartDate))
                                     <a href="{{ route('attendance.print', ['date' => $weekStartDate]) }}" target="_blank" rel="noopener" @click="menu = false" class="block px-3 py-1.5 text-xs font-semibold transition hover:bg-slate-100 dark:hover:bg-white/10">
                                         This week
-                                        <span class="mt-0.5 block text-[10.5px] font-normal text-slate-400">{{ $weekDates->first()->format('M j') }} – {{ $weekDates->last()->format('M j') }} · one page</span>
+                                        <span class="mt-0.5 block text-[0.7rem] font-normal text-slate-400">{{ $weekDates->first()->format('M j') }} – {{ $weekDates->last()->format('M j') }} · one page</span>
                                     </a>
                                     <a href="{{ route('attendance.print', ['date' => $weekStartDate, 'range' => 'month']) }}" target="_blank" rel="noopener" @click="menu = false" class="block px-3 py-1.5 text-xs font-semibold transition hover:bg-slate-100 dark:hover:bg-white/10">
                                         Whole month
-                                        <span class="mt-0.5 block text-[10.5px] font-normal text-slate-400">{{ $printMonth->format('F Y') }} · a page per week</span>
+                                        <span class="mt-0.5 block text-[0.7rem] font-normal text-slate-400">{{ $printMonth->format('F Y') }} · a page per week</span>
                                     </a>
                                 </div>
                                 </template>
@@ -334,7 +334,7 @@
                             @resize.window="menu && place()"
                             class="relative shrink-0"
                         >
-                            <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="menu" aria-haspopup="true" class="grid h-[26px] w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
+                            <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="menu" aria-haspopup="true" class="grid h-[1.7333rem] w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
                             <template x-teleport="body">
                             <div x-show="menu" x-cloak x-transition @click.outside="menu = false" :style="`top: ${y}px; left: ${x}px`" class="fixed z-50 w-56 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
                                 {{-- How names read on this reader's own screens.
@@ -350,7 +350,7 @@
                                 @php($nameFormat = auth()->user()->nameFormat())
                                 <form method="POST" action="{{ route('profile.name-format') }}" class="space-y-1.5">
                                     @csrf
-                                    <span class="block text-[11px] font-semibold text-slate-500 dark:text-slate-400">Show names as</span>
+                                    <span class="block text-[0.7333rem] font-semibold text-slate-500 dark:text-slate-400">Show names as</span>
                                     @foreach(\App\Models\User::NAME_FORMATS as $value => $example)
                                         <button
                                             name="name_format"
@@ -374,7 +374,7 @@
                 {{-- A finished week is a record. Say so plainly instead of showing
                      controls that would be refused. --}}
                 @if($weekIsFrozen)
-                    <div class="mt-2 flex flex-wrap items-center gap-x-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <div class="mt-2 flex flex-wrap items-center gap-x-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[0.7333rem] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         <span>🔒 This week has ended — the schedule is locked. Sign-ins already recorded stand as they are.</span>
                     </div>
                 @endif
@@ -401,8 +401,8 @@
                         {{-- Days the centre is shut are why a column is gray, so the
                              count sits beside the filters rather than being found by
                              opening the schedule view. --}}
-                        <span x-show="closedCount > 0" x-cloak class="hidden items-center gap-1 text-[11px] font-medium text-slate-500 sm:inline-flex dark:text-slate-400" :title="closedReasons()">
-                            <span class="grid h-3.5 w-3.5 place-items-center rounded-full border border-current text-[9px] leading-none" aria-hidden="true">i</span>
+                        <span x-show="closedCount > 0" x-cloak class="hidden items-center gap-1 text-[0.7333rem] font-medium text-slate-500 sm:inline-flex dark:text-slate-400" :title="closedReasons()">
+                            <span class="grid h-3.5 w-3.5 place-items-center rounded-full border border-current text-[0.6rem] leading-none" aria-hidden="true">i</span>
                             <span x-text="closedCount"></span> <span x-text="closedCount === 1 ? 'day closed' : 'days closed'"></span>
                         </span>
 
@@ -425,10 +425,10 @@
                 {{-- What every mark on the sheet means, in the sheet's own marks.
                      Painted from the same $boxStates the grid is painted from, so
                      a chip here and a cell down there cannot come to disagree. --}}
-                <div x-show="view === 'signin' && showKey" x-cloak class="-mx-3 -mb-2.5 mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-b-2xl border-t border-slate-200/70 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+                <div x-show="view === 'signin' && showKey" x-cloak class="-mx-3 -mb-2.5 mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-b-2xl border-t border-slate-200/70 bg-slate-50/70 px-3 py-2 text-[0.7333rem] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
                     @foreach($boxStates as $key => $state)
                         <span class="inline-flex items-center gap-1.5">
-                            <span class="inline-flex h-[22px] min-w-[52px] items-center justify-center rounded-lg border px-2 font-mono text-[10.5px] font-medium leading-none {{ $state['classes'] }}">{{ $state['swatch'] }}</span>
+                            <span class="inline-flex h-[1.4667rem] min-w-[3.4667rem] items-center justify-center rounded-lg border px-2 font-mono text-[0.7rem] font-medium leading-none {{ $state['classes'] }}">{{ $state['swatch'] }}</span>
                             {{ $state['label'] }}
                         </span>
                     @endforeach
@@ -447,7 +447,7 @@
                 <div class="glass-card overflow-hidden rounded-2xl">
                     {{-- Week grid: needs the width, so it only appears from md up. --}}
                     <div class="hidden overflow-x-auto md:block">
-                        <table class="att-table w-full min-w-[1290px]">
+                        <table class="att-table w-full min-w-[86rem]">
                             <thead>
                                 <tr>
                                     {{-- The LAN, not a row number: it is what the paper
@@ -455,10 +455,10 @@
                                          child by. Frozen with the name against a sideways
                                          scroll on a tablet. --}}
                                     <th scope="col" class="att-th att-col-lan sticky left-0 z-20 bg-white dark:bg-night-900" title="Learner account number">LAN</th>
-                                    <th scope="col" :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'" class="att-th att-col-student sticky left-[60px] z-20 bg-white dark:bg-night-900">
+                                    <th scope="col" :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'" class="att-th att-col-student sticky left-[4rem] z-20 bg-white dark:bg-night-900">
                                         <button type="button" @click="toggleSort" class="group inline-flex items-center gap-1.5 transition hover:text-indigo-600 dark:hover:text-indigo-300" :title="sortDirection === 'asc' ? 'Sorted A–Z, click for Z–A' : 'Sorted Z–A, click for A–Z'">
                                             <span>Student</span>
-                                            <span class="text-[11px] leading-none opacity-60" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
+                                            <span class="text-[0.7333rem] leading-none opacity-60" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
                                         </button>
                                     </th>
                                     {{-- Read down a column these compare at a glance, which
@@ -492,7 +492,7 @@
                                             {{-- A closed day still takes sign-ins, so the column
                                                  stays live — it just says why it is all dashes. --}}
                                             </span>
-                                            <span x-show="isClosed('{{ $iso }}')" x-cloak class="mt-0.5 block rounded-md bg-rose-50 px-1 text-[10px] font-semibold uppercase text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" x-text="closureReason('{{ $iso }}')"></span>
+                                            <span x-show="isClosed('{{ $iso }}')" x-cloak class="mt-0.5 block rounded-md bg-rose-50 px-1 text-[0.6667rem] font-semibold uppercase text-rose-600 dark:bg-rose-500/10 dark:text-rose-300" x-text="closureReason('{{ $iso }}')"></span>
                                         </th>
                                     @endforeach
                                 </tr>
@@ -501,7 +501,7 @@
                                 <template x-for="child in filteredChildren" :key="child.id">
                                     <tr class="transition hover:bg-slate-50/60 dark:hover:bg-white/5">
                                         <td class="att-td att-lan sticky left-0 z-10 bg-white dark:bg-night-900" x-text="child.lan || '—'"></td>
-                                        <td class="att-td att-student sticky left-[60px] z-10 bg-white dark:bg-night-900">
+                                        <td class="att-td att-student sticky left-[4rem] z-10 bg-white dark:bg-night-900">
                                             <div class="att-person">
                                                 <span class="att-avatar" x-html="child.avatar"></span>
                                                 <span class="min-w-0">
@@ -549,9 +549,9 @@
                         <div class="flex items-center justify-between px-3 py-2">
                             <button type="button" @click="toggleSort" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 <span>Student</span>
-                                <span class="text-[10px] leading-none text-slate-400" x-text="sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A'"></span>
+                                <span class="text-[0.6667rem] leading-none text-slate-400" x-text="sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A'"></span>
                             </button>
-                            <span class="text-[11px] text-slate-400">{{ $weekDates->first()->format('M d') }} – {{ $weekDates->last()->format('M d') }}</span>
+                            <span class="text-[0.7333rem] text-slate-400">{{ $weekDates->first()->format('M d') }} – {{ $weekDates->last()->format('M d') }}</span>
                         </div>
                         <template x-for="child in filteredChildren" :key="'card-' + child.id">
                             <article class="px-3 py-3">
@@ -670,7 +670,7 @@
                         <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
                     </span>
                     <h2 class="text-sm font-bold">Recent sign-ins</h2>
-                    <span class="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300" x-text="recent.length"></span>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[0.7333rem] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300" x-text="recent.length"></span>
                     <button type="button" @click="recentOpen = false" class="ml-auto grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Close">✕</button>
                 </header>
 
@@ -680,22 +680,22 @@
                          whole question being asked. --}}
                     <template x-for="(signIn, index) in recent" :key="signIn.id">
                         <div class="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 transition dark:border-white/5" :class="index === 0 ? 'bg-emerald-50/60 dark:bg-emerald-500/10' : ''">
-                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[13px] text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" aria-hidden="true">✓</span>
+                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[0.8667rem] text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" aria-hidden="true">✓</span>
                             <div class="min-w-0 flex-1">
-                                <p class="truncate text-[13px] font-semibold" x-text="signIn.name"></p>
-                                <p class="truncate text-[11px] text-slate-500 dark:text-slate-400" x-text="signIn.classroom"></p>
+                                <p class="truncate text-[0.8667rem] font-semibold" x-text="signIn.name"></p>
+                                <p class="truncate text-[0.7333rem] text-slate-500 dark:text-slate-400" x-text="signIn.classroom"></p>
                             </div>
-                            <span class="shrink-0 font-mono text-[11px] font-medium tabular-nums text-slate-500 dark:text-slate-400" x-text="signIn.time"></span>
+                            <span class="shrink-0 font-mono text-[0.7333rem] font-medium tabular-nums text-slate-500 dark:text-slate-400" x-text="signIn.time"></span>
                         </div>
                     </template>
 
-                    <p x-show="recent.length === 0" class="px-4 py-12 text-center text-[13px] text-slate-500 dark:text-slate-400">
+                    <p x-show="recent.length === 0" class="px-4 py-12 text-center text-[0.8667rem] text-slate-500 dark:text-slate-400">
                         Nobody has signed in yet today.<br>
-                        <span class="text-[11px] text-slate-400">Tap a cell on the sheet and they will appear here.</span>
+                        <span class="text-[0.7333rem] text-slate-400">Tap a cell on the sheet and they will appear here.</span>
                     </p>
                 </div>
 
-                <p class="border-t border-slate-200 px-4 py-2 text-[11px] text-slate-400 dark:border-white/10 dark:text-slate-500">
+                <p class="border-t border-slate-200 px-4 py-2 text-[0.7333rem] text-slate-400 dark:border-white/10 dark:text-slate-500">
                     Arrivals on {{ \Illuminate\Support\Carbon::parse($selectedDate)->format('D, M j') }}, newest first.
                 </p>
             </div>
@@ -848,14 +848,15 @@ function attendanceApp() { return {
     // Which cells in this week were put right by hand rather than tapped on
     // the day. Keyed child|date|session, the same shape the attendance map is.
     amended: @js((object) $amendmentMap),
-    // Shown until somebody says otherwise, and then it stays hidden. A key is
-    // read on the first morning and never again, so asking for it again every
-    // day would be the wrong default in both directions.
+    // Away until somebody asks for it, and then it stays. A key is read on the
+    // first morning and never again, so a sheet that opens carrying one is
+    // spending a strip of the screen on a question nobody is asking — and the
+    // "?" in the bar is always there to ask it with.
     //
     // In a try/catch because a private window can throw on the accessor
     // itself, and a page that will not render is a worse outcome than a key
     // that forgets.
-    showKey: (() => { try { return localStorage.getItem('attendance.key') !== 'hidden'; } catch { return true; } })(),
+    showKey: (() => { try { return localStorage.getItem('attendance.key') === 'shown'; } catch { return false; } })(),
     toggleKey() {
         this.showKey = ! this.showKey;
         try { localStorage.setItem('attendance.key', this.showKey ? 'shown' : 'hidden'); } catch {}
@@ -1435,15 +1436,16 @@ function attendanceApp() { return {
     },
 
     /**
-     * What the cell shows. A whole day has room for "8:04 AM"; a half day
-     * shares the cell with its twin and shows "8:04a", as the reference does.
+     * What the cell shows: "11:54a", morning or afternoon, whole day or half.
+     *
+     * A whole day used to read "11:52 AM" while the two halves beside it read
+     * "11:54a" — the same reading written two ways in one column, so comparing
+     * two arrivals meant measuring two shapes. The short form is the one that
+     * has to fit, because a half day shares its cell with its twin, and a
+     * format that fits the tightest cell fits every other.
      */
     displayTime(childId, date, session) {
-        const short = this.sessionTime(childId, date, session);
-        if (! short || session !== 'FULL') return short;
-
-        const match = /^(\d{1,2}:\d{2})([ap])$/.exec(short);
-        return match ? match[1] + ' ' + (match[2] === 'a' ? 'AM' : 'PM') : short;
+        return this.sessionTime(childId, date, session);
     },
 
     /* ---- the box itself ---- */
@@ -1519,7 +1521,7 @@ function attendanceApp() { return {
             // A dashed edge on an arrival that was entered after the fact. The
             // fill still says what it says — they were here, and whether it was
             // planned — and the broken edge says nobody was at the door for it.
-            const width = session === 'FULL' ? ' min-w-[74px]' : ' min-w-[48px]';
+            const width = session === 'FULL' ? ' min-w-[4.9333rem]' : ' min-w-[3.2rem]';
 
             return filled + width + (this.amendment(childId, date, session) ? ' border-dashed' : '');
         }
@@ -1546,7 +1548,7 @@ function attendanceApp() { return {
         // A morning and an afternoon share a cell, so each gets half the room a
         // whole day takes. Both are wide enough for a time, which is what they
         // hold the moment a child arrives.
-        return base + (session === 'FULL' ? ' min-w-[74px]' : ' min-w-[48px]');
+        return base + (session === 'FULL' ? ' min-w-[4.9333rem]' : ' min-w-[3.2rem]');
     },
     // What the cell says. A child who has arrived is the time they arrived —
     // the fact anybody opening this sheet is looking for — and everything else

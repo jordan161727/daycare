@@ -20,7 +20,7 @@
 
 {{-- Not enrolled: no slot exists for this day, so there is nothing to tap. --}}
 <template x-if="! hasSlot(child.id, '{{ $iso }}')">
-    <span class="grid min-h-[26px] w-full place-items-center text-[11px] text-slate-300 dark:text-slate-600" title="Not enrolled on this date">—</span>
+    <span class="grid min-h-[1.7333rem] w-full place-items-center text-[0.7333rem] text-slate-300 dark:text-slate-600" title="Not enrolled on this date">—</span>
 </template>
 
 <template x-if="hasSlot(child.id, '{{ $iso }}')">

@@ -138,7 +138,7 @@ class ChildRecordEditingTest extends TestCase
         $this->assertStringNotContainsString('<input disabled', $teacherForm);
         $this->assertStringNotContainsString('<select disabled', $teacherForm);
 
-        foreach (['name="lan"', 'name="classroom_override"', 'name="dss_cin"', 'name="schedule_days[]"'] as $field) {
+        foreach (['name="classroom_override"', 'name="dss_cin"', 'name="schedule_days[]"'] as $field) {
             $this->assertStringContainsString($field, $teacherForm);
             $this->assertStringContainsString($field, $directorForm);
         }

@@ -75,7 +75,8 @@ class ChildDocumentImportTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.document-import.review', $token))
             ->assertOk()
-            ->assertSee('name="lan" value="1071"', false);
+            // Shown, not asked for: the LAN is issued on save.
+            ->assertSee('value="10001" class="cs-input" readonly', false);
     }
 
     public function test_the_stored_document_is_streamed_inline(): void
@@ -110,7 +111,7 @@ class ChildDocumentImportTest extends TestCase
             'import_token' => $token,
         ])->assertRedirect(route('children.index'));
 
-        $this->assertDatabaseHas('children', ['lan' => '1071', 'first_name' => 'Ada']);
+        $this->assertDatabaseHas('children', ['first_name' => 'Ada', 'last_name' => 'Lovelace']);
         $this->assertCount(0, Storage::disk('local')->files('child-imports'));
     }
 

@@ -283,6 +283,10 @@ class AttendanceSheet
 
                 $rows[] = [
                     'name' => $child->last_name.', '.$child->first_name,
+                    // Beside the name because that is the column with room for
+                    // it, and because it is a fact about the child rather than
+                    // about any one of the five days.
+                    'hours' => $child->hoursCompact(),
                     // Only worth printing where a room has two rows a child.
                     'session' => $split ? $session : null,
                     // The name is written once and the second row carries the
@@ -393,6 +397,7 @@ class AttendanceSheet
 
             $rows[] = [
                 'name' => $child->last_name.', '.$child->first_name,
+                'hours' => $child->hoursCompact(),
                 'cells' => $cells,
             ];
         }

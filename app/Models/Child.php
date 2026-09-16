@@ -37,6 +37,7 @@ class Child extends Model
         // every read, and a decimal cast hands back a string.
         'expected_hours_per_week' => 'float',
         'schedule_days' => 'array',
+        'alerts' => 'array',
         'mother_ssn' => 'encrypted',
         'father_ssn' => 'encrypted',
     ];
@@ -68,7 +69,7 @@ class Child extends Model
         'email_address', 'parents_status', 'responsible_for_payment', 'emergency_contact', 'secondary_emergency_contact', 'emergency_telephone', 'emergency_relationship', 'emergency_license_number',
         'pickup_1_name', 'pickup_1_address', 'pickup_1_telephone', 'pickup_1_alternate', 'pickup_1_relationship', 'pickup_1_license_number',
         'pickup_2_name', 'pickup_2_address', 'pickup_2_telephone', 'pickup_2_alternate', 'pickup_2_relationship', 'pickup_2_license_number',
-        'pickup_3_name', 'pickup_3_address', 'pickup_3_telephone', 'pickup_3_alternate', 'pickup_3_relationship', 'pickup_3_license_number', 'other_notes', 'important_notes',
+        'pickup_3_name', 'pickup_3_address', 'pickup_3_telephone', 'pickup_3_alternate', 'pickup_3_relationship', 'pickup_3_license_number', 'other_notes', 'important_notes', 'alerts',
     ];
 
     /**
@@ -233,6 +234,77 @@ class Child extends Model
      * the number stored is the number Carbon::dayOfWeekIso hands back and
      * nothing has to translate between the two.
      */
+    /**
+     * What a child can be on the roll.
+     *
+     * Pending is a child whose paperwork is in and whose place is agreed but
+     * who has not started. They are on the roll, so they can be found and
+     * their record filled in, and they are not Active, so they are not counted
+     * as somebody the rooms are staffed for or looked for at sign-in.
+     */
+    public const STATUSES = ['Active', 'Pending', 'Inactive'];
+
+    /**
+     * The kinds of alert a record can carry, and how each one reads.
+     *
+     * The kind is what gives the chip its colour, so a court order is noticed
+     * without being read — which is the whole point of putting these on the
+     * roll rather than leaving them in the paragraph below them.
+     *
+     * The example is what the empty field offers as the shape of an answer,
+     * so it has to belong to the kind: a court order prompted with a banana
+     * teaches the wrong thing about both.
+     *
+     * Colours are the app's own and mean what they mean everywhere else here:
+     * rose is a rule that must not be broken, amber is a thing to watch, sky
+     * is a matter of fact, slate is a remark.
+     */
+    public const ALERT_TYPES = [
+        'court' => ['label' => 'Court Order', 'example' => 'No pickup by Jordan Key', 'classes' => 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200'],
+        'allergy' => ['label' => 'Allergy', 'example' => 'Banana — swells, no epi-pen', 'classes' => 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-100'],
+        'medical' => ['label' => 'Medical', 'example' => 'Inhaler in office', 'classes' => 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-100'],
+        'note' => ['label' => 'Note', 'example' => 'Leaves early on Tuesdays', 'classes' => 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'],
+    ];
+
+    /**
+     * The alerts on this record, as the page wants to draw them.
+     *
+     * Rows with no words in them are dropped rather than shown empty: the form
+     * posts a blank row whenever somebody opens one and changes their mind,
+     * and a chip reading "Allergy:" with nothing after it is worse than no
+     * chip, because it says a question was answered when it was not.
+     *
+     * A kind that is not one of ours — a record hand-edited, or a type retired
+     * later — falls back to Note rather than disappearing. The words are the
+     * part that matters; the colour is how they are found.
+     *
+     * @return array<int, array{type: string, label: string, classes: string, text: string}>
+     */
+    public function alertList(): array
+    {
+        $out = [];
+
+        foreach ($this->alerts ?? [] as $alert) {
+            $text = trim((string) ($alert['text'] ?? ''));
+
+            if ($text === '') {
+                continue;
+            }
+
+            $type = (string) ($alert['type'] ?? 'note');
+            $known = self::ALERT_TYPES[$type] ?? self::ALERT_TYPES['note'];
+
+            $out[] = [
+                'type' => isset(self::ALERT_TYPES[$type]) ? $type : 'note',
+                'label' => $known['label'],
+                'classes' => $known['classes'],
+                'text' => $text,
+            ];
+        }
+
+        return $out;
+    }
+
     public const WEEKDAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri'];
 
     /**
@@ -321,6 +393,29 @@ class Child extends Model
         }
 
         return static::timeLabel($this->drop_off_time).' – '.static::timeLabel($this->pick_up_time);
+    }
+
+    /**
+     * The contracted day as the paper register writes it: "730-430".
+     *
+     * No colon and no meridiem. A daycare register has no morning pick-ups and
+     * no midnight drop-offs, so the meridiem says nothing a reader did not
+     * already know, and the name column on the printed sheet is the tightest
+     * thing on the page — two characters a row is a column's worth over a
+     * roll of sixty.
+     *
+     * Null until both ends are agreed, like scheduleLabel(): half a range is
+     * worse than none, because "730-" reads as a time that was cut off.
+     */
+    public function hoursCompact(): ?string
+    {
+        if (blank($this->drop_off_time) || blank($this->pick_up_time)) {
+            return null;
+        }
+
+        $strip = fn (string $time) => Carbon::parse($time)->format('gi');
+
+        return $strip($this->drop_off_time).'-'.$strip($this->pick_up_time);
     }
 
     /**
@@ -468,9 +563,16 @@ class Child extends Model
         return ! ($this->withdrawn_on && $date > $this->withdrawn_on->toDateString());
     }
 
+    /** The first LAN the centre issues. Five digits, as the roll is kept. */
+    public const LAN_STARTS_AT = 10001;
+
     /**
      * The next LAN in sequence: one past the highest numeric LAN on file.
-     * Non-numeric LANs from older records are ignored.
+     *
+     * Floored at the start of the range rather than counting from whatever is
+     * there, so a centre whose oldest records are four digits — or whose roll
+     * is empty — still issues five. Non-numeric LANs from before the sequence
+     * existed have no place in it and are ignored.
      */
     public static function nextLan(): string
     {
@@ -480,7 +582,7 @@ class Child extends Model
             ->map(fn ($lan) => (int) $lan)
             ->max();
 
-        return (string) (($highest ?? 1000) + 1);
+        return (string) max(self::LAN_STARTS_AT, ($highest ?? 0) + 1);
     }
 
     public function attendances()

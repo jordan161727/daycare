@@ -65,7 +65,11 @@ class ChildController extends Controller
         // be a different number on every page of the same list.
         $activeCount = Child::visibleTo($requestUser)->where('status', 'Active')->count();
 
-        return view('children.index', compact('children', 'sort', 'direction', 'activeCount'));
+        // Shown only when there are any: a standing "0 pending" is a number
+        // that is read once and then stops being looked at.
+        $pendingCount = Child::visibleTo($requestUser)->where('status', 'Pending')->count();
+
+        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount'));
     }
 
     /**
@@ -110,7 +114,45 @@ class ChildController extends Controller
         return view('children.show', [
             'child' => $child,
             'roomSchedule' => RoomSchedule::byRoom()[$child->classroom] ?? null,
+            'back' => $this->backFrom($child),
         ]);
+    }
+
+    /**
+     * Where "Back" on a child's record goes.
+     *
+     * Wherever the reader came from, which is the only answer that is right
+     * for all of them: the roster, the attendance sheet with a week on it, a
+     * search. It used to be the roster by name, so anyone arriving from the
+     * sheet pressed a button labelled Roster and lost the week they had open.
+     *
+     * Three things are refused, each of which would make Back do nothing
+     * useful or something surprising:
+     *
+     *  - another site, because a Back button is not a way off this one;
+     *  - this record itself, which is where a saved edit sends the reader, so
+     *    Back would reload the page it is on;
+     *  - this record's own edit form, for the same reason one step further —
+     *    Back would return to the form that has just been left.
+     */
+    private function backFrom(Child $child): string
+    {
+        $previous = url()->previous();
+        $roster = route('children.index');
+
+        if (! $previous || ! str_starts_with($previous, url('/'))) {
+            return $roster;
+        }
+
+        $mine = [route('children.show', $child), route('children.edit', $child)];
+
+        foreach ($mine as $own) {
+            if (str_starts_with(strtok($previous, '?'), $own)) {
+                return $roster;
+            }
+        }
+
+        return $previous;
     }
 
     /**
@@ -230,7 +272,6 @@ class ChildController extends Controller
             ))]);
         }
         $rules = [
-            'lan' => ['required', 'string', 'max:255', Rule::unique('children', 'lan')->ignore($child)],
             'child_name' => ['nullable', 'string', 'max:255'],
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -241,7 +282,15 @@ class ChildController extends Controller
             // Blank means today, the same as it does on the schedule page. It is
             // not a second thing to fill in before a room can be picked.
             'classroom_override_from' => ['nullable', 'date_format:Y-m-d'],
-            'status' => ['required', Rule::in(['Active', 'Inactive'])],
+            // Active, Pending or Inactive — the list lives on the model, so the
+            // form's options and what the form will accept cannot drift apart.
+            'status' => ['required', Rule::in(Child::STATUSES)],
+
+            // What a room has to know before the day starts. A kind and a line
+            // apiece; the kind is what colours the chip on the roll.
+            'alerts' => ['nullable', 'array', 'max:12'],
+            'alerts.*.type' => ['required', Rule::in(array_keys(Child::ALERT_TYPES))],
+            'alerts.*.text' => ['nullable', 'string', 'max:120'],
             'enrolled_on' => ['nullable', 'date'],
             'withdrawn_on' => ['nullable', 'date', 'after_or_equal:enrolled_on'],
             // What the parent contracted for. Blank means nobody has said, and
@@ -283,6 +332,32 @@ class ChildController extends Controller
 
         // The upload is not a column. syncPhoto puts the stored path in.
         unset($data['photo']);
+
+        // The alerts arrive as the form drew them, which includes any row
+        // somebody opened and then left empty. A chip reading "Allergy:" with
+        // nothing after it says a question was answered when it was not, so
+        // the blank ones are dropped here rather than filtered on every read.
+        //
+        // The key is only absent when the form did not carry the field at all;
+        // an empty list is somebody clearing the last one, and has to be kept
+        // apart from that.
+        if (array_key_exists('alerts', $data)) {
+            $data['alerts'] = array_values(array_filter(
+                array_map(fn ($alert) => [
+                    'type' => $alert['type'],
+                    'text' => trim((string) ($alert['text'] ?? '')),
+                ], $data['alerts'] ?? []),
+                fn ($alert) => $alert['text'] !== ''
+            ));
+        }
+
+        // The LAN is issued here, not accepted from the form. On an existing
+        // record it is the one it already has: a LAN is how the paper file
+        // names this child, so changing it silently renames them everywhere
+        // off-screen. The field is read-only, and this is what makes that true
+        // rather than merely apparent — a read-only input is a hint to a
+        // browser, not a rule.
+        $data['lan'] = $child?->lan ?? Child::nextLan();
 
         // One date, two columns behind it: `dob` from the original roster and
         // `birth_date` from the enrolment form. The form edits one field, so

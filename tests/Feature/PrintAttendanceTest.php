@@ -577,6 +577,57 @@ class PrintAttendanceTest extends TestCase
         }
     }
 
+    /**
+     * The contracted hours ride beside the name on both printed sheets.
+     *
+     * The paper register is what the room works from, and the question it could
+     * not answer was "when is this one due out?" — which meant leaving the
+     * clipboard and opening the record. Written the way it is written on paper:
+     * no colon, no meridiem. A register has no morning pick-ups.
+     */
+    public function test_the_printed_name_carries_the_contracted_hours(): void
+    {
+        $child = $this->makeChild('Morris', 'Oryan', 'Toddler', [
+            'drop_off_time' => '07:30',
+            'pick_up_time' => '16:30',
+        ]);
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        // The sheet prints who is scheduled, so there has to be a day ticked.
+        ScheduleSlot::where('child_id', $child->id)->update(['is_scheduled' => true]);
+
+        foreach ([[], ['range' => 'month']] as $range) {
+            $this->actingAs($this->admin)
+                ->get(route('attendance.print', ['date' => self::MONDAY] + $range))
+                ->assertOk()
+                ->assertSee('Morris, Oryan')
+                ->assertSee('730-430');
+        }
+    }
+
+    /**
+     * Half a range is worse than none.
+     *
+     * Most of the roll has no hours agreed yet, and "730-" on a printed sheet
+     * reads as a time that was cut off rather than as one that was never
+     * given.
+     */
+    public function test_a_child_with_no_agreed_hours_prints_no_range(): void
+    {
+        $child = $this->makeChild('Turner', 'Myla', 'Toddler', [
+            'drop_off_time' => '08:00',
+        ]);
+        app(WeekSchedule::class)->open(self::MONDAY);
+        ScheduleSlot::where('child_id', $child->id)->update(['is_scheduled' => true]);
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.print', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('Turner, Myla', $html);
+        $this->assertStringNotContainsString('800-', $html);
+    }
     private function makeChild(string $last, string $first, string $room, array $extra = []): Child
     {
         return Child::create(array_merge([
