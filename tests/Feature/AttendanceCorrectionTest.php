@@ -384,8 +384,17 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString('class="att-pencil" @click.stop="beginRetime(child.id,', $html);
-        $this->assertStringContainsString('@keydown.e.prevent="beginRetime(child.id,', $html);
+        // The pencil is drawn into the box rather than bound as an element of
+        // its own, and the press is caught once on the table — so what is
+        // asserted is that it is still marked as the pencil, and that a press
+        // on that mark still opens the field rather than moving the box along.
+        $this->assertStringContainsString('class="att-pencil" data-pencil', $html);
+        $this->assertStringContainsString("closest('[data-pencil]')", $html);
+        $this->assertStringContainsString('return this.beginRetime(Number(childId), date, session);', $html);
+
+        // E on the box opens it too, through the same one handler.
+        $this->assertStringContainsString("event.key === 'e' || event.key === 'E'", $html);
+
         $this->assertStringContainsString('@blur="commitRetime(child.id,', $html);
         $this->assertStringContainsString('@keydown.escape.prevent="cancelRetime()"', $html);
         $this->assertStringContainsString("if (! value) return;", $html);

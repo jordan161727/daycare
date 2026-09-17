@@ -329,8 +329,20 @@ class AttendanceCellDesignTest extends TestCase
 
         // The partial is not empty of calls, or this test proves nothing.
         $this->assertNotEmpty($called);
-        $this->assertContains('canTap', $called, 'the locked-column check is what went missing before');
-        $this->assertContains('cellClass', $called);
+
+        // The box states what it is through these two rather than through a
+        // dozen bindings of its own — four hundred boxes, and what each costs
+        // to build is most of what the sheet costs to open.
+        $this->assertContains('cellAttrs', $called);
+        $this->assertContains('cellInner', $called);
+
+        // And the checks that used to be written on the box are still made,
+        // one level in. The locked-column check is what went missing before,
+        // so it is named here rather than left to the loop below.
+        preg_match('/cellAttrs\s*\([^)]*\)\s*\{.*?\n    \},/s', $component, $attrs);
+        $this->assertNotEmpty($attrs, 'cellAttrs() should be defined on the component');
+        $this->assertStringContainsString('canTap(date)', $attrs[0], 'the locked-column check is what went missing before');
+        $this->assertStringContainsString('cellClass(child.id, date, session)', $attrs[0]);
 
         foreach ($called as $method) {
             $defined = preg_match('/(?:^|\s)(?:get\s+)?'.preg_quote($method, '/').'\s*\([^)]*\)\s*\{/m', $component) === 1

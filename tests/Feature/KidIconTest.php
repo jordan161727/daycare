@@ -92,8 +92,13 @@ class KidIconTest extends TestCase
 
         // The cell carries the arrival time and nothing else — displayTime is
         // the whole of what a signed-in box shows, so there is no second mark
-        // to read and no second mark to keep in step.
-        $this->assertStringContainsString('x-text="displayTime(child.id,', $html, 'the cell no longer shows the arrival time');
+        // to read and no second mark to keep in step. Written into the box by
+        // cellInner rather than bound on a span of its own.
+        $this->assertStringContainsString(
+            "this.esc(this.displayTime(child.id, date, session))",
+            $html,
+            'the cell no longer shows the arrival time'
+        );
         $this->assertStringContainsString('return this.sessionTime(childId, date, session);', $html);
     }
 

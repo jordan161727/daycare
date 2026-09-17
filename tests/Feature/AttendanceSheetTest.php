@@ -172,13 +172,16 @@ class AttendanceSheetTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // One handler per weekday per layout; the session comes from the child's own
+        // One box per weekday per layout; the session comes from the child's own
         // list at runtime rather than being hardcoded per room.
-        // Counted on the click, since the same handler also answers Enter and
-        // Space on the box.
-        $this->assertSame(10, substr_count($html, "@click=\"tapCell(child.id, '"));
-        $this->assertSame(2, substr_count($html, "@click=\"tapCell(child.id, '".$date."', session)\""));
+        // Counted on the box rather than on a click handler: the taps are
+        // caught once on the table now, so the box is what there are ten of.
+        $this->assertSame(10, substr_count($html, "cellAttrs(child, '"));
+        $this->assertSame(2, substr_count($html, "cellAttrs(child, '".$date."', session)"));
         $this->assertStringContainsString('x-for="session in child.sessions"', $html);
+
+        // And a tap on any of them still reaches the same place.
+        $this->assertStringContainsString('this.tapCell(Number(childId), date, session);', $html);
     }
 
     public function test_the_toolbar_stacks_on_narrow_screens(): void

@@ -56,7 +56,11 @@
             'classes' => 'att-closed',
         ],    ];
 @endphp
-<div x-data="attendanceApp()" @attendance-key.window="toggleKey()" @keydown.escape.window="recentOpen = false" @pointermove.window="paintAt($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()">
+{{-- The taps on the sheet are caught here, once, rather than bound to each of
+     the four hundred boxes below — see cellAttrs/onCellClick. Both handlers
+     look for a box and return immediately when the press was anywhere else,
+     so the toolbar and the search box are unaffected. --}}
+<div x-data="attendanceApp()" @attendance-key.window="toggleKey()" @keydown.escape.window="recentOpen = false" @pointermove.window="paintAt($event)" @pointerup.window="endPaint()" @pointercancel.window="endPaint()" @click="onCellClick($event)" @keydown="onCellKey($event)">
     {{-- What the last copy did. Without this the page redirects back looking
          untouched, and a copy that worked is indistinguishable from one that
          never ran. --}}
@@ -920,9 +924,24 @@ function attendanceApp() { return {
         this.buildAfterPaint();
     },
 
+    /*
+     * How many rows are built. A screenful to begin with, then null — meaning
+     * all of them — once that screenful is on the glass.
+     */
+    rowLimit: 18,
+
     buildAfterPaint() {
         this.ready = false;
-        requestAnimationFrame(() => requestAnimationFrame(() => { this.ready = true; }));
+        this.rowLimit = 18;
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            this.ready = true;
+
+            // Once the first rows have been painted, fill in the rest. Two
+            // frames again: the first draws them, the second is when the
+            // browser is free to take the work.
+            requestAnimationFrame(() => requestAnimationFrame(() => { this.rowLimit = null; }));
+        }));
     },
 
     /*
@@ -1027,6 +1046,17 @@ function attendanceApp() { return {
     closed: @js($closedDays),
     recent: @js($recentAttendance->map(fn($attendance) => ['id' => $attendance->id, 'name' => $attendance->child->displayName(), 'classroom' => $attendance->child->classroom, 'time' => \App\Models\Child::timeShort($attendance->signed_in_at->timezone(config('app.timezone')))])->values()),
     get filteredChildren() {
+        const rows = this.matchingChildren;
+
+        // The first screenful, then the rest. Building seventy-five rows is
+        // one piece of work the browser cannot be interrupted during, so the
+        // sheet used to appear all at once at the end of it. Cut in two, the
+        // rows somebody is actually looking at are on screen while the rest
+        // are still being built, which is the whole of the difference.
+        return this.rowLimit === null ? rows : rows.slice(0, this.rowLimit);
+    },
+
+    get matchingChildren() {
         const key = `${this.search}|${this.room}|${this.sortDirection}|${this.rosterVersion}`;
 
         if (this.filteredCache?.key !== key) {
@@ -1048,7 +1078,9 @@ function attendanceApp() { return {
 
         return this.sortDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
     },
-    get filteredCount() { return this.filteredChildren.length; },
+    // Everyone the search matches, not just the rows built so far — "showing
+    // all 75" has to say 75 while the last of them are still being drawn.
+    get filteredCount() { return this.matchingChildren.length; },
 
     /*
      * The three numbers in the header, and what they are counting.
@@ -1586,6 +1618,117 @@ function attendanceApp() { return {
      */
     displayTime(childId, date, session) {
         return this.sessionTime(childId, date, session);
+    },
+
+    /* ---- the box, in two bindings ----
+
+       See the note at the top of partials/day-buttons.blade.php for why. The
+       short of it: four hundred boxes, and what each one costs to build is
+       most of what the sheet costs to open. */
+
+    /** Anything that could be read back out as markup goes through here. */
+    esc(value) {
+        return String(value ?? '').replace(/[&<>"]/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+        }[character]));
+    },
+
+    /**
+     * What the box is: its state, whether it takes a tap, and what a screen
+     * reader is told. data-cell is how the one handler on the table works out
+     * which box was pressed, so it is the tap target's identity as well.
+     */
+    cellAttrs(child, date, session) {
+        const tappable = this.canTap(date);
+
+        return {
+            'class': this.cellClass(child.id, date, session),
+            'role': tappable ? 'button' : null,
+            'tabindex': tappable ? 0 : null,
+            'aria-label': this.cellLabel(child, date, session),
+            'title': this.boxTitle(child.id, date, session),
+            'data-cell': this.cellKey(child.id, date, session),
+        };
+    },
+
+    /**
+     * What is in the box: the half-day tag, then one of the three states, then
+     * the pencil if the hour can be retyped.
+     *
+     * An expected day is deliberately empty — the outline is the statement.
+     */
+    cellInner(child, date, session) {
+        const present = this.isPresent(child.id, date, session);
+        const closed = this.isClosed(date);
+
+        let html = session === 'FULL' ? '' : '<span class="att-tag">' + this.esc(session) + '</span>';
+
+        html += '<span class="att-main">';
+
+        if (present) {
+            html += '<span>' + this.esc(this.displayTime(child.id, date, session)) + '</span>';
+        } else if (closed) {
+            html += '<span aria-hidden="true">&mdash;</span>';
+        } else if (! this.isScheduled(child.id, date, session)) {
+            html += '<span class="att-dot" aria-hidden="true"></span>';
+        }
+
+        html += '</span>';
+
+        // The pencil: the exact hour, typed. Only on a time, only in Edit. The
+        // pad keeps a half-day box the same width as one that has a pencil.
+        if (this.canRetime(child.id, date, session)) {
+            html += '<button type="button" class="att-pencil" data-pencil aria-label="'
+                + this.esc('Type an exact time for ' + child.name) + '">' + this.icons.pencil + '</button>';
+        } else if (session !== 'FULL') {
+            html += '<span class="att-pad" aria-hidden="true"></span>';
+        }
+
+        return html;
+    },
+
+    /**
+     * Every tap on the sheet, caught once.
+     *
+     * Bound on the table rather than on each box: four hundred click handlers
+     * and twelve hundred key handlers were being created on load to do what
+     * two can do. The box says which child, day and session it is through
+     * data-cell, which is all either of these needs.
+     */
+    onCellClick(event) {
+        const box = event.target.closest('[data-cell]');
+
+        if (! box) return;
+
+        const [childId, date, session] = box.dataset.cell.split('|');
+
+        // The pencil sits inside the box, and pressing it must not also move
+        // the box along — what @click.stop used to do on the button itself.
+        if (event.target.closest('[data-pencil]')) {
+            return this.beginRetime(Number(childId), date, session);
+        }
+
+        this.tapCell(Number(childId), date, session);
+    },
+
+    onCellKey(event) {
+        const box = event.target.closest('[data-cell]');
+
+        if (! box) return;
+
+        const [childId, date, session] = box.dataset.cell.split('|');
+
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+
+            return this.tapCell(Number(childId), date, session);
+        }
+
+        if (event.key === 'e' || event.key === 'E') {
+            event.preventDefault();
+
+            this.beginRetime(Number(childId), date, session);
+        }
     },
 
     /* ---- the box itself ---- */

@@ -13,6 +13,26 @@
     becomes a field to type the exact hour into. Enter or leaving saves,
     Escape puts it back. A half-day room stacks its AM and PM boxes.
 
+    ----
+
+    Why the box is two bindings and not twenty.
+
+    This partial is drawn once per child per day, so on a roll of seventy-five
+    it is nearly four hundred boxes, and every binding inside it is one Alpine
+    has to create and then watch. Written out — a class, a role, a tabindex, a
+    label, a title, four key handlers, a click, and four nested templates for
+    the contents — it came to about twenty-two each, and building them was the
+    second or two the sheet took to appear.
+
+    So the box states what it is through one attribute object and one string of
+    contents, and the taps and key presses are caught once on the table rather
+    than bound per box (see onCellClick/onCellKey). The behaviour is the same;
+    the cost is four bindings instead of twenty-two.
+
+    The field is left as it was. Only ever one box on the sheet is being typed
+    into, and x-if means the rest never build it — a field needs real bindings
+    and there is only one of it.
+
     $date    Carbon  the day these cells stamp
     $variant string  'table' (grid cell) or 'card' (stacked list row)
 --}}
@@ -54,41 +74,9 @@
                     </div>
                 </template>
 
-                {{-- The box. --}}
+                {{-- The box. What it is, and what is in it. --}}
                 <template x-if="! isRetiming(child.id, '{{ $iso }}', session)">
-                    <div
-                        :class="cellClass(child.id, '{{ $iso }}', session)"
-                        :role="canTap('{{ $iso }}') ? 'button' : null"
-                        :tabindex="canTap('{{ $iso }}') ? 0 : null"
-                        :aria-label="cellLabel(child, '{{ $iso }}', session)"
-                        :title="boxTitle(child.id, '{{ $iso }}', session)"
-                        @click="tapCell(child.id, '{{ $iso }}', session)"
-                        @keydown.enter.prevent="tapCell(child.id, '{{ $iso }}', session)"
-                        @keydown.space.prevent="tapCell(child.id, '{{ $iso }}', session)"
-                        @keydown.e.prevent="beginRetime(child.id, '{{ $iso }}', session)"
-                    >
-                        <span x-show="session !== 'FULL'" class="att-tag" x-text="session"></span>
-                        <span class="att-main">
-                            <template x-if="isPresent(child.id, '{{ $iso }}', session)">
-                                <span x-text="displayTime(child.id, '{{ $iso }}', session)"></span>
-                            </template>
-                            <template x-if="! isPresent(child.id, '{{ $iso }}', session) && ! isScheduled(child.id, '{{ $iso }}', session) && ! isClosed('{{ $iso }}')">
-                                <span class="att-dot" aria-hidden="true"></span>
-                            </template>
-                            <template x-if="! isPresent(child.id, '{{ $iso }}', session) && isClosed('{{ $iso }}')">
-                                <span aria-hidden="true">—</span>
-                            </template>
-                        </span>
-                        {{-- The pencil: the exact hour, typed. Only on a time,
-                             only in Edit. Stops the tap so pressing it does not
-                             also move the box along. --}}
-                        <template x-if="canRetime(child.id, '{{ $iso }}', session)">
-                            <button type="button" class="att-pencil" @click.stop="beginRetime(child.id, '{{ $iso }}', session)" :aria-label="'Type an exact time for ' + child.name" x-html="icons.pencil"></button>
-                        </template>
-                        <template x-if="! canRetime(child.id, '{{ $iso }}', session) && session !== 'FULL'">
-                            <span class="att-pad" aria-hidden="true"></span>
-                        </template>
-                    </div>
+                    <div x-bind="cellAttrs(child, '{{ $iso }}', session)" x-html="cellInner(child, '{{ $iso }}', session)"></div>
                 </template>
             </div>
         </template>
