@@ -31,21 +31,21 @@ class AttendanceController extends Controller
             // roster, in case the nightly sweep is not running.
             ClassroomAssignment::syncAll();
 
-            // Active children
-            $children = Child::visibleTo($user)->where('status', 'Active')
+            $selectedCarbon = Carbon::parse($selectedDate);
+            $weekStart = $selectedCarbon->startOfWeek(Carbon::MONDAY);
+            $weekDates = collect(range(0, 4))->map(fn ($offset) => $weekStart->copy()->addDays($offset));
+
+            // Whoever this week belongs to, which on a week gone by includes
+            // children who have since left.
+            $children = Child::visibleTo($user)
+                ->onRollDuring($weekStart->toDateString(), $weekDates->last()->toDateString())
                 ->orderBy('last_name')
                 ->orderBy('first_name')
                 ->get();
 
-            // Classroom filters
-            $classrooms = Child::visibleTo($user)->where('status', 'Active')
-                ->select('classroom')
-                ->distinct()
-                ->pluck('classroom');
-
-            $selectedCarbon = Carbon::parse($selectedDate);
-            $weekStart = $selectedCarbon->startOfWeek(Carbon::MONDAY);
-            $weekDates = collect(range(0, 4))->map(fn ($offset) => $weekStart->copy()->addDays($offset));
+            // The room chips are drawn from the same set, so a room that this
+            // week holds only a leaver still has one to filter by.
+            $classrooms = $children->pluck('classroom')->filter()->unique()->values();
 
             $attendanceRecords = Attendance::with('child')
                 // Date strings, not Carbon instances. attendance_date is a DATE
@@ -72,7 +72,7 @@ class AttendanceController extends Controller
             }
 
             // Dashboard Statistics
-            $totalChildren = Child::visibleTo($user)->where('status', 'Active')->count();
+            $totalChildren = $children->count();
 
             $presentToday = Attendance::whereDate('attendance_date', $selectedDate)
                 ->whereHas('child', fn ($query) => $query->visibleTo($user))
@@ -81,9 +81,7 @@ class AttendanceController extends Controller
 
             $absentToday = $totalChildren - $presentToday;
 
-            $totalRooms = Child::visibleTo($user)->where('status', 'Active')
-                ->distinct('classroom')
-                ->count('classroom');
+            $totalRooms = $classrooms->count();
 
             // Recent Sign-ins
             $recentAttendance = Attendance::with('child')
@@ -373,7 +371,18 @@ class AttendanceController extends Controller
          */
         $range = request('range') === 'month' ? 'month' : 'week';
         $selected = Carbon::parse($selectedDate);
-        $children = Child::visibleTo($user)->where('status', 'Active')->get();
+        // The same roster the screen shows for this range, so a printed week
+        // gone by carries the children who were in it.
+        $printFrom = $range === 'month'
+            ? $selected->copy()->startOfMonth()->startOfWeek(Carbon::MONDAY)
+            : $selected->copy()->startOfWeek(Carbon::MONDAY);
+        $printTo = $range === 'month'
+            ? $selected->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY)
+            : $printFrom->copy()->addDays(4);
+
+        $children = Child::visibleTo($user)
+            ->onRollDuring($printFrom->toDateString(), $printTo->toDateString())
+            ->get();
 
         // Where "back to attendance" and the other range's link should land.
         $shared = [

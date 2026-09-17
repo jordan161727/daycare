@@ -513,7 +513,17 @@
                                                     <a x-show="canOpenProfile" :href="profileUrl(child.lan)" class="att-name truncate underline-offset-2 hover:text-indigo-600 hover:underline dark:hover:text-indigo-300" x-text="child.name" :title="'Open ' + child.first_name + '\'s record' + (child.schedule_hours ? ' — here ' + child.schedule_hours : '')"></a>
                                                     <span x-show="! canOpenProfile" class="att-name truncate" x-text="child.name" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : ''"></span>
                                                     {{-- No room here: it has a column of its own three
-                                                         along, and a row does not need to say it twice. --}}
+                                                         along, and a row does not need to say it twice.
+
+                                                         The status is here though, and only when it is
+                                                         not Active — on a roll of sixty, sixty rows
+                                                         reading "Active" would hide the one that does
+                                                         not. A week gone by can hold a child who has
+                                                         since left, and this is what says so. --}}
+                                                    <span x-show="child.status !== 'Active'" x-cloak
+                                                          class="att-status"
+                                                          :class="child.status === 'Pending' ? 'att-status-pending' : 'att-status-off'"
+                                                          x-text="child.status"></span>
                                                 </span>
                                             </div>
                                         </td>
@@ -904,7 +914,7 @@ function attendanceApp() { return {
         'shape' => '',
         'attributes' => new \Illuminate\View\ComponentAttributeBag,
     ])->render())))
-    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'lan' => $child->lan, 'name' => $child->displayName(), 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'drop_off_label' => \App\Models\Child::timeLabel($child->drop_off_time), 'pick_up_label' => \App\Models\Child::timeLabel($child->pick_up_time), 'drop_off' => \App\Models\Child::timeInputValue($child->drop_off_time ?: \App\Models\Child::DAY_OPENS_AT), 'schedule_days' => $child->scheduleDays(), 'schedule_days_label' => $child->scheduleDaysLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
+    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'lan' => $child->lan, 'name' => $child->displayName(), 'status' => $child->status, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'drop_off_label' => \App\Models\Child::timeLabel($child->drop_off_time), 'pick_up_label' => \App\Models\Child::timeLabel($child->pick_up_time), 'drop_off' => \App\Models\Child::timeInputValue($child->drop_off_time ?: \App\Models\Child::DAY_OPENS_AT), 'schedule_days' => $child->scheduleDays(), 'schedule_days_label' => $child->scheduleDaysLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
     rooms: @js(\App\Services\ClassroomAssignment::rooms()),
     // Moving a child between rooms changes who can see them, so it is the
     // director's call rather than a teacher's.

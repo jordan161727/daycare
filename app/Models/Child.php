@@ -551,6 +551,37 @@ class Child extends Model
     }
 
     /**
+     * Everybody the register should list for one week, leavers included.
+     *
+     * "Active" alone answers who is here now, which is the wrong question for
+     * any week but this one: a child marked Inactive on Friday would disappear
+     * from the whole of the year they attended.
+     *
+     * Three ways onto a week, and a child needs only one of them:
+     *
+     *  - they are Active, which is the roll as it stands;
+     *  - they signed in that week, whatever the record says now;
+     *  - they were withdrawn on or after the Monday and had started by the
+     *    Friday, which is the span between their first day and their last.
+     *
+     * Whether each of their five boxes is offered is still isEnrolledOn's
+     * business. This decides whose row is on the page; that decides which days
+     * in the row are theirs.
+     */
+    public function scopeOnRollDuring($query, string $weekStart, string $weekEnd)
+    {
+        return $query->where(function ($outer) use ($weekStart, $weekEnd) {
+            $outer->where('status', 'Active')
+                ->orWhereHas('attendances', fn ($a) => $a->whereBetween('attendance_date', [$weekStart, $weekEnd]))
+                ->orWhere(function ($left) use ($weekStart, $weekEnd) {
+                    $left->whereNotNull('withdrawn_on')
+                        ->whereDate('withdrawn_on', '>=', $weekStart)
+                        ->where(fn ($started) => $started->whereNull('enrolled_on')->orWhereDate('enrolled_on', '<=', $weekEnd));
+                });
+        });
+    }
+
+    /**
      * Whether the child is on the roster on a given day. Null dates mean open-ended,
      * which is how every record behaved before enrolment dates existed.
      */

@@ -63,11 +63,19 @@ class AttendanceSheet
             $schedule[$slot->child_id][$slot->slot_date->toDateString()][$slot->session] = (bool) $slot->is_scheduled;
         }
 
-        // A child with no slot at all this week is not enrolled this week —
-        // before their start date or after their last day — so they are not a
-        // row. A child with slots and no ticks is: they are on the roll and
-        // simply not expected, which is exactly what a row of grey boxes says.
-        $onTheRoll = $children->filter(fn ($child) => isset($schedule[$child->id]));
+        // Who signed in, which makes a row on its own. Slots are written for
+        // children whose status is Active, so a child marked Inactive since has
+        // none on any week — including the weeks they were here every day.
+        $cameThisWeek = Attendance::whereBetween('attendance_date', [$dates->first()->toDateString(), $dates->last()->toDateString()])
+            ->whereIn('child_id', $children->pluck('id'))
+            ->pluck('child_id')
+            ->flip();
+
+        // A child with no slot and no signature was not here this week — before
+        // their start date or after their last day — so they are not a row. A
+        // child with slots and no ticks is: on the roll and not expected, which
+        // is exactly what a row of grey boxes says.
+        $onTheRoll = $children->filter(fn ($child) => isset($schedule[$child->id]) || $cameThisWeek->has($child->id));
 
         $rooms = [];
         foreach ($this->roomsInOrder($onTheRoll) as $roomName) {
@@ -166,9 +174,10 @@ class AttendanceSheet
             $attended[$record->child_id][$record->attendance_date->toDateString()][$record->session ?? 'FULL'] = true;
         }
 
-        // A child with no box anywhere in the month was not at the centre this
-        // month at all, as against one on the roll with nothing ticked.
-        $onTheRoll = $children->filter(fn ($child) => isset($schedule[$child->id]));
+        // A child with no box anywhere in the month and nothing signed was not
+        // at the centre this month at all, as against one on the roll with
+        // nothing ticked. $attended is already in hand just above.
+        $onTheRoll = $children->filter(fn ($child) => isset($schedule[$child->id]) || isset($attended[$child->id]));
 
         $rooms = [];
         foreach ($this->roomsInOrder($onTheRoll) as $roomName) {

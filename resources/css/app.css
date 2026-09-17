@@ -285,6 +285,12 @@
     /* Read down its left edge: the rooms run from four characters to ten and
        carry an icon, so centred they landed in six different places. The
        gutter keeps the icon off the frozen name column that ends beside it. */
+    /* Under the name, and only for a child the row is news about: a leaver
+       on a week they were still here, or a place agreed and not yet started. */
+    .att-status { display: inline-block; margin-top: 1px; border-radius: 999px; padding: 0 0.4rem; font-size: 0.6667rem; font-weight: 600; line-height: 1.5; }
+    .att-status-off { @apply bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300; }
+    .att-status-pending { @apply bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200; }
+
     .att-w-room { width: 7.3333rem; }   /* "🐘 School Age ✎" */
     .att-table th.att-w-room, .att-table td.att-w-room { text-align: left; padding-left: 0.8rem; }
     .att-w-dob { width: 5.6rem; }       /* "2018/09/18" */
