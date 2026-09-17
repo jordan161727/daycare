@@ -23,7 +23,11 @@
 @php($seed = crc32(($child->lan ?? '').'|'.$name))
 
 @if($photo)
-    <img src="{{ $photo }}" alt="{{ $name }}" {{ $attributes->class([$size, $shape, 'shrink-0 object-cover']) }}>
+    {{-- Lazily, and decoded off the main thread. A roll of sixty photographs
+     is sixty requests, each one served by PHP because these are private
+     files; fetched eagerly they compete with the rows nobody has scrolled
+     to yet, and the first screen fills in last. --}}
+<img src="{{ $photo }}" alt="{{ $name }}" loading="lazy" decoding="async" {{ $attributes->class([$size, $shape, 'shrink-0 bg-slate-100 object-cover dark:bg-slate-800']) }}>
 @else
     {{-- Skin, hair and clothes are drawn from separate slices of the one number
          so two children who share a hairstyle rarely share everything else. --}}

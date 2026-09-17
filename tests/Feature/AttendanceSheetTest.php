@@ -149,9 +149,13 @@ class AttendanceSheetTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // The wide grid is hidden below md; the card list is hidden from md up.
-        $this->assertStringContainsString('hidden overflow-x-auto md:block', $html);
-        $this->assertStringContainsString('md:hidden', $html);
+        // Which layout exists, not merely which one is visible. Hidden with a
+        // class, both were built on every load — the whole roll five days wide,
+        // twice — and the page sat empty while Alpine worked through the one
+        // nobody would see. Each is gated on the breakpoint instead.
+        $this->assertStringContainsString('x-if="! isPhone"', $html);
+        $this->assertStringContainsString('x-if="isPhone"', $html);
+        $this->assertStringNotContainsString('hidden overflow-x-auto md:block', $html);
 
         // Both sign-in layouts loop the same children and can both sort.
         $this->assertSame(2, substr_count($html, 'child in filteredChildren"'));

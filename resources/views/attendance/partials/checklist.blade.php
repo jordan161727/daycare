@@ -235,6 +235,6 @@
         <span><span class="font-semibold text-slate-700 dark:text-slate-200" x-text="scheduledCount"></span> of <span x-text="slotCount"></span> possible days ticked this week.</span>
         <span x-show="saving" x-cloak class="text-xs text-indigo-600 dark:text-indigo-300">Saving…</span>
         <span x-show="saveError" x-cloak class="text-xs font-semibold text-rose-600" x-text="saveError"></span>
-        <button type="button" @click="view = 'signin'" class="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700">Done — back to sign-in</button>
+        <button type="button" @click="switchView('signin')" class="ml-auto rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700">Done — back to sign-in</button>
     </div>
 </div>

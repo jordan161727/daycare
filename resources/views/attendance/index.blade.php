@@ -292,7 +292,7 @@
 
                         {{-- Parked, not removed: see daycare.schedule_view. --}}
                         @if($canEditSchedule && config('daycare.schedule_view'))
-                            <button type="button" @click="view = view === 'signin' ? 'schedule' : 'signin'; editing = false" :class="view === 'schedule' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition" x-text="view === 'signin' ? 'Schedule' : 'Sign in'"></button>
+                            <button type="button" @click="switchView(view === 'signin' ? 'schedule' : 'signin')" :class="view === 'schedule' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10'" class="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition" x-text="view === 'signin' ? 'Schedule' : 'Sign in'"></button>
 
                         @endif
 
@@ -437,16 +437,43 @@
             </div>
             @if($weekIsOpen)
             {{-- Schedule setup: ticks, not colours. --}}
+            {{-- x-if rather than x-show, here and on the sheet below: this is the
+                 whole roll five days wide, and the view nobody is looking at was
+                 being built anyway — every cell, every binding — before the one
+                 they asked for could appear. Built when it is switched to. --}}
             @if($canEditSchedule)
-                <div class="mt-3" x-show="view === 'schedule'" x-cloak>
-                    @include('attendance.partials.checklist')
-                </div>
+                <template x-if="ready && view === 'schedule'">
+                    <div class="mt-3">
+                        @include('attendance.partials.checklist')
+                    </div>
+                </template>
             @endif
 
-            <div class="mt-3" x-show="view === 'signin'">
+            {{-- What is on screen while the grid is being built.
+
+                 Seventy-five children five days wide is a few thousand boxes,
+                 and building them is the one unavoidable pause on this page.
+                 An empty card for that second reads as a page that failed; a
+                 turning circle reads as a page that is working, which is the
+                 truth. It is plain markup with no x-cloak on purpose, so it is
+                 on screen from the first paint — before Alpine has started —
+                 and `ready` is set a frame later so the browser gets to draw it
+                 before the grid takes the thread. --}}
+            <div x-show="! ready" class="glass-card mt-3 grid place-items-center rounded-2xl px-6 py-16">
+                <div class="h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600 dark:border-white/10 dark:border-t-indigo-400" role="status" aria-label="Loading the sheet"></div>
+                <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">Loading the sheet&hellip;</p>
+            </div>
+
+            <template x-if="ready && view === 'signin'">
+            <div class="mt-3">
                 <div class="glass-card overflow-hidden rounded-2xl">
-                    {{-- Week grid: needs the width, so it only appears from md up. --}}
-                    <div class="hidden overflow-x-auto md:block">
+                    {{-- Week grid: needs the width, so it only appears from md up.
+                         Gated on the breakpoint rather than merely hidden at it —
+                         a phone was building the grid it would never show, and a
+                         desktop was building the cards, so every roll was drawn
+                         twice over. --}}
+                    <template x-if="! isPhone">
+                    <div class="overflow-x-auto">
                         <table class="att-table w-full min-w-[72rem]">
                             <thead>
                                 <tr>
@@ -566,9 +593,11 @@
                             </tbody>
                         </table>
                     </div>
+                    </template>
 
                     {{-- Phone layout: one card per child, one row per day. --}}
-                    <div class="divide-y divide-slate-200 md:hidden dark:divide-white/10">
+                    <template x-if="isPhone">
+                    <div class="divide-y divide-slate-200 dark:divide-white/10">
                         <div class="flex items-center justify-between px-3 py-2">
                             <button type="button" @click="toggleSort" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 <span>Student</span>
@@ -600,6 +629,7 @@
                             </article>
                         </template>
                     </div>
+                    </template>
 
                     <p x-show="filteredCount === 0" class="p-8 text-center text-sm text-slate-500">No children match this search.</p>
                     <div x-show="filteredCount > 0" class="border-t border-slate-200 px-4 py-2.5 text-sm text-slate-500 dark:border-white/10">
@@ -609,6 +639,7 @@
                     </div>
                 </div>
             </div>
+            </template>
             @else
                 {{-- A week nobody has built yet. It shows as it is — no children,
                      no boxes, nothing to colour in — because the alternative is a
@@ -856,6 +887,71 @@ function attendanceApp() { return {
     editing: false,
     canAmend: @js($canAmendAttendance),
 
+    /*
+     * Which of the three grids is built, rather than which is merely visible.
+     *
+     * The desktop sheet, the phone cards and the schedule checklist are the
+     * same roll five days wide. Hidden with x-show, all three were still built
+     * on load — on a roll of seventy-five that is eleven hundred cells and the
+     * reactive bindings behind every one of them — and the page sat empty while
+     * Alpine worked through the two nobody was looking at. They are gated with
+     * x-if now, so only the one on screen is built, and these two say which.
+     *
+     * Read once and then kept current: a tablet turned on its side crosses the
+     * breakpoint, and the grid it crosses into has to exist by the time it
+     * lands there.
+     */
+    isPhone: window.matchMedia('(max-width: 767px)').matches,
+
+    /*
+     * False until the browser has had a chance to paint. Building the grid is
+     * a few thousand boxes and it holds the thread while it happens, so doing
+     * it inside init() would mean the spinner never appeared — the first thing
+     * drawn would be the finished sheet, after the wait rather than during it.
+     * Two frames: the first gets the spinner on screen, the second hands the
+     * thread back so it is actually turning while the grid is built.
+     */
+    ready: false,
+
+    init() {
+        window.matchMedia('(max-width: 767px)')
+            .addEventListener('change', event => { this.isPhone = event.matches; });
+
+        this.buildAfterPaint();
+    },
+
+    buildAfterPaint() {
+        this.ready = false;
+        requestAnimationFrame(() => requestAnimationFrame(() => { this.ready = true; }));
+    },
+
+    /*
+     * Switching between the sheet and the checklist builds the other grid from
+     * nothing, which is the same pause the page opens with — so it gets the
+     * same circle rather than a toolbar that stops responding.
+     */
+    switchView(next) {
+        if (this.view === next) return;
+
+        this.view = next;
+        this.editing = false;
+        this.buildAfterPaint();
+    },
+
+    /*
+     * The roster is sorted and filtered on the way into the grid, and the grid
+     * asks for it far more often than it changes — every cell that re-renders
+     * reads the list it belongs to. Copying, filtering and locale-sorting the
+     * whole roll on each of those reads was most of the cost of a keystroke.
+     *
+     * So it is worked out once per change and held. The key is everything the
+     * answer depends on: the search box, the room chip, the sort direction and
+     * a counter the one place that edits a child in place bumps by hand.
+     */
+    rosterVersion: 0,
+    filteredCache: null,
+    scheduleCache: null,
+
     /* Inline, because they are painted from Alpine into cells that re-render. */
     icons: {
         pencil: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>',
@@ -931,13 +1027,26 @@ function attendanceApp() { return {
     closed: @js($closedDays),
     recent: @js($recentAttendance->map(fn($attendance) => ['id' => $attendance->id, 'name' => $attendance->child->displayName(), 'classroom' => $attendance->child->classroom, 'time' => \App\Models\Child::timeShort($attendance->signed_in_at->timezone(config('app.timezone')))])->values()),
     get filteredChildren() {
-        return [...this.childrenData]
-            .filter(child => this.matchesChild(child))
-            .sort((a, b) => {
-                const nameA = `${a.last_name} ${a.first_name}`.toLowerCase();
-                const nameB = `${b.last_name} ${b.first_name}`.toLowerCase();
-                return this.sortDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-            });
+        const key = `${this.search}|${this.room}|${this.sortDirection}|${this.rosterVersion}`;
+
+        if (this.filteredCache?.key !== key) {
+            this.filteredCache = {
+                key,
+                rows: this.childrenData
+                    .filter(child => this.matchesChild(child))
+                    .sort((a, b) => this.byName(a, b)),
+            };
+        }
+
+        return this.filteredCache.rows;
+    },
+
+    /* Last name then first, in whichever direction the header is set to. */
+    byName(a, b) {
+        const nameA = `${a.last_name} ${a.first_name}`.toLowerCase();
+        const nameB = `${b.last_name} ${b.first_name}`.toLowerCase();
+
+        return this.sortDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
     },
     get filteredCount() { return this.filteredChildren.length; },
 
@@ -970,11 +1079,13 @@ function attendanceApp() { return {
     /* ---- setting the schedule is a whole-centre job: every child, every room,
             whatever the sign-in view happens to be filtered to ---- */
     get scheduleChildren() {
-        return [...this.childrenData].sort((a, b) => {
-            const nameA = `${a.last_name} ${a.first_name}`.toLowerCase();
-            const nameB = `${b.last_name} ${b.first_name}`.toLowerCase();
-            return this.sortDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
-        });
+        const key = `${this.sortDirection}|${this.rosterVersion}`;
+
+        if (this.scheduleCache?.key !== key) {
+            this.scheduleCache = { key, rows: [...this.childrenData].sort((a, b) => this.byName(a, b)) };
+        }
+
+        return this.scheduleCache.rows;
     },
     matches(name, classroom) { return name.includes(this.search.toLowerCase()) && (this.room === '' || classroom === this.room); },
     // The LAN is searched as well as the name: it is on the sheet now, and a
@@ -1224,6 +1335,10 @@ function attendanceApp() { return {
             });
 
             this.roomEditing = null;
+            // The roll is sorted and filtered once and held; the room is one of
+            // the things it is filtered by, so moving a child has to say so or
+            // they would stay in the room they just left until the next reload.
+            this.rosterVersion++;
 
             // Moving in or out of School Age turns a full day into AM and PM.
             // The server reshaped the boxes; reload rather than guess the grid.
