@@ -27,6 +27,40 @@ class ChildProfileTest extends TestCase
     }
 
     /**
+     * A child's page is addressed by their LAN, not by their row id.
+     *
+     * The id is on no paper the centre keeps and is different in every copy of
+     * this database, so a link carrying it can be neither read out nor checked
+     * against a file. /children/10063 can be both.
+     */
+    public function test_a_child_is_addressed_by_their_lan(): void
+    {
+        $child = $this->child();
+
+        $this->assertSame($child->lan, (string) $child->getRouteKey());
+        $this->assertStringEndsWith('/children/'.$child->lan, route('children.show', $child));
+
+        $this->actingAs($this->admin())
+            ->get(route('children.show', $child))
+            ->assertOk()
+            ->assertSee('Ada Lovelace');
+    }
+
+    /** And the row id is no longer a way in. */
+    public function test_the_row_id_no_longer_opens_the_record(): void
+    {
+        $child = $this->child();
+
+        // Guards the test itself: with a five-digit LAN these cannot collide,
+        // and if they ever did this would be checking nothing.
+        $this->assertNotSame((string) $child->id, $child->lan);
+
+        $this->actingAs($this->admin())
+            ->get('/children/'.$child->id)
+            ->assertNotFound();
+    }
+
+    /**
      * Back goes where the reader came from, not to one named page.
      *
      * The record is opened from the roster, from the attendance sheet, and from
@@ -186,7 +220,7 @@ class ChildProfileTest extends TestCase
     private function child(array $attributes = []): Child
     {
         return Child::create($attributes + [
-            'lan' => '1001',
+            'lan' => '10001',
             'status' => 'Active',
             'first_name' => 'Ada',
             'last_name' => 'Lovelace',

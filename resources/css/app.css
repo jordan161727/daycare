@@ -163,7 +163,7 @@
        keep in step, and the first thing to fall out of it. */
     .att-stack { display: flex; flex-direction: column; gap: 0.2rem; align-items: center; }
     .att-cell {
-        width: 6.4rem; height: 1.7333rem; margin: 0 auto;
+        width: 5.8667rem; height: 1.7333rem; margin: 0 auto;
         display: flex; align-items: center;
         border-radius: 0.5333rem; border: 1px solid transparent;
         font-size: 0.7333rem; font-variant-numeric: tabular-nums; color: inherit;
@@ -195,13 +195,13 @@
     /* A day gone by reads quieter than today: the time stays, the box does not,
        until the pointer is over it. */
     .att-history.att-time { @apply border-transparent bg-transparent text-slate-500 dark:text-slate-400; }
-    .att-cell.att-history.att-time:hover { @apply border-slate-300 bg-slate-50 dark:border-white/20 dark:bg-white/5; }
+    .att-cell.att-history.att-time:hover { @apply border-slate-400 bg-slate-50 dark:border-white/30 dark:bg-white/5; }
 
     /* Nothing to do here: the shape stays so the row still lines up, the
        colour goes so nobody reaches for it. */
     .att-locked { cursor: default; @apply text-slate-400 dark:text-slate-500; }
-    .att-locked.att-expected, .att-locked.att-time { @apply border-slate-200 bg-transparent text-slate-400 dark:border-white/10 dark:text-slate-500; }
-    .att-locked .att-dot { @apply bg-slate-200 dark:bg-white/20; }
+    .att-locked.att-expected, .att-locked.att-time { @apply border-slate-300 bg-transparent text-slate-400 dark:border-white/20 dark:text-slate-500; }
+    .att-locked .att-dot { @apply bg-slate-300 dark:bg-white/25; }
     .att-locked .att-tag { @apply text-slate-400 dark:text-slate-500; }
 
     /* Put right by hand, after the fact. */
@@ -250,10 +250,15 @@
        today in the sky the sheet has always used for it. Left cells stay
        frozen for the tablet, so they carry their own opaque ground. */
     .att-table { border-collapse: collapse; table-layout: fixed; }
-    .att-table th, .att-table td { padding: 0.5333rem 0.2667rem; text-align: center; vertical-align: middle; @apply border-b border-slate-100 dark:border-white/5; }
+    .att-table th, .att-table td { padding: 0.5333rem 0.2667rem; text-align: center; vertical-align: middle; }
+    /* Only under the headings: that line separates what the columns are called
+       from what is in them. Between rows there is nothing, because sixty of
+       them against eleven columns of boxes drew a grid, and a grid is read as
+       a shape before it is read as a list. */
+    .att-table thead th { @apply border-b border-slate-300 dark:border-white/10; }
     .att-th { font-size: 0.7333rem; font-weight: 500; padding-bottom: 0.6667rem !important; @apply text-slate-500 dark:text-slate-400; }
     .att-col-lan, .att-lan { width: 4rem; }
-    .att-col-student, .att-student { width: 12.4rem; }
+    .att-col-student, .att-student { width: 10rem; }
     /* An element and two classes, to outrank the centring on `.att-table th,
        .att-table td` — a class and an element, which a bare class loses to. */
     .att-table th.att-col-student, .att-table td.att-student { text-align: left; }
@@ -262,7 +267,7 @@
        zig-zagged instead of making a line, and a column of names is scanned
        down the edge they start at. */
     .att-person { display: flex; align-items: center; gap: 0.6rem; text-align: left; justify-content: flex-start; }
-    .att-day { width: 7.7333rem; }
+    .att-day { width: 7.2rem; }
     .att-today { @apply bg-sky-100 dark:bg-sky-500/10; }
     .att-closed-col { @apply bg-rose-50/60 dark:bg-rose-500/5; }
     .att-lan { font-size: 0.7333rem; font-variant-numeric: tabular-nums; @apply text-slate-400 dark:text-slate-500; }
@@ -280,11 +285,22 @@
     /* Read down its left edge: the rooms run from four characters to ten and
        carry an icon, so centred they landed in six different places. The
        gutter keeps the icon off the frozen name column that ends beside it. */
-    .att-w-room { width: 8.1333rem; }   /* "🐘 School Age ✎" */
+    .att-w-room { width: 7.3333rem; }   /* "🐘 School Age ✎" */
     .att-table th.att-w-room, .att-table td.att-w-room { text-align: left; padding-left: 0.8rem; }
-    .att-w-dob { width: 6.9333rem; }     /* "2018/09/18" */
-    .att-w-age { width: 4.9333rem; }      /* "10y 11m" */
-    .att-w-hours { width: 10.1333rem; }   /* "8:00 AM – 5:30 PM" */
+    .att-w-dob { width: 5.6rem; }       /* "2018/09/18" */
+    .att-w-age { width: 4rem; }         /* "10y 11m" */
+    /* The same gutter as the room beside them, so the four fact columns start
+       at the same place on every row rather than each floating in the middle
+       of its own width. */
+    .att-table th.att-w-dob, .att-table td.att-w-dob,
+    .att-table th.att-w-age, .att-table td.att-w-age,
+    .att-table th.att-w-hours, .att-table td.att-w-hours { text-align: left; padding-left: 0.8rem; }
+    /* One time a line, so the column is a time wide rather than a phrase
+       wide. Tight leading: two lines in the height of a row, beside a name
+       that is one line, and the row must not grow to hold them. */
+    .att-w-hours { width: 5rem; }       /* "12:00 AM" and a gutter */
+    .att-hours { display: block; line-height: 1.15; }
+    .att-hours > span { display: block; }
 
     /* Today, as a pill rather than a tint the width of the column. Sky is the
        one colour the sheet does not use elsewhere — the boxes are green,

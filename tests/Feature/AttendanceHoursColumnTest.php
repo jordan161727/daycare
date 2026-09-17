@@ -46,13 +46,28 @@ class AttendanceHoursColumnTest extends TestCase
 
         // A column beside the boxes, after the age, before the week.
         $this->assertStringContainsString('>Hours</th>', $html);
-        $this->assertStringContainsString("x-text=\"child.schedule_hours || '—'\"", $html);
+
+        // One time a line, not "8:30 AM – 5:30 PM" as a phrase: the drop-offs
+        // make a column and the pick-ups make another, so a row that differs
+        // from the ones around it is seen rather than read.
+        $this->assertStringContainsString('<span class="att-hours">', $html);
+        $this->assertStringContainsString('x-text="child.drop_off_label"', $html);
+        $this->assertStringContainsString('x-text="child.pick_up_label"', $html);
+
+        // Guarded on the pair rather than on either end, because half a range
+        // reads as a time that was cut off.
+        $this->assertStringContainsString('<template x-if="child.schedule_hours">', $html);
 
         // The hours themselves reach the browser, straight off the record.
         $this->assertSame(1, preg_match("/childrenData: JSON\.parse\('(.*?)'\)/", $html, $matches));
         $rows = json_decode(json_decode('"'.$matches[1].'"'), associative: true);
 
         $this->assertSame('8:30 AM – 5:30 PM', $rows[0]['schedule_hours']);
+
+        // The phrase stays for the hover and the card, where one line is the
+        // right shape; the column is drawn from the two ends beside it.
+        $this->assertSame('8:30 AM', $rows[0]['drop_off_label']);
+        $this->assertSame('5:30 PM', $rows[0]['pick_up_label']);
     }
 
     /**

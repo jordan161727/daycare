@@ -447,7 +447,7 @@
                 <div class="glass-card overflow-hidden rounded-2xl">
                     {{-- Week grid: needs the width, so it only appears from md up. --}}
                     <div class="hidden overflow-x-auto md:block">
-                        <table class="att-table w-full min-w-[86rem]">
+                        <table class="att-table w-full min-w-[72rem]">
                             <thead>
                                 <tr>
                                     {{-- The LAN, not a row number: it is what the paper
@@ -497,7 +497,7 @@
                                     @endforeach
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-slate-100 dark:divide-white/10">
+                            <tbody>
                                 <template x-for="child in filteredChildren" :key="child.id">
                                     <tr class="transition hover:bg-slate-50/60 dark:hover:bg-white/5">
                                         <td class="att-td att-lan sticky left-0 z-10 bg-white dark:bg-night-900" x-text="child.lan || '—'"></td>
@@ -510,7 +510,7 @@
                                                          a box exists at all. Its hover carries the hours
                                                          they are contracted for, which used to be a
                                                          column of their own. --}}
-                                                    <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="att-name truncate underline-offset-2 hover:text-indigo-600 hover:underline dark:hover:text-indigo-300" x-text="child.name" :title="'Open ' + child.first_name + '\'s record' + (child.schedule_hours ? ' — here ' + child.schedule_hours : '')"></a>
+                                                    <a x-show="canOpenProfile" :href="profileUrl(child.lan)" class="att-name truncate underline-offset-2 hover:text-indigo-600 hover:underline dark:hover:text-indigo-300" x-text="child.name" :title="'Open ' + child.first_name + '\'s record' + (child.schedule_hours ? ' — here ' + child.schedule_hours : '')"></a>
                                                     <span x-show="! canOpenProfile" class="att-name truncate" x-text="child.name" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : ''"></span>
                                                     {{-- No room here: it has a column of its own three
                                                          along, and a row does not need to say it twice. --}}
@@ -528,7 +528,20 @@
                                         </td>
                                         <td class="att-td att-meta att-w-dob" :class="blankClass(child.birth_date)" x-text="child.birth_date || '—'"></td>
                                         <td class="att-td att-meta att-w-age" :class="blankClass(child.age)" x-text="child.age || '—'"></td>
-                                        <td class="att-td att-meta att-w-hours" :class="blankClass(child.schedule_hours)" x-text="child.schedule_hours || '—'" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : 'No hours agreed yet'"></td>
+                                        {{-- One time a line. The guard is
+                                             schedule_hours because that is null
+                                             until both ends are agreed, and half
+                                             a range on a register reads as a time
+                                             that was cut off. --}}
+                                        <td class="att-td att-meta att-w-hours" :class="blankClass(child.schedule_hours)" :title="child.schedule_hours ? child.first_name + ' is here ' + child.schedule_hours : 'No hours agreed yet'">
+                                            <template x-if="child.schedule_hours">
+                                                <span class="att-hours">
+                                                    <span x-text="child.drop_off_label"></span>
+                                                    <span x-text="child.pick_up_label"></span>
+                                                </span>
+                                            </template>
+                                            <template x-if="! child.schedule_hours"><span>&mdash;</span></template>
+                                        </td>
                                         @foreach($weekDates as $date)
                                             {{-- Closure is painted from Alpine rather than Blade
                                                  because a day is closed and reopened without the
@@ -545,7 +558,7 @@
                     </div>
 
                     {{-- Phone layout: one card per child, one row per day. --}}
-                    <div class="divide-y divide-slate-100 md:hidden dark:divide-white/10">
+                    <div class="divide-y divide-slate-200 md:hidden dark:divide-white/10">
                         <div class="flex items-center justify-between px-3 py-2">
                             <button type="button" @click="toggleSort" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 <span>Student</span>
@@ -558,7 +571,7 @@
                                 <div class="flex items-center gap-3">
                                     <span class="h-9 w-9 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
                                     <div class="min-w-0 flex-1">
-                                        <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.name"></a>
+                                        <a x-show="canOpenProfile" :href="profileUrl(child.lan)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.name"></a>
                                         <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.name"></p>
                                         <p class="truncate text-xs text-slate-500" x-text="[roomLabel(child), child.birth_date, child.schedule_hours].filter(Boolean).join(' · ')" title="Room, date of birth and the hours agreed"></p>
                                     </div>
@@ -871,7 +884,9 @@ function attendanceApp() { return {
          children they may already see — the list is filtered by the same rule
          the record is — so the teacher gets the phone numbers and the pick-up
          list from here too, instead of a link they are refused. --}}
-    profileUrl(childId) { return "{{ route('children.show', ['child' => '__ID__']) }}".replace('__ID__', childId); },
+    // By LAN, not by row id: that is how a child's page is addressed, and
+    // how the office names them on paper.
+    profileUrl(lan) { return "{{ route('children.show', ['child' => '__LAN__']) }}".replace('__LAN__', lan); },
     weekStart: @js($weekStartDate),
     paint: null,
     pending: {},
@@ -889,7 +904,7 @@ function attendanceApp() { return {
         'shape' => '',
         'attributes' => new \Illuminate\View\ComponentAttributeBag,
     ])->render())))
-    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'lan' => $child->lan, 'name' => $child->displayName(), 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'drop_off' => \App\Models\Child::timeInputValue($child->drop_off_time ?: \App\Models\Child::DAY_OPENS_AT), 'schedule_days' => $child->scheduleDays(), 'schedule_days_label' => $child->scheduleDaysLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
+    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'lan' => $child->lan, 'name' => $child->displayName(), 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'drop_off_label' => \App\Models\Child::timeLabel($child->drop_off_time), 'pick_up_label' => \App\Models\Child::timeLabel($child->pick_up_time), 'drop_off' => \App\Models\Child::timeInputValue($child->drop_off_time ?: \App\Models\Child::DAY_OPENS_AT), 'schedule_days' => $child->scheduleDays(), 'schedule_days_label' => $child->scheduleDaysLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
     rooms: @js(\App\Services\ClassroomAssignment::rooms()),
     // Moving a child between rooms changes who can see them, so it is the
     // director's call rather than a teacher's.

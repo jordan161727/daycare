@@ -554,8 +554,11 @@ class ScheduleEditingTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('attendance.index', ['date' => self::MONDAY]))
             ->assertOk()
-            ->assertSee('profileUrl(child.id)', false)
-            ->assertSee('/children/__ID__"', false);
+            // Built from the LAN, because that is how a child's page is
+            // addressed. Built from the id it resolved to nothing, and a name on
+            // the sheet led to a 404.
+            ->assertSee('profileUrl(child.lan)', false)
+            ->assertSee('/children/__LAN__"', false);
 
         $this->actingAs(User::factory()->create(['role' => 'teacher', 'classroom' => 'Toddler']))
             ->get(route('children.show', $child))

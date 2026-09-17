@@ -51,7 +51,7 @@
                     <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
                         @php($head = 'px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400')
                                                 <th scope="col" class="{{ $head }} sticky left-0 z-20 w-[4rem] bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{{ $arrow('lan') }}</a></th>
-                        <th scope="col" class="{{ $head }} sticky left-[4rem] z-20 border-r border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
+                        <th scope="col" class="{{ $head }} sticky left-[4rem] z-20 bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
                         {{-- Third, as on the attendance sheet. The two tables list
                              the same children and are read one after the other, so a
                              column that sits in a different place on each is one the
@@ -70,14 +70,14 @@
                         <th scope="col" class="{{ $head }} text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-white/10">
+                <tbody>
                     @forelse($children as $child)
                         <tr x-show="@js(strtolower($child->first_name.' '.$child->last_name.' '.$child->classroom.' '.$child->lan)).includes(search.toLowerCase())" class="transition hover:bg-slate-50 dark:hover:bg-white/5">
                                                         {{-- Frozen against a sideways scroll: on a tablet the roll is
                                  wider than the screen, and a row read with the name
                                  off-screen is a row about nobody. --}}
                             <td class="sticky left-0 z-10 w-[4rem] bg-white px-3 py-2 text-sm tabular-nums text-slate-400 dark:bg-night-900 dark:text-slate-500">{{ $child->lan }}</td>
-                            <td class="sticky left-[4rem] z-10 border-r border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-night-900">
+                            <td class="sticky left-[4rem] z-10 bg-white px-3 py-2 dark:bg-night-900">
                                 {{-- The same avatar and name the attendance sheet draws,
                                      in the same classes, so the two tables cannot drift.
 

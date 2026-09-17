@@ -2,7 +2,7 @@
 
 {{-- Narrower than it was: the labels are smaller now, so the old 17rem was
      paid for by the page beside it and bought nothing. --}}
-<aside :class="[collapsed ? 'desktop:w-20' : 'desktop:w-60', mobileOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0']" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-[#B6C3E6] text-slate-900 shadow-2xl dark:bg-night-900 dark:text-slate-100 transition-all duration-300 desktop:sticky desktop:top-0 desktop:h-screen">
+<aside :class="[collapsed ? 'desktop:w-16' : 'desktop:w-48', mobileOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0']" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-[#B6C3E6] text-slate-900 shadow-2xl dark:bg-night-900 dark:text-slate-100 transition-all duration-300 desktop:sticky desktop:top-0 desktop:h-screen">
     {{-- Deep enough for the logo to be read rather than merely acknowledged.
          It costs the nav sixteen pixels, which that list can spare — it already
          scrolls on its own.

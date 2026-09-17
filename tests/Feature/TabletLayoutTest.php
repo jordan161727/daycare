@@ -62,9 +62,10 @@ class TabletLayoutTest extends TestCase
         // columns are there to make safe.
         //
         // In rem, like every width in the grid, so the table grows with the
-        // text rather than holding 1290 pixels while the words inside it get
-        // bigger. 86rem is the same 1290px at the 15px root.
-        $this->assertStringContainsString('min-w-[86rem]', $html);
+        // text rather than holding a fixed pixel count while the words inside
+        // it get bigger. It narrowed when the Hours column stopped carrying
+        // "7:00 AM – 5:05 PM" on one line and began stacking the two times.
+        $this->assertStringContainsString('min-w-[72rem]', $html);
         $this->assertStringNotContainsString('min-w-[1290px]', $html);
     }
 

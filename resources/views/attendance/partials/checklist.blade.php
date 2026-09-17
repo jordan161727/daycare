@@ -97,7 +97,7 @@
                                 <div class="min-w-0">
                                     {{-- Straight to the enrolment dates, which are the reason a
                                          row has fewer boxes than the rest. --}}
-                                    <a x-show="canOpenProfile" :href="profileUrl(child.id)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.name"></a>
+                                    <a x-show="canOpenProfile" :href="profileUrl(child.lan)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.name"></a>
                                     <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.name"></p>
                                     {{-- The room is where a ratio comes from, so it is set
                                          here, where the week is being planned. --}}

@@ -563,6 +563,23 @@ class Child extends Model
         return ! ($this->withdrawn_on && $date > $this->withdrawn_on->toDateString());
     }
 
+    /**
+     * Children are addressed by their LAN in a URL, not by their row id.
+     *
+     * The id means nothing off this screen: it is on no paper the centre keeps,
+     * and the same child has a different one in every copy of this database.
+     * The LAN is what the cabinet, the parent letter and the staff all use, so
+     * /children/10063 is a link that can be read out and checked against a file.
+     *
+     * The route constraint is whereNumber('child'), which is what keeps
+     * /children/create from being swallowed by /children/{child}. A LAN is
+     * digits, so that still holds.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'lan';
+    }
+
     /** The first LAN the centre issues. Five digits, as the roll is kept. */
     public const LAN_STARTS_AT = 10001;
 
