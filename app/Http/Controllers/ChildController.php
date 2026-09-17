@@ -45,8 +45,16 @@ class ChildController extends Controller
         abort_unless(in_array($sort, $allowedSorts, true), 404);
         abort_unless(in_array($direction, ['asc', 'desc'], true), 404);
 
+        // Which status the roll is filtered to, or all of them. An invented one
+        // is a 404 rather than an empty list: a page that says "no children"
+        // when the truth is "no such status" sends somebody looking for a bug
+        // in their data.
+        $status = trim((string) request('status'));
+        abort_unless($status === '' || in_array($status, Child::STATUSES, true), 404);
+
         $children = Child::query()
             ->visibleTo($requestUser = request()->user())
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
             // Age is shown, not stored, so it sorts by the date it is worked out
             // from — the other way round, since the youngest child is the one
             // with the latest date of birth.
@@ -69,7 +77,18 @@ class ChildController extends Controller
         // that is read once and then stops being looked at.
         $pendingCount = Child::visibleTo($requestUser)->where('status', 'Pending')->count();
 
-        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount'));
+        // Every status and how many are in it, for the chips. Counted over the
+        // whole roll rather than the filtered view — they are how the filter is
+        // chosen, so a count that moved when a chip was pressed would be
+        // answering about somewhere else.
+        $statusCounts = Child::visibleTo($requestUser)
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $rollCount = $statusCounts->sum();
+
+        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount'));
     }
 
     /**
@@ -115,6 +134,9 @@ class ChildController extends Controller
             'child' => $child,
             'roomSchedule' => RoomSchedule::byRoom()[$child->classroom] ?? null,
             'back' => $this->backFrom($child),
+            // What happened to their place on the roll, newest first. Eager the
+            // user, or the panel asks for each name one query at a time.
+            'statusChanges' => $child->statusChanges()->with('changedBy')->get(),
         ]);
     }
 

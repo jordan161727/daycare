@@ -63,7 +63,11 @@ class ChildScheduleTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']))
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSeeInOrder(['12', 'on the roll', '9', 'active']);
+            // On the chips that filter by them: one place the roll is
+            // counted, and it is the control you press to see those children.
+            ->assertSee('All <span class="ml-0.5 opacity-60">12</span>', false)
+            ->assertSee('Active <span class="ml-0.5 opacity-60">9</span>', false)
+            ->assertSee('Inactive <span class="ml-0.5 opacity-60">3</span>', false);
     }
 
     public function test_the_roster_shows_the_date_year_first(): void

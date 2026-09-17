@@ -324,6 +324,19 @@
                         </div>
                     @endif
                 @endforeach
+                {{-- What they are now and since when, above the two dates that
+                     say what was planned. The badge at the top of the page says
+                     "Inactive"; the next thing a reader wants is when, and
+                     withdrawn_on cannot answer it because it is a box somebody
+                     has to remember to fill in. This is recorded whether they
+                     remembered or not. --}}
+                @php($became = $statusChanges->firstWhere('to_status', $child->status))
+                @if($child->status !== 'Active' && $became?->from_status !== null)
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-slate-500 dark:text-slate-400">{{ $child->status }} since</dt>
+                        <dd class="font-semibold">{{ $became->created_at->format('n/j/Y') }}</dd>
+                    </div>
+                @endif
                 <div class="flex justify-between gap-4">
                     <dt class="text-slate-500 dark:text-slate-400">Enrolled</dt>
                     <dd class="font-semibold">{{ $child->enrolled_on?->format('n/j/Y') ?? 'Always been here' }}</dd>
@@ -332,6 +345,35 @@
                     <dt class="text-slate-500 dark:text-slate-400">Withdrawn</dt>
                     <dd class="font-semibold">{{ $child->withdrawn_on?->format('n/j/Y') ?? 'Still enrolled' }}</dd>
                 </div>
+
+                {{-- What their place on the roll has actually done, as against
+                     the two dates above, which say what was planned for it.
+
+                     Only once there is something to tell: a record that has
+                     been Active since the day it was made says so in the badge
+                     at the top of the page, and repeating it here as "Added as
+                     Active" would be a panel that teaches the reader to skip
+                     this part of the record. --}}
+                @if($statusChanges->contains(fn ($change) => $change->from_status !== null))
+                    <div class="border-t border-slate-200/70 pt-3 dark:border-white/10">
+                        <dt class="mb-1.5 text-slate-500 dark:text-slate-400">On the roll</dt>
+                        <dd>
+                            <ul class="space-y-1">
+                                @foreach($statusChanges as $change)
+                                    <li class="flex justify-between gap-4">
+                                        <span class="font-semibold">{{ $change->summary() }}</span>
+                                        <span class="whitespace-nowrap text-right text-slate-500 dark:text-slate-400">
+                                            {{ $change->created_at->format('n/j/Y') }}
+                                            @if($change->changedBy)
+                                                <span class="block text-[11px]">by {{ $change->changedBy->name }}</span>
+                                            @endif
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </dd>
+                    </div>
+                @endif
                 @if(filled($child->gender))
                     <div class="flex justify-between gap-4">
                         <dt class="text-slate-500 dark:text-slate-400">Girl or boy</dt>

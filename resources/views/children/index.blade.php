@@ -6,7 +6,7 @@
 
 <div x-data="{ search: '' }">
     @php($nextDirection = fn ($column) => $sort === $column && $direction === 'asc' ? 'desc' : 'asc')
-    @php($sortUrl = fn ($column) => route('children.index', ['sort' => $column, 'direction' => $nextDirection($column)]))
+    @php($sortUrl = fn ($column) => route('children.index', array_filter(['sort' => $column, 'direction' => $nextDirection($column), 'status' => $status])))
     @php($arrow = fn ($column) => $sort === $column ? ($direction === 'asc' ? ' ↑' : ' ↓') : '')
 
     {{-- One line, the same shape as the attendance sheet's: what page this is,
@@ -15,11 +15,34 @@
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 class="text-base font-bold tracking-tight sm:text-lg">{{ auth()->user()->isAdmin() ? 'Children' : 'My Students' }}</h1>
 
-            <p class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                <span><b class="font-bold text-slate-900 dark:text-white">{{ $children->count() }}</b> on the roll</span>
-                <span><b class="font-bold text-emerald-600 dark:text-emerald-400">{{ $activeCount }}</b> active</span>
-                @if($pendingCount > 0)<span><b class="font-bold text-amber-600 dark:text-amber-400">{{ $pendingCount }}</b> pending</span>@endif
-            </p>
+            {{-- The roll by status, as chips: a count apiece so it can be read
+                 without pressing anything, and a press to see only those.
+
+                 The same shape the attendance sheet filters its rooms with, and
+                 in the same place, because the two pages list the same children
+                 and are read one after the other.
+
+                 A status nobody is in is not offered — an "Inactive 0" chip is
+                 a control that does nothing, and the centre's first year has no
+                 leavers in it at all. --}}
+            @php($chip = 'shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition')
+            @php($chipOn = 'bg-slate-900 text-white dark:bg-white dark:text-slate-900')
+            @php($chipOff = 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10')
+            <div class="flex flex-wrap items-center gap-1.5">
+                <a href="{{ route('children.index', array_filter(['sort' => $sort, 'direction' => $direction])) }}"
+                   class="{{ $chip }} {{ $status === '' ? $chipOn : $chipOff }}"
+                   @if($status === '') aria-current="true" @endif>
+                    All <span class="ml-0.5 opacity-60">{{ $rollCount }}</span>
+                </a>
+                @foreach(\App\Models\Child::STATUSES as $option)
+                    @continue(($statusCounts[$option] ?? 0) === 0)
+                    <a href="{{ route('children.index', array_filter(['sort' => $sort, 'direction' => $direction, 'status' => $option])) }}"
+                       class="{{ $chip }} {{ $status === $option ? $chipOn : $chipOff }}"
+                       @if($status === $option) aria-current="true" @endif>
+                        {{ $option }} <span class="ml-0.5 opacity-60">{{ $statusCounts[$option] }}</span>
+                    </a>
+                @endforeach
+            </div>
 
             <div class="ml-auto flex items-center gap-1.5">
                 <label class="relative hidden sm:block">
@@ -132,7 +155,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="px-3 py-12 text-center text-sm text-slate-500">No children have been added yet.</td></tr>
+                        <tr><td colspan="9" class="px-3 py-12 text-center text-sm text-slate-500">{{ $status === '' ? 'No children have been added yet.' : 'Nobody on the roll is '.strtolower($status).' right now.' }}</td></tr>
                     @endforelse
                 </tbody>
             </table>

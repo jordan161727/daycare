@@ -1507,7 +1507,6 @@ function attendanceApp() { return {
 
         if (present && date < this.today && this.sessionCount(childId) === 1) classes.push('att-history');
         if (! this.canTap(date)) classes.push('att-locked');
-        if (this.amendment(childId, date, session)) classes.push('att-amended');
 
         return classes.join(' ');
     },

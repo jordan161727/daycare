@@ -97,8 +97,8 @@ class ChildPendingStatusTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSee('>1</b> active', false)
-            ->assertSee('>1</b> pending', false);
+            ->assertSee('Active <span class="ml-0.5 opacity-60">1</span>', false)
+            ->assertSee('Pending <span class="ml-0.5 opacity-60">1</span>', false);
     }
 
     private function child(array $attributes = []): Child

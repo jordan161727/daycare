@@ -204,9 +204,6 @@
     .att-locked .att-dot { @apply bg-slate-300 dark:bg-white/25; }
     .att-locked .att-tag { @apply text-slate-400 dark:text-slate-500; }
 
-    /* Put right by hand, after the fact. */
-    .att-amended { border-style: dashed; }
-
     /* The strip on the right of a time, in Edit: press it to type the exact
        hour. It takes the box's own colour so it reads as part of the box. */
     .att-pencil {
@@ -221,7 +218,10 @@
     .att-pencil:hover { @apply bg-slate-900/5 dark:bg-white/10; }
     .att-pencil:focus-visible { @apply outline-2 -outline-offset-2 outline-indigo-500; }
 
-    .att-cell.att-editing { padding: 0 0.2667rem; cursor: text; @apply border-dashed border-emerald-400 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-500/15; }
+    /* Solid, like every other box. The dash was saying "not settled yet",
+       which the caret and the green ground already say, and dotted means one
+       thing on this sheet: expected, not arrived. */
+    .att-cell.att-editing { padding: 0 0.2667rem; cursor: text; @apply border-solid border-emerald-400 bg-emerald-50 dark:border-emerald-400/50 dark:bg-emerald-500/15; }
     .att-cell.att-editing input {
         flex: 1; min-width: 0; border: 0; background: transparent;
         font: inherit; font-size: 0.7333rem; text-align: center; outline: none;

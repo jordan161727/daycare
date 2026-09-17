@@ -94,6 +94,38 @@ class Child extends Model
 
             $child->classroom = $child->classroomOn();
         });
+
+        // The first line of the history: added to the roll, as something.
+        static::created(fn (self $child) => $child->recordStatus(null, $child->status));
+
+        // And every line after it. wasChanged rather than isDirty, because this
+        // runs after the write — isDirty is already false by then, which is the
+        // quiet way an audit trail ends up empty.
+        static::updated(function (self $child) {
+            if ($child->wasChanged('status')) {
+                $child->recordStatus($child->getOriginal('status'), $child->status);
+            }
+        });
+    }
+
+    /**
+     * Append one line to this child's history on the roll.
+     *
+     * auth()->id() is null for a seeder, an import or a command run from the
+     * shell, and the row is written anyway: "we do not know who" is a fact
+     * worth keeping and is not the same as nobody having done it.
+     */
+    protected function recordStatus(?string $from, ?string $to): void
+    {
+        if ($to === null || $from === $to) {
+            return;
+        }
+
+        $this->statusChanges()->create([
+            'from_status' => $from,
+            'to_status' => $to,
+            'changed_by' => auth()->id(),
+        ]);
     }
 
     public function getFullNameAttribute()
@@ -631,6 +663,23 @@ class Child extends Model
             ->max();
 
         return (string) max(self::LAN_STARTS_AT, ($highest ?? 0) + 1);
+    }
+
+    /**
+     * When this child went on the roll, and every change since.
+     *
+     * Newest first, because the question this answers is almost always "are
+     * they with us, and since when" rather than "what happened in 2023".
+     */
+    public function statusChanges()
+    {
+        return $this->hasMany(ChildStatusChange::class)->latest();
+    }
+
+    /** The day they became what they are now, or null for a record that predates the history. */
+    public function statusSince(): ?\Illuminate\Support\Carbon
+    {
+        return $this->statusChanges()->where('to_status', $this->status)->first()?->created_at;
     }
 
     public function attendances()
