@@ -73,6 +73,174 @@ class PeopleStepTest extends TestCase
         $this->assertStringContainsString('This cannot be undone.', $html);
     }
 
+    public function test_saving_a_child_links_the_parents_on_the_form(): void
+    {
+        /*
+         * The scenario the scanned enrollment form produces.
+         *
+         * Before this, the extractor filled the mother and father columns and
+         * stopped: the child's page showed two parents while the People step
+         * showed nobody, and nothing tied them to the sibling already on file.
+         */
+        $this->actingAs($this->admin)
+            ->post(route('children.store'), [
+                'first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Active',
+                'birth_date' => '2022-12-15',
+                'mother_name' => 'Kaylynn Adkins', 'mother_cell' => '585-820-5029',
+                'mother_email' => 'Kaylynnadkins13@gmail.com',
+                'father_name' => 'Brad Adkins', 'father_cell' => '716-510-5162',
+                'father_email' => 'bradkins@gmail.com', 'father_employer' => 'NExgistics, LLC',
+                'emergency_contact' => 'Kaylynn Adkins',
+                'secondary_emergency_contact' => 'Amy Crumb',
+                'emergency_telephone' => '585-352-8844',
+                'emergency_relationship' => 'Grandmother',
+                'pickup_1_name' => 'Amy Crumb', 'pickup_1_telephone' => '585-352-8844',
+            ])
+            ->assertRedirect();
+
+        $child = Child::firstOrFail();
+
+        // Kaylynn is the mother block and the first emergency line; Amy is the
+        // second emergency line and the first pick-up slot. Three people, not
+        // five.
+        $this->assertSame(3, Person::count());
+
+        $kaylynn = Person::where('name', 'Kaylynn Adkins')->firstOrFail();
+        $link = ChildPerson::where('child_id', $child->id)->where('person_id', $kaylynn->id)->firstOrFail();
+
+        $this->assertSame('Mother', $link->relationship);
+        $this->assertTrue($link->is_guardian);
+        $this->assertTrue($link->can_pickup);
+        $this->assertTrue($link->is_emergency, 'she is the first emergency contact too');
+        $this->assertSame(1, $link->priority);
+        $this->assertSame('Kaylynnadkins13@gmail.com', $kaylynn->email);
+
+        $brad = Person::where('name', 'Brad Adkins')->firstOrFail();
+        $this->assertSame('NExgistics, LLC', $brad->employer);
+        $this->assertSame('Father', ChildPerson::where('person_id', $brad->id)->firstOrFail()->relationship);
+    }
+
+    public function test_a_second_child_reuses_the_parent_already_on_file(): void
+    {
+        // The whole point of the people table: a mother with two children at
+        // the centre is one record, not two.
+        $form = [
+            'status' => 'Active', 'last_name' => 'Adkins', 'birth_date' => '2022-12-15',
+            'mother_name' => 'Kaylynn Adkins', 'mother_cell' => '585-820-5029',
+        ];
+
+        $this->actingAs($this->admin)->post(route('children.store'), array_merge($form, ['first_name' => 'Maeve']))->assertRedirect();
+
+        // The same woman, her number written the other way round on the second
+        // form — which is how it arrives off a scan.
+        $this->actingAs($this->admin)->post(route('children.store'), array_merge($form, [
+            'first_name' => 'Sibling', 'mother_cell' => '(585) 820 5029',
+        ]))->assertRedirect();
+
+        $this->assertSame(1, Person::count(), 'the mother was typed in twice');
+        $this->assertSame(2, ChildPerson::count());
+    }
+
+    public function test_a_scanned_form_is_marked_for_review_and_a_typed_one_is_not(): void
+    {
+        $base = ['first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Active'];
+
+        $this->actingAs($this->admin)->post(route('children.store'), $base)->assertRedirect();
+        $this->assertSame('ok', Child::firstOrFail()->import_status, 'typed by hand, already seen by a person');
+
+        $this->actingAs($this->admin)
+            ->post(route('children.store'), array_merge($base, ['first_name' => 'Scanned', 'import_token' => 'abc-123']))
+            ->assertRedirect();
+
+        // Handwriting read by a model is worth somebody's eye before it is
+        // trusted.
+        $this->assertSame('needs_review', Child::where('first_name', 'Scanned')->firstOrFail()->import_status);
+    }
+
+    public function test_the_child_page_reads_the_people_tables_not_the_old_columns(): void
+    {
+        /*
+         * The confusion this removes.
+         *
+         * The page used to build "Parents & guardians" from mother_name and
+         * father_name, which nothing writes to any more. So a parent unlinked
+         * on the People step went on being shown here, and one added there
+         * never appeared — two answers to who a child's parents are, on two
+         * screens, both of them confident.
+         */
+        $child = $this->makeChild([
+            // Still on the row, and now deliberately ignored.
+            'mother_name' => 'Ghost Mother',
+            'father_name' => 'Ghost Father',
+            'emergency_contact' => 'Ghost Emergency',
+            'pickup_1_name' => 'Ghost Pickup',
+        ]);
+
+        $person = Person::create(['name' => 'Kaylynn Adkins', 'cell' => '585-820-5029']);
+
+        $this->actingAs($this->admin)->postJson(route('people.link', $person), [
+            'child_id' => $child->id, 'relationship' => 'Mother',
+            'is_guardian' => true, 'can_pickup' => true, 'is_emergency' => true, 'priority' => 1,
+        ])->assertOk();
+
+        $html = $this->actingAs($this->admin)->get(route('children.show', $child))->assertOk()->getContent();
+
+        $this->assertStringContainsString('Kaylynn Adkins', $html);
+
+        // None of the four old columns reaches the page any more.
+        foreach (['Ghost Mother', 'Ghost Father', 'Ghost Emergency', 'Ghost Pickup'] as $ghost) {
+            $this->assertStringNotContainsString($ghost, $html, "{$ghost} is still being read off the old columns");
+        }
+    }
+
+    public function test_a_restricted_person_is_named_but_kept_off_the_pick_up_list(): void
+    {
+        // The card is read with a stranger at the door. Somebody who was on the
+        // list last week and is not today is the fact that matters most, and an
+        // empty space does not carry it.
+        $child = $this->makeChild();
+        $person = Person::create(['name' => 'Jordan Adkins', 'cell' => '585-000-0000']);
+
+        $this->actingAs($this->admin)->postJson(route('people.link', $person), [
+            'child_id' => $child->id, 'can_pickup' => true,
+            'restriction' => 'Court order — no contact',
+        ])->assertOk();
+
+        $html = $this->actingAs($this->admin)->get(route('children.show', $child))->assertOk()->getContent();
+
+        $this->assertStringContainsString('Must not collect', $html);
+        $this->assertStringContainsString('Court order', $html);
+        $this->assertStringContainsString('Nobody is cleared to collect this child.', $html);
+    }
+
+    public function test_creating_a_person_takes_the_reader_to_the_form(): void
+    {
+        // The form is the third card down, so the press opened it below the
+        // fold on anything shorter than a desktop — the button looked as if it
+        // had done nothing until you scrolled to check.
+        $child = $this->makeChild();
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('children.edit', $child))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('@click="toggleCreate()"', $html);
+        $this->assertStringContainsString('x-ref="newPersonCard"', $html);
+        $this->assertStringContainsString('x-ref="newPersonName"', $html);
+        $this->assertStringContainsString('scrollIntoView', $html);
+
+        // The cursor lands in the field somebody who pressed it was heading for.
+        $this->assertStringContainsString('newPersonName?.focus({ preventScroll: true })', $html);
+
+        // Slid or jumped, according to what the reader has asked their browser
+        // for — the same as the rest of the site.
+        $this->assertStringContainsString("'(prefers-reduced-motion: reduce)'", $html);
+
+        // And the button says which way it will go.
+        $this->assertStringContainsString(':aria-expanded="creating"', $html);
+    }
+
     public function test_saving_the_child_no_longer_touches_the_old_contact_columns(): void
     {
         // They are still on the table and still hold what the migration put

@@ -164,6 +164,27 @@ class PeopleBackfillTest extends TestCase
         $this->assertSame(1, $this->linkFor($child, Person::firstOrFail())->priority);
     }
 
+    public function test_a_dry_run_writes_nothing(): void
+    {
+        // The promise the flag makes, and the one worth a test of its own:
+        // somebody runs this against production to see what it would do.
+        $this->makeChild([
+            'mother_name' => 'Kaylynn Adkins',
+            'mother_cell' => '585-820-5029',
+            'pickup_1_name' => 'Amy Crumb',
+            'pickup_1_telephone' => '585-352-8844',
+        ]);
+
+        $this->artisan('people:backfill --dry-run')->assertSuccessful();
+
+        $this->assertSame(0, Person::count(), 'a dry run wrote people to the database');
+        $this->assertSame(0, ChildPerson::count(), 'a dry run wrote links to the database');
+
+        // And it still reports what it would have done.
+        $this->backfill();
+        $this->assertSame(2, Person::count());
+    }
+
     public function test_the_script_can_be_run_twice_without_duplicating(): void
     {
         $this->makeChild([

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Child;
 use App\Models\ChildPerson;
 use App\Models\Person;
+use App\Services\PeopleDirectory;
 use App\Services\PersonMatcher;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,11 @@ class BackfillPeople extends Command
 
     protected $description = 'Fill people and child_people from the old child columns and the guardians table';
 
+    public function __construct(private PeopleDirectory $directory)
+    {
+        parent::__construct();
+    }
+
     public function handle(PersonMatcher $matcher): int
     {
         $dry = (bool) $this->option('dry-run');
@@ -45,14 +51,26 @@ class BackfillPeople extends Command
 
         $counts = ['people' => 0, 'links' => 0, 'reused' => 0];
 
-        DB::transaction(function () use ($matcher, &$counts) {
-            $counts = $this->backfill($matcher);
-        });
+        /*
+         * A dry run is undone by throwing, which is the only thing that undoes
+         * it: DB::transaction() commits the moment its closure returns, so a
+         * rollBack() afterwards has no open transaction to act on and does
+         * nothing at all. This command printed "nothing will be written" and
+         * then wrote everything.
+         *
+         * The counts survive the throw because $counts is bound by reference —
+         * it is assigned before the exception is raised.
+         */
+        try {
+            DB::transaction(function () use ($matcher, &$counts, $dry) {
+                $counts = $this->backfill($matcher);
 
-        if ($dry) {
-            // Everything above ran; rolling back by throwing would lose the
-            // counts, so the transaction is undone here instead.
-            DB::rollBack();
+                if ($dry) {
+                    throw new DryRunComplete;
+                }
+            });
+        } catch (DryRunComplete) {
+            // Rolled back. Anything else is a real failure and is left to rise.
         }
 
         $this->table(
@@ -73,13 +91,16 @@ class BackfillPeople extends Command
         $bar = $this->output->createProgressBar($children->count());
 
         foreach ($children as $child) {
-            foreach ($matcher->merge($this->candidatesFor($child)) as $candidate) {
-                $person = $this->personFor($matcher, $candidate, $child, $counts);
+            // The same reading of the same columns that a scanned enrollment
+            // form gets when it is saved — see PeopleDirectory. One copy, so
+            // the migration and the import cannot disagree about what a form
+            // says.
+            $found = $this->directory->absorbContactBlocks($child, 'migration');
 
-                $this->link($child, $person, $candidate, 'migration', $counts);
+            foreach ($counts as $key => $value) {
+                $counts[$key] = $value + $found[$key];
             }
 
-            $this->renumberEmergencies($child);
             $bar->advance();
         }
 
@@ -130,7 +151,7 @@ class BackfillPeople extends Command
                     continue;
                 }
 
-                $this->link(
+                $this->directory->absorbLink(
                     Child::find($link->child_id),
                     $person,
                     [
@@ -147,177 +168,4 @@ class BackfillPeople extends Command
         }
     }
 
-    /**
-     * One child's blocks as candidate adults, in precedence order.
-     *
-     * Mother and father first because those blocks are the fullest — ten
-     * fields each — so when the same person is named again further down with
-     * only a telephone, it is the full record that survives the merge.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function candidatesFor(Child $child): array
-    {
-        $candidates = [];
-
-        foreach (['mother' => 'Mother', 'father' => 'Father'] as $block => $relationship) {
-            if (blank($child->{$block.'_name'})) {
-                continue;
-            }
-
-            $candidates[] = [
-                'block' => $block,
-                'name' => $child->{$block.'_name'},
-                'address' => $child->{$block.'_address'},
-                'home_phone' => $child->{$block.'_home_phone'},
-                'work_phone' => $child->{$block.'_work_phone'},
-                'cell' => $child->{$block.'_cell'},
-                'fax' => $child->{$block.'_fax'},
-                'email' => $child->{$block.'_email'},
-                'employer' => $child->{$block.'_employer'},
-                'title' => $child->{$block.'_title'},
-                'ssn' => $child->{$block.'_ssn'},
-                'relationship' => $relationship,
-                'is_guardian' => true,
-                'can_pickup' => true,
-            ];
-        }
-
-        // The first emergency contact is a name and nothing else on this form —
-        // there is one telephone box in that section and it belongs to the
-        // second. Nearly always it is a name already above, which is why the
-        // merge runs before anything is written.
-        if (filled($child->emergency_contact)) {
-            $candidates[] = [
-                'block' => 'emergency_1',
-                'name' => $child->emergency_contact,
-                'is_emergency' => true,
-                'priority' => 1,
-            ];
-        }
-
-        if (filled($child->secondary_emergency_contact)) {
-            $candidates[] = [
-                'block' => 'emergency_2',
-                'name' => $child->secondary_emergency_contact,
-                'cell' => $child->emergency_telephone,
-                'relationship' => $child->emergency_relationship,
-                'drivers_license' => $child->emergency_license_number,
-                'is_emergency' => true,
-                'priority' => 2,
-            ];
-        }
-
-        foreach ([1, 2, 3] as $slot) {
-            if (blank($child->{'pickup_'.$slot.'_name'})) {
-                continue;
-            }
-
-            $candidates[] = [
-                'block' => 'pickup_'.$slot,
-                'name' => $child->{'pickup_'.$slot.'_name'},
-                'address' => $child->{'pickup_'.$slot.'_address'},
-                'cell' => $child->{'pickup_'.$slot.'_telephone'},
-                'alternate_phone' => $child->{'pickup_'.$slot.'_alternate'},
-                'relationship' => $child->{'pickup_'.$slot.'_relationship'},
-                'drivers_license' => $child->{'pickup_'.$slot.'_license_number'},
-                'can_pickup' => true,
-            ];
-        }
-
-        return $candidates;
-    }
-
-    /** The person this candidate is, found on file or created. */
-    private function personFor(PersonMatcher $matcher, array $candidate, Child $child, array &$counts): Person
-    {
-        $fields = [];
-
-        foreach (PersonMatcher::FIELDS as $field) {
-            $fields[$field] = $candidate[$field] ?? null;
-        }
-
-        // "Same as household" is stored as nothing at all and resolved against
-        // the child when it is shown, so it cannot go stale when they move.
-        if (PersonMatcher::meansSameAsHousehold($fields['address'])) {
-            $fields['address'] = null;
-        }
-
-        $existing = $matcher->findExisting($fields);
-
-        if ($existing) {
-            $counts['reused']++;
-
-            // Fill gaps on the record already on file without overwriting it:
-            // this child's form may carry an email the other child's did not.
-            foreach ($fields as $field => $value) {
-                if (filled($value) && blank($existing->{$field})) {
-                    $existing->{$field} = $value;
-                }
-            }
-
-            $existing->save();
-
-            return $existing;
-        }
-
-        $counts['people']++;
-
-        return Person::create($fields);
-    }
-
-    /** Write the link, OR-ing onto whatever a previous source already set. */
-    private function link(Child $child, Person $person, array $candidate, string $source, array &$counts): void
-    {
-        $link = ChildPerson::firstOrNew([
-            'child_id' => $child->id,
-            'person_id' => $person->id,
-        ]);
-
-        $link->relationship = $link->relationship ?: ($candidate['relationship'] ?? null);
-        $link->is_guardian = $link->is_guardian || ($candidate['is_guardian'] ?? false);
-        $link->can_pickup = $link->can_pickup || ($candidate['can_pickup'] ?? false);
-        $link->is_emergency = $link->is_emergency || ($candidate['is_emergency'] ?? false);
-
-        $priority = $candidate['priority'] ?? null;
-
-        if ($priority !== null) {
-            $link->priority = $link->priority === null ? $priority : min($link->priority, $priority);
-        }
-
-        $link->source = $link->exists ? $link->source : $source;
-
-        if (! $link->exists) {
-            $counts['links']++;
-        }
-
-        $link->save();
-    }
-
-    /**
-     * Close the gaps in one child's call order.
-     *
-     * Rule 3: priorities are unique per child and run 1, 2, 3 with nothing
-     * missing. A form whose first emergency contact was blank would otherwise
-     * leave a list that starts at 2.
-     */
-    private function renumberEmergencies(Child $child): void
-    {
-        $links = ChildPerson::where('child_id', $child->id)
-            ->where('is_emergency', true)
-            ->orderByRaw('priority is null, priority')
-            ->orderBy('id')
-            ->get();
-
-        foreach ($links->values() as $index => $link) {
-            $link->priority = $index + 1;
-            $link->save();
-        }
-
-        // A tick that came off leaves no call order behind.
-        ChildPerson::where('child_id', $child->id)
-            ->where('is_emergency', false)
-            ->whereNotNull('priority')
-            ->update(['priority' => null]);
-    }
 }

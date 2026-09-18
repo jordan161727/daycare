@@ -21,31 +21,6 @@
 <x-kids-background />
 
 @php($digits = fn (?string $number) => preg_replace('/[^0-9+]/', '', (string) $number))
-@php($guardians = collect([
-    ['title' => 'Mother', 'name' => $child->mother_name, 'rows' => [
-        ['Cell', $child->mother_cell, 'tel'],
-        ['Home', $child->mother_home_phone, 'tel'],
-        ['Work', $child->mother_work_phone, 'tel'],
-        ['Email', $child->mother_email, 'mail'],
-        ['Employer', $child->mother_employer, null],
-        ['Address', $child->mother_address, null],
-    ]],
-    ['title' => 'Father', 'name' => $child->father_name, 'rows' => [
-        ['Cell', $child->father_cell, 'tel'],
-        ['Home', $child->father_home_phone, 'tel'],
-        ['Work', $child->father_work_phone, 'tel'],
-        ['Email', $child->father_email, 'mail'],
-        ['Employer', $child->father_employer, null],
-        ['Address', $child->father_address, null],
-    ]],
-])->map(fn ($guardian) => [...$guardian, 'rows' => collect($guardian['rows'])->filter(fn ($row) => filled($row[1]))])
-  ->filter(fn ($guardian) => filled($guardian['name']) || $guardian['rows']->isNotEmpty()))
-@php($pickups = collect([1, 2, 3])->map(fn ($number) => [
-    'name' => $child->{"pickup_{$number}_name"},
-    'relationship' => $child->{"pickup_{$number}_relationship"},
-    'telephone' => $child->{"pickup_{$number}_telephone"} ?: $child->{"pickup_{$number}_alternate"},
-    'licence' => $child->{"pickup_{$number}_license_number"},
-])->filter(fn ($pickup) => filled($pickup['name'])))
 @php($household = collect([
     ['Address', collect([$child->address, $child->city, $child->zip])->filter()->join(', '), null],
     ['Telephone', $child->telephone, 'tel'],
@@ -207,33 +182,89 @@
 
 <div class="mt-6 grid gap-5 xl:grid-cols-3">
     <div class="space-y-5 xl:col-span-2">
-        {{-- Parents first and in full: this is the panel that gets used. --}}
+        {{-- Everybody on the record, in one list.
+
+             This was "Parents & guardians", built from the mother_* and
+             father_* columns, with a separate pick-up card and a separate
+             emergency card built from their own columns. Three cards, three
+             sources, and no way to say that the grandmother on two of them was
+             one woman.
+
+             It is one list now, from child_people, with marks saying what each
+             person is. The two cards in the right-hand column are drawn from
+             the same rows. Nothing here can disagree with the People step,
+             because it is the same table. --}}
         <section class="glass-card rounded-2xl p-6">
-            <h2 class="card-title"><span class="card-icon">👪</span> Parents &amp; guardians</h2>
+            <h2 class="card-title">
+                <span class="card-icon">👪</span> People
+                @if($people->isNotEmpty())
+                    <span class="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-white/10 dark:text-slate-400">{{ $people->count() }}</span>
+                @endif
+            </h2>
+
             <div class="mt-5 grid gap-5 sm:grid-cols-2">
-                @forelse($guardians as $guardian)
-                    <div class="rounded-2xl bg-slate-50/80 p-4 dark:bg-white/5">
-                        <p class="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">{{ $guardian['title'] }}</p>
-                        <p class="mt-1 text-base font-bold">{{ $guardian['name'] ?: 'Name not on file' }}</p>
+                @forelse($people as $link)
+                    @php($person = $link->person)
+                    {{-- A restriction tints the whole card rather than adding a
+                         mark at one end: it is the first thing anybody reading
+                         this page needs to see. --}}
+                    <div class="rounded-2xl p-4 {{ filled($link->restriction) ? 'bg-rose-50/80 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:ring-rose-400/20' : 'bg-slate-50/80 dark:bg-white/5' }}">
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">{{ $link->relationship ?: 'On the record' }}</p>
+                            <div class="flex shrink-0 flex-wrap justify-end gap-1">
+                                @if($link->is_guardian)<span class="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">Guardian</span>@endif
+                                @if($link->allowsPickup())<span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">Pick-up</span>@endif
+                                @if($link->is_emergency)<span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">Emergency{{ $link->priority ? ' #'.$link->priority : '' }}</span>@endif
+                            </div>
+                        </div>
+
+                        <p class="mt-1 text-base font-bold {{ filled($link->restriction) ? 'text-rose-800 dark:text-rose-200' : '' }}">{{ $person?->name ?: 'Name not on file' }}</p>
+
+                        @if(filled($link->restriction))
+                            <p class="mt-2 rounded-lg bg-rose-100 px-2.5 py-1.5 text-xs font-semibold text-rose-800 dark:bg-rose-500/20 dark:text-rose-200">
+                                ⚠ {{ $link->restriction }} &mdash; must not collect
+                            </p>
+                        @endif
+
                         <dl class="mt-3 divide-y divide-slate-200/70 text-sm dark:divide-white/10">
-                            @foreach($guardian['rows'] as [$label, $value, $type])
-                                <div class="flex items-baseline justify-between gap-3 py-2">
-                                    <dt class="shrink-0 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ $label }}</dt>
-                                    <dd class="text-right font-medium">
-                                        @if($type === 'tel')
-                                            <a href="tel:{{ $digits($value) }}" class="text-indigo-600 hover:underline dark:text-indigo-400">{{ $value }}</a>
-                                        @elseif($type === 'mail')
-                                            <a href="mailto:{{ $value }}" class="break-all text-indigo-600 hover:underline dark:text-indigo-400">{{ $value }}</a>
-                                        @else
-                                            {{ $value }}
-                                        @endif
-                                    </dd>
-                                </div>
+                            @foreach([
+                                ['Cell', $person?->cell, 'tel'],
+                                ['Home', $person?->home_phone, 'tel'],
+                                ['Work', $person?->work_phone, 'tel'],
+                                ['Email', $person?->email, 'mail'],
+                                ['Employer', $person?->employer, null],
+                                // Rule 5: no address of their own means the
+                                // child's household, resolved here rather than
+                                // copied onto them.
+                                ['Address', $person?->address ?: 'Same as household', null],
+                            ] as [$label, $value, $type])
+                                @if(filled($value))
+                                    <div class="flex items-baseline justify-between gap-3 py-2">
+                                        <dt class="shrink-0 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ $label }}</dt>
+                                        <dd class="text-right font-medium">
+                                            @if($type === 'tel')
+                                                <a href="tel:{{ $digits($value) }}" class="text-indigo-600 hover:underline dark:text-indigo-400">{{ $value }}</a>
+                                            @elseif($type === 'mail')
+                                                <a href="mailto:{{ $value }}" class="break-all text-indigo-600 hover:underline dark:text-indigo-400">{{ $value }}</a>
+                                            @else
+                                                {{ $value }}
+                                            @endif
+                                        </dd>
+                                    </div>
+                                @endif
                             @endforeach
                         </dl>
                     </div>
                 @empty
-                    <p class="rounded-2xl bg-slate-50/80 p-6 text-center text-sm text-slate-500 sm:col-span-2 dark:bg-white/5 dark:text-slate-400">No parent details are on file yet.</p>
+                    <div class="rounded-2xl bg-slate-50/80 p-6 text-center sm:col-span-2 dark:bg-white/5">
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Nobody is on this child&rsquo;s record yet.</p>
+                        {{-- The same door the edit route uses: a teacher keeps
+                             the record of the children in their own rooms, and
+                             they are already looking at one of them. --}}
+                        @if(in_array(auth()->user()->role, ['admin', 'teacher'], true))
+                            <a href="{{ route('children.edit', $child) }}" class="mt-2 inline-block text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">Add their people</a>
+                        @endif
+                    </div>
                 @endforelse
             </div>
         </section>
@@ -273,39 +304,65 @@
              are, what they were asked to bring, and gives the number to ring. --}}
         <section class="glass-card rounded-2xl p-6">
             <h2 class="card-title"><span class="card-icon">🪪</span> Authorised for pick-up</h2>
+            {{-- A query, not a list somebody maintains: the tick, minus anybody
+                 under a restriction. So a court order typed a minute ago is off
+                 this card before the next person reads it. --}}
             <ul class="mt-4 space-y-3">
-                @forelse($pickups as $index => $pickup)
+                @forelse($pickups as $link)
                     <li class="flex gap-3 rounded-2xl bg-slate-50/80 p-3.5 dark:bg-white/5">
                         <span class="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{{ $loop->iteration }}</span>
                         <div class="min-w-0 text-sm">
-                            <p class="font-bold">{{ $pickup['name'] }}</p>
-                            @if(filled($pickup['relationship']))<p class="text-xs text-slate-500 dark:text-slate-400">{{ $pickup['relationship'] }}</p>@endif
-                            @if(filled($pickup['telephone']))<a href="tel:{{ $digits($pickup['telephone']) }}" class="mt-1 inline-block font-medium text-indigo-600 hover:underline dark:text-indigo-400">{{ $pickup['telephone'] }}</a>@endif
-                            @if(filled($pickup['licence']))<p class="mt-0.5 text-xs text-slate-400 dark:text-slate-500">Licence {{ $pickup['licence'] }}</p>@endif
+                            <p class="font-bold">{{ $link->person?->name }}</p>
+                            @if(filled($link->relationship))<p class="text-xs text-slate-500 dark:text-slate-400">{{ $link->relationship }}</p>@endif
+                            @php($number = $link->person?->cell ?: $link->person?->alternate_phone ?: $link->person?->home_phone)
+                            @if(filled($number))<a href="tel:{{ $digits($number) }}" class="mt-1 inline-block font-medium text-indigo-600 hover:underline dark:text-indigo-400">{{ $number }}</a>@endif
+                            @if(filled($link->person?->drivers_license))<p class="mt-0.5 text-xs text-slate-400 dark:text-slate-500">Licence {{ $link->person->drivers_license }}</p>@endif
                         </div>
                     </li>
                 @empty
-                    <li class="rounded-2xl bg-slate-50/80 p-5 text-center text-sm text-slate-500 dark:bg-white/5 dark:text-slate-400">Nobody is on file. The parents on the record collect.</li>
+                    <li class="rounded-2xl bg-slate-50/80 p-5 text-center text-sm text-slate-500 dark:bg-white/5 dark:text-slate-400">Nobody is cleared to collect this child.</li>
                 @endforelse
             </ul>
+
+            {{-- Named rather than silently absent. Somebody who was on this
+                 list last week and is not today is the fact the person at the
+                 door most needs, and an empty space does not carry it. --}}
+            @php($barred = $people->filter(fn ($link) => filled($link->restriction)))
+            @if($barred->isNotEmpty())
+                <div class="mt-4 rounded-2xl border border-rose-200 bg-rose-50/70 p-3.5 dark:border-rose-400/20 dark:bg-rose-500/10">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-rose-700 dark:text-rose-300">Must not collect</p>
+                    @foreach($barred as $link)
+                        <p class="mt-1.5 text-sm font-semibold text-rose-800 dark:text-rose-200">{{ $link->person?->name }}</p>
+                        <p class="text-xs text-rose-700/90 dark:text-rose-300/90">{{ $link->restriction }}</p>
+                    @endforeach
+                </div>
+            @endif
         </section>
 
         {{-- Break glass. Its own colour so it is never mistaken for one more
              contact block on a page full of them. --}}
         <section class="rounded-2xl border border-rose-200 bg-rose-50/70 p-6 dark:border-rose-400/20 dark:bg-rose-500/10">
             <h2 class="card-title"><span class="card-icon bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-300">🚑</span> Emergency</h2>
-            @if(filled($child->emergency_contact) || filled($child->emergency_telephone))
-                <p class="mt-4 text-base font-bold">{{ $child->emergency_contact ?: 'Contact not named' }}</p>
-                @if(filled($child->emergency_relationship))<p class="text-xs text-slate-500 dark:text-slate-400">{{ $child->emergency_relationship }}</p>@endif
-                @if(filled($child->emergency_telephone))
-                    <a href="tel:{{ $digits($child->emergency_telephone) }}" class="mt-3 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/25 transition hover:bg-rose-700">📞 {{ $child->emergency_telephone }}</a>
+            {{-- In the order they are rung. The first one gets the button,
+                 because at the moment this card is read nobody is choosing. --}}
+            @forelse($emergencies as $link)
+                @php($number = $link->person?->cell ?: $link->person?->home_phone ?: $link->person?->work_phone)
+                @if($loop->first)
+                    <p class="mt-4 text-base font-bold">{{ $link->person?->name ?: 'Contact not named' }}</p>
+                    @if(filled($link->relationship))<p class="text-xs text-slate-500 dark:text-slate-400">{{ $link->relationship }}</p>@endif
+                    @if(filled($number))
+                        <a href="tel:{{ $digits($number) }}" class="mt-3 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/25 transition hover:bg-rose-700">📞 {{ $number }}</a>
+                    @endif
+                @else
+                    <div class="mt-4 border-t border-rose-200/70 pt-3 text-sm dark:border-rose-400/20">
+                        <span class="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">{{ $link->priority ? 'Number '.$link->priority : 'Then' }}</span>
+                        <p class="font-semibold">{{ $link->person?->name }}</p>
+                        @if(filled($number))<a href="tel:{{ $digits($number) }}" class="font-medium text-rose-700 hover:underline dark:text-rose-300">{{ $number }}</a>@endif
+                    </div>
                 @endif
-                @if(filled($child->secondary_emergency_contact))
-                    <p class="mt-4 border-t border-rose-200/70 pt-3 text-sm dark:border-rose-400/20"><span class="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">Second</span><br>{{ $child->secondary_emergency_contact }}</p>
-                @endif
-            @else
+            @empty
                 <p class="mt-4 text-sm text-slate-500 dark:text-slate-400">No emergency contact is on file. This is worth chasing.</p>
-            @endif
+            @endforelse
         </section>
 
         <section class="glass-card rounded-2xl p-6">

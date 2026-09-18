@@ -55,7 +55,7 @@
     class="cs-cards"
 >
     {{-- ---- the list ---- --}}
-    <section class="cs-card">
+    <section class="cs-card" x-ref="peopleList">
         <div class="cs-card-head">
             <h3 class="cs-card-title">Linked people</h3>
             <span class="cs-pill" x-text="rows.length + ' linked'"></span>
@@ -196,14 +196,15 @@
         <div class="mt-3 flex items-center justify-between gap-3">
             <span class="text-[11px] text-slate-400">Not one of these?</span>
             <button type="button" class="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10"
-                    @click="creating = ! creating">
-                + Create a new person
+                    :aria-expanded="creating" aria-controls="new-person"
+                    @click="toggleCreate()">
+                <span x-text="creating ? '− Cancel new person' : '+ Create a new person'"></span>
             </button>
         </div>
     </section>
 
     {{-- ---- the ten fields, once ---- --}}
-    <section class="cs-card" x-show="creating" x-cloak>
+    <section class="cs-card" id="new-person" x-ref="newPersonCard" x-show="creating" x-cloak>
         <div class="cs-card-head">
             <h3 class="cs-card-title">New person</h3>
         </div>
@@ -211,7 +212,7 @@
         <div class="cs-grid">
             <label>
                 <span class="cs-label">Name <span class="text-rose-500">*</span></span>
-                <input type="text" class="cs-input" x-model="draft.name" placeholder="e.g. Kaylynn Adkins">
+                <input type="text" class="cs-input" x-ref="newPersonName" x-model="draft.name" placeholder="e.g. Kaylynn Adkins">
             </label>
             <label>
                 <span class="cs-label">Address</span>

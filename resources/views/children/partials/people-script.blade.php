@@ -71,6 +71,47 @@ function peopleStep(config) { return {
         this.resetDraft();
     },
 
+    /**
+     * Open the new-person form and take the reader to it.
+     *
+     * The form is the third card down, so on anything shorter than a desktop
+     * the press opened it below the fold: the button appeared to do nothing,
+     * and the next move was to scroll and find out whether it had. Pressing it
+     * now puts the cursor in the Name field, which is where somebody who
+     * pressed "create a new person" was going anyway.
+     *
+     * Honoured rather than assumed: a reader who has asked for reduced motion
+     * is jumped there instead of slid, the same as everything else on the site.
+     */
+    toggleCreate() {
+        if (this.creating) {
+            this.creating = false;
+
+            return;
+        }
+
+        this.creating = true;
+
+        this.$nextTick(() => {
+            this.$refs.newPersonCard?.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'start',
+            });
+
+            // preventScroll, or the browser jumps to the field and undoes the
+            // smooth scroll that is still running.
+            this.$refs.newPersonName?.focus({ preventScroll: true });
+        });
+    },
+
+    /** Back to the list, where the row they just made now is. */
+    showList() {
+        this.$refs.peopleList?.scrollIntoView({
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+            block: 'start',
+        });
+    },
+
     resetDraft() {
         this.draft = {
             name: '', address: '', same_as_household: true,
@@ -246,6 +287,10 @@ function peopleStep(config) { return {
 
             this.creating = false;
             this.resetDraft();
+
+            // The form collapses and the page moves under them, so put the
+            // list they just added to back on screen.
+            this.$nextTick(() => this.showList());
         } catch (problem) {
             this.createError = problem.message;
         } finally {

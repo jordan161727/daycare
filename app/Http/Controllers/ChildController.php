@@ -8,6 +8,7 @@ use App\Models\Child;
 use App\Models\RoomSchedule;
 use App\Models\User;
 use App\Services\ClassroomAssignment;
+use App\Services\PeopleDirectory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -143,11 +144,34 @@ class ChildController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request, PeopleDirectory $people)
     {
         $child = Child::create($this->validatedData($request));
 
         $this->syncPhoto($request, $child);
+
+        /*
+         * The adults on the form become people, linked to this child.
+         *
+         * Without this a scanned enrollment filled the mother and father
+         * columns and stopped there: the child's page showed two parents while
+         * the People step showed nobody, and a mother already on file for an
+         * older sibling was not recognised as the same woman.
+         *
+         * The same reading the migration does, so a form saved today and a
+         * form read out of the old columns produce the same people. It matches
+         * against everybody on file first, so a second child reuses the
+         * parent's record rather than making a second one.
+         */
+        $fromDocument = filled($request->input('import_token'));
+
+        $people->absorbContactBlocks($child, $fromDocument ? 'pdf_import' : 'manual');
+
+        // A record a model read off handwriting is worth somebody's eye before
+        // it is trusted. One typed in by hand has already had it.
+        if ($fromDocument) {
+            $child->forceFill(['import_status' => 'needs_review'])->save();
+        }
 
         // The child is on file, so the imported document no longer needs keeping.
         ChildDocumentController::discard($request->input('import_token'));
@@ -164,7 +188,7 @@ class ChildController extends Controller
      * and is director-only; this is the same record readable by the teacher who
      * actually has the child in front of them.
      */
-    public function show(Child $child)
+    public function show(Child $child, PeopleDirectory $people)
     {
         // The same rule the roster list is filtered by, applied to the one
         // record: a teacher may read the children in their own rooms and
@@ -178,6 +202,25 @@ class ChildController extends Controller
             // What happened to their place on the roll, newest first. Eager the
             // user, or the panel asks for each name one query at a time.
             'statusChanges' => $child->statusChanges()->with('changedBy')->get(),
+
+            /*
+             * Everybody on this child's record, and the two lists drawn from
+             * them.
+             *
+             * All three come from child_people, so the page can no longer
+             * disagree with itself or with the People step. It used to read the
+             * old mother_* and father_* columns, which nothing writes to any
+             * more — a parent unlinked on the People step went on being shown
+             * here, and a parent added there never appeared.
+             *
+             * The lists are queries rather than stored: the pick-up list is the
+             * tick minus anyone under a restriction, worked out on every read,
+             * so a court order typed a minute ago is on the screen the person
+             * at the door is looking at.
+             */
+            'people' => $people->forChild($child),
+            'pickups' => $people->pickupList($child),
+            'emergencies' => $people->emergencyList($child),
         ]);
     }
 

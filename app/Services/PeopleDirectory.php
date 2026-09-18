@@ -164,6 +164,195 @@ class PeopleDirectory
         });
     }
 
+    /**
+     * Read a child's old contact columns and turn them into linked people.
+     *
+     * The mother and father blocks, the two emergency lines and the three
+     * pick-up slots, merged so that a woman named in three of them is one
+     * person, matched against everybody already on file so that a second child
+     * reuses her record, and linked with the flags each block implies.
+     *
+     * Called from three places and written once, because all three are the
+     * same act: the migration reading sixty thousand old rows, a scanned
+     * enrollment form being saved, and somebody filling the parent fields on
+     * the create form by hand. A second copy of this would drift within a
+     * month, and the way it would show is a family linked on one path and not
+     * on another.
+     *
+     * Flags are OR-ed rather than set: this is reading a form, and being named
+     * in two blocks can only ever add permissions. The People step sets them
+     * outright instead — see link().
+     *
+     * @return array{people: int, reused: int, links: int}
+     */
+    public function absorbContactBlocks(Child $child, string $source = 'manual'): array
+    {
+        $counts = ['people' => 0, 'reused' => 0, 'links' => 0];
+
+        foreach ($this->matcher->merge($this->contactBlocksOf($child)) as $candidate) {
+            $person = $this->personFor($candidate, $counts);
+
+            $this->absorbLink($child, $person, $candidate, $source, $counts);
+        }
+
+        $this->renumber($child);
+
+        return $counts;
+    }
+
+    /**
+     * One child's contact blocks as candidate adults, in precedence order.
+     *
+     * Mother and father first because those blocks are the fullest — ten
+     * fields each — so when the same person is named again further down with
+     * only a telephone, it is the full record that survives the merge.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function contactBlocksOf(Child $child): array
+    {
+        $candidates = [];
+
+        foreach (['mother' => 'Mother', 'father' => 'Father'] as $block => $relationship) {
+            if (blank($child->{$block.'_name'})) {
+                continue;
+            }
+
+            $candidates[] = [
+                'block' => $block,
+                'name' => $child->{$block.'_name'},
+                'address' => $child->{$block.'_address'},
+                'home_phone' => $child->{$block.'_home_phone'},
+                'work_phone' => $child->{$block.'_work_phone'},
+                'cell' => $child->{$block.'_cell'},
+                'fax' => $child->{$block.'_fax'},
+                'email' => $child->{$block.'_email'},
+                'employer' => $child->{$block.'_employer'},
+                'title' => $child->{$block.'_title'},
+                'ssn' => $child->{$block.'_ssn'},
+                'relationship' => $relationship,
+                'is_guardian' => true,
+                'can_pickup' => true,
+            ];
+        }
+
+        // The first emergency contact is a name and nothing else on this form —
+        // there is one telephone box in that section and it belongs to the
+        // second. Nearly always it is a name already above, which is why the
+        // merge runs before anything is written.
+        if (filled($child->emergency_contact)) {
+            $candidates[] = [
+                'block' => 'emergency_1',
+                'name' => $child->emergency_contact,
+                'is_emergency' => true,
+                'priority' => 1,
+            ];
+        }
+
+        if (filled($child->secondary_emergency_contact)) {
+            $candidates[] = [
+                'block' => 'emergency_2',
+                'name' => $child->secondary_emergency_contact,
+                'cell' => $child->emergency_telephone,
+                'relationship' => $child->emergency_relationship,
+                'drivers_license' => $child->emergency_license_number,
+                'is_emergency' => true,
+                'priority' => 2,
+            ];
+        }
+
+        foreach ([1, 2, 3] as $slot) {
+            if (blank($child->{'pickup_'.$slot.'_name'})) {
+                continue;
+            }
+
+            $candidates[] = [
+                'block' => 'pickup_'.$slot,
+                'name' => $child->{'pickup_'.$slot.'_name'},
+                'address' => $child->{'pickup_'.$slot.'_address'},
+                'cell' => $child->{'pickup_'.$slot.'_telephone'},
+                'alternate_phone' => $child->{'pickup_'.$slot.'_alternate'},
+                'relationship' => $child->{'pickup_'.$slot.'_relationship'},
+                'drivers_license' => $child->{'pickup_'.$slot.'_license_number'},
+                'can_pickup' => true,
+            ];
+        }
+
+        return $candidates;
+    }
+
+    /** The person a candidate is, found on file or created. */
+    public function personFor(array $candidate, array &$counts): Person
+    {
+        $fields = [];
+
+        foreach (PersonMatcher::FIELDS as $field) {
+            $fields[$field] = $candidate[$field] ?? null;
+        }
+
+        // "Same as household" is stored as nothing at all and resolved against
+        // the child when it is shown, so it cannot go stale when they move.
+        if (PersonMatcher::meansSameAsHousehold($fields['address'])) {
+            $fields['address'] = null;
+        }
+
+        $existing = $this->matcher->findExisting($fields);
+
+        if ($existing) {
+            $counts['reused']++;
+
+            // Fill gaps on the record already on file without overwriting it:
+            // this child's form may carry an email the other child's did not.
+            foreach ($fields as $field => $value) {
+                if (filled($value) && blank($existing->{$field})) {
+                    $existing->{$field} = $value;
+                }
+            }
+
+            $existing->save();
+
+            return $existing;
+        }
+
+        $counts['people']++;
+
+        return Person::create($fields);
+    }
+
+    /**
+     * Add what a form block says to whatever the link already holds.
+     *
+     * The opposite of link(), which is the People step saying what a person is
+     * and means it. This one is a form being read, so it only ever adds.
+     */
+    public function absorbLink(Child $child, Person $person, array $candidate, string $source, array &$counts): ChildPerson
+    {
+        $link = ChildPerson::firstOrNew([
+            'child_id' => $child->id,
+            'person_id' => $person->id,
+        ]);
+
+        $link->relationship = $link->relationship ?: ($candidate['relationship'] ?? null);
+        $link->is_guardian = $link->is_guardian || ($candidate['is_guardian'] ?? false);
+        $link->can_pickup = $link->can_pickup || ($candidate['can_pickup'] ?? false);
+        $link->is_emergency = $link->is_emergency || ($candidate['is_emergency'] ?? false);
+
+        $priority = $candidate['priority'] ?? null;
+
+        if ($priority !== null) {
+            $link->priority = $link->priority === null ? $priority : min($link->priority, $priority);
+        }
+
+        if (! $link->exists) {
+            $link->source = $source;
+            $counts['links']++;
+        }
+
+        $link->save();
+
+        return $link;
+    }
+
     /** Take a person off one child, leaving the person and their other children. */
     public function unlink(Child $child, Person $person): void
     {

@@ -127,12 +127,15 @@ class ChildProfileTest extends TestCase
         $child = $this->child([
             'drop_off_time' => '07:00',
             'pick_up_time' => '17:30',
-            'mother_name' => 'Ada Lovelace Senior',
-            'mother_cell' => '555-0100',
-            'pickup_1_name' => 'Charles Babbage',
-            'pickup_1_relationship' => 'Uncle',
             'important_notes' => 'Peanut allergy — EpiPen in the office.',
         ]);
+
+        // The adults come from people and child_people now, not from the
+        // mother_* and pickup_* columns — those are still on the table and
+        // nothing writes to them, so a page built from them showed whatever was
+        // true on the day of the migration.
+        $this->link($child, 'Ada Lovelace Senior', '555-0100', 'Mother', ['is_guardian' => true, 'can_pickup' => true]);
+        $this->link($child, 'Charles Babbage', '555-0177', 'Aunt/Uncle', ['can_pickup' => true]);
 
         $this->actingAs($this->admin())
             ->get(route('children.show', $child))
@@ -148,13 +151,32 @@ class ChildProfileTest extends TestCase
     public function test_a_number_on_the_record_can_be_rung(): void
     {
         // The page is read on a phone at the door as often as at a desk.
-        $child = $this->child(['mother_cell' => '(555) 010-0100', 'emergency_telephone' => '555-0199']);
+        $child = $this->child();
+
+        $this->link($child, 'Ada Lovelace Senior', '(555) 010-0100', 'Mother', ['is_guardian' => true]);
+        $this->link($child, 'Grace Hopper', '555-0199', 'Grandmother', ['is_emergency' => true, 'priority' => 1]);
 
         $this->actingAs($this->admin())
             ->get(route('children.show', $child))
             ->assertOk()
             ->assertSee('tel:5550100100', escape: false)
             ->assertSee('tel:5550199', escape: false);
+    }
+
+    /** One adult on this child's record, with the ticks that say what they are. */
+    private function link(Child $child, string $name, string $cell, string $relationship, array $flags = []): void
+    {
+        $person = \App\Models\Person::create(['name' => $name, 'cell' => $cell]);
+
+        \App\Models\ChildPerson::create([
+            'child_id' => $child->id,
+            'person_id' => $person->id,
+            'relationship' => $relationship,
+            'is_guardian' => $flags['is_guardian'] ?? false,
+            'can_pickup' => $flags['can_pickup'] ?? false,
+            'is_emergency' => $flags['is_emergency'] ?? false,
+            'priority' => $flags['priority'] ?? null,
+        ]);
     }
 
     public function test_a_room_the_director_chose_says_so_on_the_record(): void
@@ -187,7 +209,7 @@ class ChildProfileTest extends TestCase
             ->assertOk()
             // And may keep it up to date: a teacher is the one told a new
             // mobile number at the door. What decides rooms, enrolment and
-            // billing is still the director's � see ChildRecordEditingTest.
+            // billing is still the director's � see ChildRecordEditingTest.
             ->assertSee('Edit record');
     }
 
