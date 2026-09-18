@@ -109,13 +109,41 @@ class AttendanceCellDesignTest extends TestCase
 
         $this->assertStringContainsString("classes.push('att-half')", $html);
         $this->assertStringContainsString('class="att-tag" x-text="session"', $html);
-        $this->assertStringContainsString("child.sessions.length > 1 ? 'att-stack' : ''", $html);
+
+        // Both boxes sit in one slot, and so does a whole-day box — the slot is
+        // what makes every row the same height. Stacking used to be a class the
+        // half-day rows had and the others did not, which is exactly why the
+        // two came out different heights and the columns stepped in and out.
+        $this->assertStringContainsString('class="att-slot"', $html);
+        $this->assertStringNotContainsString("'att-stack'", $html);
+
+        // And the taller slot only applies while a half-day room is on the
+        // sheet, which it is here.
+        $this->assertStringContainsString('att-split', $html);
 
         // And its time is the compact form, because it shares the cell —
         // which is now the only form, so a whole day and a half day are the
         // same shape down one column.
         $this->assertStringContainsString('displayTime(childId, date, session) {'."
 ".'        return this.sessionTime(childId, date, session);', $html);
+    }
+
+    public function test_a_sheet_with_no_half_day_room_keeps_its_rows_compact(): void
+    {
+        // The other half of the bargain. Every row matching a stacked AM/PM
+        // cell is right when there is one on the sheet; a centre with no School
+        // Age children would just be reading an inch and a half of white space
+        // on every line to match a stack that is never drawn.
+        $this->makeChild(['first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Toddler']);
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('class="att-slot"', $html);
+        $this->assertStringNotContainsString('att-split', $html);
     }
 
     public function test_the_key_is_a_strip_above_the_sheet_that_can_be_put_away(): void

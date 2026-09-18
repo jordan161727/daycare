@@ -572,6 +572,50 @@ class Child extends Model
         return $this->belongsToMany(Guardian::class)->withPivot('can_collect')->withTimestamps();
     }
 
+    /**
+     * Everybody on this child's record: parents, guardians, the adults who may
+     * collect, the emergency numbers. One list, with the ticks saying which of
+     * those each person is — see ChildPerson.
+     *
+     * The three cards on the child page are all drawn from here, which is what
+     * stops them disagreeing with each other.
+     */
+    public function people()
+    {
+        return $this->belongsToMany(Person::class, 'child_people')
+            ->using(ChildPerson::class)
+            ->withPivot(['relationship', 'is_guardian', 'can_pickup', 'is_emergency', 'priority', 'restriction', 'source'])
+            ->withTimestamps();
+    }
+
+    /** The links themselves, for the queries that are about the ticks. */
+    public function personLinks()
+    {
+        return $this->hasMany(ChildPerson::class);
+    }
+
+    /**
+     * Who may take this child home.
+     *
+     * A restriction beats the tick — see ChildPerson::allowsPickup. Asked as a
+     * query rather than kept as a list, so it is right the moment a tick moves.
+     */
+    public function pickupPeople()
+    {
+        return $this->people()
+            ->wherePivot('can_pickup', true)
+            ->wherePivotNull('restriction')
+            ->orderBy('name');
+    }
+
+    /** Who to ring, in the order the centre rings them. */
+    public function emergencyPeople()
+    {
+        return $this->people()
+            ->wherePivot('is_emergency', true)
+            ->orderByPivot('priority');
+    }
+
     public function attendancePunches()
     {
         return $this->hasMany(ChildAttendancePunch::class);

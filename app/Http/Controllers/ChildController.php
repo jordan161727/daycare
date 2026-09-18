@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\ChildrenExport;
 use App\Imports\ChildrenImport;
 use App\Models\Child;
 use App\Models\RoomSchedule;
@@ -10,6 +11,7 @@ use App\Services\ClassroomAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Facades\Excel;
 use Carbon\Carbon;
 
 class ChildController extends Controller
@@ -38,35 +40,9 @@ class ChildController extends Controller
      */
     public function index()
     {
-        $allowedSorts = ['lan', 'first_name', 'last_name', 'age', 'classroom', 'status'];
-        $sort = trim((string) request('sort')) ?: 'last_name';
-        $direction = trim((string) request('direction')) ?: 'asc';
+        [$children, $sort, $direction, $status] = $this->roster();
 
-        abort_unless(in_array($sort, $allowedSorts, true), 404);
-        abort_unless(in_array($direction, ['asc', 'desc'], true), 404);
-
-        // Which status the roll is filtered to, or all of them. An invented one
-        // is a 404 rather than an empty list: a page that says "no children"
-        // when the truth is "no such status" sends somebody looking for a bug
-        // in their data.
-        $status = trim((string) request('status'));
-        abort_unless($status === '' || in_array($status, Child::STATUSES, true), 404);
-
-        $children = Child::query()
-            ->visibleTo($requestUser = request()->user())
-            ->when($status !== '', fn ($query) => $query->where('status', $status))
-            // Age is shown, not stored, so it sorts by the date it is worked out
-            // from — the other way round, since the youngest child is the one
-            // with the latest date of birth.
-            ->when($sort === 'age', fn ($query) => $query->orderByRaw(
-                'COALESCE(birth_date, dob) '.($direction === 'asc' ? 'desc' : 'asc')
-            ), fn ($query) => $query->orderBy($sort, $direction))
-            ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
-            // The whole roll on one page. It used to page at ten, which put a
-            // sixty-child centre six clicks from the child they were looking
-            // for and broke the search box — it could only find children on the
-            // page it was on. A roster is read by scrolling, like the sheet.
-            ->get();
+        $requestUser = request()->user();
 
 
         // The whole roll, not the page: "61 active" counted off ten rows would
@@ -89,6 +65,71 @@ class ChildController extends Controller
         $rollCount = $statusCounts->sum();
 
         return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount'));
+    }
+
+    /**
+     * The roll as the page is asking for it: filtered, sorted, and narrowed to
+     * what this reader may see.
+     *
+     * Shared with the export rather than written twice. A spreadsheet that
+     * quietly held a different set of children from the screen it was
+     * downloaded from is the kind of difference nobody notices until it has
+     * been sent somewhere.
+     *
+     * @return array{0: \Illuminate\Database\Eloquent\Collection<int, Child>, 1: string, 2: string, 3: string}
+     */
+    private function roster(): array
+    {
+        $allowedSorts = ['lan', 'first_name', 'last_name', 'age', 'classroom', 'status'];
+        $sort = trim((string) request('sort')) ?: 'last_name';
+        $direction = trim((string) request('direction')) ?: 'asc';
+
+        abort_unless(in_array($sort, $allowedSorts, true), 404);
+        abort_unless(in_array($direction, ['asc', 'desc'], true), 404);
+
+        // Which status the roll is filtered to, or all of them. An invented one
+        // is a 404 rather than an empty list: a page that says "no children"
+        // when the truth is "no such status" sends somebody looking for a bug
+        // in their data.
+        $status = trim((string) request('status'));
+        abort_unless($status === '' || in_array($status, Child::STATUSES, true), 404);
+
+        $children = Child::query()
+            ->visibleTo(request()->user())
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            // Age is shown, not stored, so it sorts by the date it is worked out
+            // from — the other way round, since the youngest child is the one
+            // with the latest date of birth.
+            ->when($sort === 'age', fn ($query) => $query->orderByRaw(
+                'COALESCE(birth_date, dob) '.($direction === 'asc' ? 'desc' : 'asc')
+            ), fn ($query) => $query->orderBy($sort, $direction))
+            ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
+            // The whole roll on one page. It used to page at ten, which put a
+            // sixty-child centre six clicks from the child they were looking
+            // for and broke the search box — it could only find children on the
+            // page it was on. A roster is read by scrolling, like the sheet.
+            ->get();
+
+        return [$children, $sort, $direction, $status];
+    }
+
+    /**
+     * The roll as a spreadsheet.
+     *
+     * Named for what it holds and when it was taken, because these end up in a
+     * downloads folder beside last month's and the one before that.
+     */
+    public function export()
+    {
+        [$children, , , $status] = $this->roster();
+
+        // Everybody attached to the roll, in two queries rather than two per
+        // child. Both sheets read these same links.
+        $children->load(['personLinks.person']);
+
+        $name = 'children-'.($status !== '' ? strtolower($status).'-' : '').today()->format('Y-m-d').'.xlsx';
+
+        return Excel::download(new ChildrenExport($children, request()->user()?->nameFormat()), $name);
     }
 
     /**

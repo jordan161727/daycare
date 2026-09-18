@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Guardian;
+use App\Models\Person;
 use Illuminate\Support\Facades\Hash;
 
 /**
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Hash;
  *
  * Four answers, and the difference between them is the whole of the design:
  *
- *   ok         one guardian, proven
+ *   ok         one person, proven
  *   ambiguous  two families chose the same PIN — ask for the last four of a
  *              phone number rather than guessing which one is standing there
  *   not_found  no match, and the attempt is counted
@@ -27,24 +27,24 @@ class GuardianPin
     public const LOCKOUT_MINUTES = 5;
 
     /**
-     * @return array{status: string, guardian?: Guardian}
+     * @return array{status: string, person?: Person}
      */
     public function resolve(string $pin, ?string $last4 = null): array
     {
         // The index narrows; the hash decides. Looking a PIN up by its keyed
         // hash is what keeps this one query instead of a bcrypt check against
         // every guardian in the centre.
-        $candidates = Guardian::where('pin_index', Guardian::indexFor($pin))->get();
+        $candidates = Person::where('pin_index', Person::indexFor($pin))->get();
 
         // A locked row is out of the running before anything else happens, so a
         // lockout cannot be walked around by a second guardian sharing the PIN.
-        if ($candidates->isNotEmpty() && $candidates->every(fn (Guardian $g) => $g->isLocked())) {
+        if ($candidates->isNotEmpty() && $candidates->every(fn (Person $p) => $p->isLocked())) {
             return ['status' => 'locked'];
         }
 
         $matches = $candidates
-            ->reject(fn (Guardian $guardian) => $guardian->isLocked())
-            ->filter(fn (Guardian $guardian) => Hash::check($pin, $guardian->pin_hash));
+            ->reject(fn (Person $person) => $person->isLocked())
+            ->filter(fn (Person $person) => Hash::check($pin, $person->pin_hash));
 
         if ($matches->isEmpty()) {
             $this->countFailure($candidates);
@@ -57,7 +57,7 @@ class GuardianPin
                 return ['status' => 'ambiguous'];
             }
 
-            $matches = $matches->filter(fn (Guardian $guardian) => $guardian->phone_last4 === $last4);
+            $matches = $matches->filter(fn (Person $person) => $person->phone_last4 === $last4);
 
             if ($matches->count() !== 1) {
                 $this->countFailure($candidates);
@@ -66,10 +66,10 @@ class GuardianPin
             }
         }
 
-        $guardian = $matches->first();
-        $guardian->forceFill(['failed_attempts' => 0, 'locked_until' => null])->save();
+        $person = $matches->first();
+        $person->forceFill(['failed_attempts' => 0, 'locked_until' => null])->save();
 
-        return ['status' => 'ok', 'guardian' => $guardian];
+        return ['status' => 'ok', 'person' => $person];
     }
 
     /**
@@ -81,14 +81,14 @@ class GuardianPin
      */
     private function countFailure($candidates): void
     {
-        foreach ($candidates as $guardian) {
-            $attempts = $guardian->failed_attempts + 1;
+        foreach ($candidates as $person) {
+            $attempts = $person->failed_attempts + 1;
 
-            $guardian->forceFill([
+            $person->forceFill([
                 'failed_attempts' => $attempts,
                 'locked_until' => $attempts >= self::MAX_ATTEMPTS
                     ? now()->addMinutes(self::LOCKOUT_MINUTES)
-                    : $guardian->locked_until,
+                    : $person->locked_until,
             ])->save();
         }
     }

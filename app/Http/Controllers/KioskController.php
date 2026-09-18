@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Child;
 use App\Models\ChildAttendancePunch;
-use App\Models\Guardian;
+use App\Models\Person;
 use App\Services\GuardianPin;
 use App\Services\KioskAttendance;
 use Illuminate\Http\Request;
@@ -64,13 +64,13 @@ class KioskController extends Controller
             return response()->json(['status' => $result['status']], 200);
         }
 
-        $request->session()->put('kiosk.guardian', $result['guardian']->id);
+        $request->session()->put('kiosk.guardian', $result['person']->id);
         $request->session()->put('kiosk.until', now()->addSeconds(self::SESSION_SECONDS)->timestamp);
 
         return response()->json([
             'status' => 'ok',
-            'guardian' => ['name' => $result['guardian']->name],
-            'children' => $this->familyOf($result['guardian']),
+            'guardian' => ['name' => $result['person']->name],
+            'children' => $this->familyOf($result['person']),
         ]);
     }
 
@@ -79,9 +79,9 @@ class KioskController extends Controller
     {
         abort_unless(config('daycare.kiosk.enabled'), 404);
 
-        $guardian = $this->currentGuardian($request);
+        $person = $this->currentGuardian($request);
 
-        if (! $guardian) {
+        if (! $person) {
             return response()->json(['status' => 'expired'], 200);
         }
 
@@ -96,7 +96,7 @@ class KioskController extends Controller
             return response()->json(['status' => 'not_authorised'], 200);
         }
 
-        $result = $this->attendance->punch($child, $data['direction'], $guardian, config('daycare.kiosk.device'));
+        $result = $this->attendance->punch($child, $data['direction'], $person, config('daycare.kiosk.device'));
 
         // Each press extends the window: a parent with three children should not
         // be timed out between the second and the third.
@@ -104,7 +104,7 @@ class KioskController extends Controller
 
         return response()->json($result + [
             'child' => ['id' => $child->id, 'name' => $child->first_name],
-            'children' => $this->familyOf($guardian),
+            'children' => $this->familyOf($person),
         ]);
     }
 
@@ -115,8 +115,8 @@ class KioskController extends Controller
         return response()->json(['status' => 'ok']);
     }
 
-    /** The guardian standing there, if their ninety seconds have not run out. */
-    private function currentGuardian(Request $request): ?Guardian
+    /** The adult standing there, if their ninety seconds have not run out. */
+    private function currentGuardian(Request $request): ?Person
     {
         $until = $request->session()->get('kiosk.until');
 
@@ -126,15 +126,15 @@ class KioskController extends Controller
             return null;
         }
 
-        return Guardian::find($request->session()->get('kiosk.guardian'));
+        return Person::find($request->session()->get('kiosk.guardian'));
     }
 
     /** Their children, and what the kiosk may offer for each. */
-    private function familyOf(Guardian $guardian): array
+    private function familyOf(Person $person): array
     {
         $today = today()->toDateString();
 
-        return $guardian->children()->orderBy('first_name')->get()->map(function (Child $child) use ($guardian, $today) {
+        return $person->children()->orderBy('first_name')->get()->map(function (Child $child) use ($person, $today) {
             $attendance = $child->attendances()
                 ->whereDate('attendance_date', $today)
                 ->orderByDesc('signed_in_at')
@@ -150,8 +150,10 @@ class KioskController extends Controller
                 'present' => $present,
                 'since' => $present ? $attendance->signed_in_at->format('g:i A') : null,
                 // Being on a child's record and being allowed to take them home
-                // are different permissions. The tile shows the difference.
-                'can_collect' => (bool) $child->guardians()->whereKey($guardian->id)->first()?->pivot?->can_collect,
+                // are different permissions. The tile shows the difference —
+                // and a court order set in the office now reaches this line,
+                // which it could not while the door read its own table.
+                'can_collect' => $person->mayCollect($child),
                 'enrolled' => $child->isEnrolledOn($today),
             ];
         })->all();

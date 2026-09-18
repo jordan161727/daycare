@@ -14,6 +14,7 @@ use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\PersonController;
 use App\Http\Controllers\TimeClockController;
 use App\Http\Controllers\TimePunchController;
 use App\Http\Controllers\TimesheetController;
@@ -99,6 +100,11 @@ Route::get('/dashboard', function () {
 
 
 Route::get('/children', [ChildController::class, 'index'])->name('children.index');
+
+// The roll as a spreadsheet. Same door as the roll itself — whoever may read
+// the list on screen may take it away — and the same filter, sort and
+// visibility, because it is built from the same query.
+Route::get('/children/export', [ChildController::class, 'export'])->name('children.export');
 
 // A child's record, readable by whoever may see the child on the roster — the
 // director, and the teacher whose room they are in. Numbers only, or this would
@@ -210,6 +216,29 @@ Route::middleware('role:admin,teacher')->group(function () {
      */
     Route::get('/children/{child}/edit', [ChildController::class, 'edit'])->name('children.edit')->whereNumber('child');
     Route::put('/children/{child}', [ChildController::class, 'update'])->name('children.update')->whereNumber('child');
+
+    /*
+     * The People step, and the drawer behind it.
+     *
+     * Same door as editing the child: a teacher keeps the record of the
+     * children in their own rooms, and who may collect one of them is part of
+     * that record rather than something to wait on the office for. Which child
+     * is checked per call in the controller, against the rule the roster is
+     * filtered by — the route only says that somebody may edit some child.
+     *
+     * POST throughout rather than PUT/DELETE, for the reason the attendance
+     * routes give: the app talks to the server through postJson, and Laravel
+     * reads _method spoofing out of form parameters that a JSON body does not
+     * populate.
+     */
+    Route::get('/children/{child}/people', [PersonController::class, 'forChild'])->name('children.people')->whereNumber('child');
+    Route::get('/people/search', [PersonController::class, 'search'])->name('people.search');
+    Route::post('/people', [PersonController::class, 'store'])->name('people.store');
+    Route::get('/people/{person}', [PersonController::class, 'show'])->name('people.show')->whereNumber('person');
+    Route::post('/people/{person}', [PersonController::class, 'update'])->name('people.update')->whereNumber('person');
+    Route::post('/people/{person}/delete', [PersonController::class, 'destroy'])->name('people.destroy')->whereNumber('person');
+    Route::post('/people/{person}/link', [PersonController::class, 'link'])->name('people.link')->whereNumber('person');
+    Route::post('/people/{person}/unlink', [PersonController::class, 'unlink'])->name('people.unlink')->whereNumber('person');
 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
 

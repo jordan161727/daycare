@@ -40,11 +40,13 @@
 
 {{-- Not enrolled: no slot exists for this day, so there is nothing to tap. --}}
 <template x-if="! hasSlot(child.id, '{{ $iso }}')">
-    <span class="grid min-h-[1.7333rem] w-full place-items-center text-[0.7333rem] text-slate-300 dark:text-slate-600" title="Not enrolled on this date">—</span>
+    <span class="att-slot w-full text-[0.7333rem] text-slate-300 dark:text-slate-600" title="Not enrolled on this date">—</span>
 </template>
 
 <template x-if="hasSlot(child.id, '{{ $iso }}')">
-    <div :class="child.sessions.length > 1 ? 'att-stack' : ''">
+    {{-- One slot whether the room books once a day or twice: the boxes are
+         centred in it, so every row is the same height. See .att-slot. --}}
+    <div class="att-slot">
         <template x-for="session in child.sessions" :key="session">
             <div>
                 {{-- The hour being typed. --}}

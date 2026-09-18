@@ -49,6 +49,25 @@
                     <svg class="pointer-events-none absolute left-2.5 top-1.5 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg>
                     <input x-model="search" class="w-44 rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-3 text-xs transition focus:w-56 focus:ring-2 focus:ring-indigo-500 lg:w-56 dark:border-white/10 dark:bg-slate-800" placeholder="Search children">
                 </label>
+                {{-- The roll as a spreadsheet.
+
+                     Carries the filter and the sort with it, because it is
+                     built from the same query as the table below — so the
+                     chip that says "Active 62" is what the file holds, and a
+                     teacher's copy is their own rooms. The link keeps the
+                     current query string for exactly that reason.
+
+                     Not behind the admin check beside it: reading the roll and
+                     taking a copy of what you are already reading are the same
+                     permission. Adding a child is not. --}}
+                <a href="{{ route('children.export', request()->only('sort', 'direction', 'status')) }}"
+                   class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
+                   title="Download this list as an Excel file">
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+                    </svg>
+                    Export
+                </a>
                 @if(auth()->user()->isAdmin())
                     <a href="{{ route('children.create') }}" class="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-indigo-700">+ Add child</a>
                 @endif

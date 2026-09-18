@@ -161,7 +161,26 @@
        @apply rather than hex, so dark mode comes from Tailwind's own variant.
        The hand-written .dark rules this replaces were a second palette to
        keep in step, and the first thing to fall out of it. */
-    .att-stack { display: flex; flex-direction: column; gap: 0.2rem; align-items: center; }
+    /* One day's boxes, however many sessions the room has.
+
+       A School Age child books twice a day and stacks two half-height boxes;
+       everybody else has one. Left to themselves those come to 3.2667rem and
+       1.7333rem, so a roll with both in it had rows of two different heights
+       and nothing lined up across the week — the eye running down a Tuesday
+       kept having to find the column again.
+
+       So the slot is one height and the boxes sit in the middle of it. Read
+       down, every child's Tuesday is now the same distance from their Monday.
+
+       The height only applies when the sheet actually holds a half-day room
+       (see .att-split, set from the week's children). A centre with no School
+       Age children would otherwise get an inch and a half of empty space on
+       every row to match a stack that is never drawn. */
+    .att-slot {
+        display: flex; flex-direction: column; gap: 0.2rem;
+        align-items: center; justify-content: center;
+    }
+    .att-split .att-slot { min-height: 3.2667rem; }
     .att-cell {
         width: 5.8667rem; height: 1.7333rem; margin: 0 auto;
         display: flex; align-items: center;

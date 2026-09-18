@@ -18,7 +18,7 @@ class ChildAttendancePunch extends Model
     public const OUT = 'out';
 
     protected $fillable = [
-        'child_id', 'guardian_id', 'direction', 'occurred_at',
+        'child_id', 'guardian_id', 'person_id', 'direction', 'occurred_at',
         'service_date', 'session', 'method', 'device',
     ];
 
@@ -30,6 +30,18 @@ class ChildAttendancePunch extends Model
     public function child()
     {
         return $this->belongsTo(Child::class);
+    }
+
+    /**
+     * Who pressed the button.
+     *
+     * guardian_id is still beside this and still filled for the punches that
+     * predate the move, so the old answer can be read next to the new one
+     * until that column is dropped.
+     */
+    public function person()
+    {
+        return $this->belongsTo(Person::class);
     }
 
     public function guardian()

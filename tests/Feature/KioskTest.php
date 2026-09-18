@@ -5,7 +5,8 @@ namespace Tests\Feature;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\ChildAttendancePunch;
-use App\Models\Guardian;
+use App\Models\ChildPerson;
+use App\Models\Person;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -82,7 +83,7 @@ class KioskTest extends TestCase
         // them, at which minute, and through which door.
         $this->assertDatabaseHas('child_attendance_punches', [
             'child_id' => $child->id,
-            'guardian_id' => $guardian->id,
+            'person_id' => $guardian->id,
             'direction' => 'in',
             'service_date' => '2026-09-02',
             'method' => 'pin',
@@ -136,7 +137,7 @@ class KioskTest extends TestCase
         $child = $this->child('Priya', 'Toddler');
         $guardian = $this->guardian('Daniel', '573164', '2290');
         // On the record, so he is told about her — but not cleared to collect.
-        $guardian->children()->attach($child->id, ['can_collect' => false]);
+        $this->clear($guardian, $child, canCollect: false);
 
         $this->unlock('573164');
 
@@ -149,6 +150,62 @@ class KioskTest extends TestCase
         // Checked on the server, not only by hiding the button.
         $this->assertNull(Attendance::first()->signed_out_at);
         $this->assertSame(0, ChildAttendancePunch::count());
+    }
+
+    public function test_a_court_order_stops_the_door(): void
+    {
+        /*
+         * The reason the two tables of adults became one.
+         *
+         * A director types a court order onto somebody's row on the People
+         * step. Until the door read the same table, that order reached the
+         * child's page, the pick-up list and the export — and not the one
+         * screen where a person actually stands in front of a child.
+         *
+         * The tick is deliberately left on: a restriction has to beat it, not
+         * depend on somebody also remembering to untick the box.
+         */
+        $child = $this->child('Noor', 'Toddler');
+        $person = $this->guardian('Jordan', '573164', '2290');
+
+        $link = $this->clear($person, $child);
+
+        Attendance::create([
+            'child_id' => $child->id, 'attendance_date' => '2026-09-02',
+            'session' => 'FULL', 'signed_in_at' => now(),
+        ]);
+
+        $this->unlock('573164');
+
+        // Cleared, so the door opens.
+        $this->postJson(route('kiosk.punch'), ['child_id' => $child->id, 'direction' => 'out'])
+            ->assertOk()
+            ->assertJson(['status' => 'ok']);
+
+        $link->update(['restriction' => 'Court order — must not collect']);
+
+        Attendance::first()->forceFill(['signed_out_at' => null])->save();
+
+        $this->postJson(route('kiosk.punch'), ['child_id' => $child->id, 'direction' => 'out'])
+            ->assertOk()
+            ->assertJson(['status' => 'not_authorised']);
+
+        $this->assertTrue($link->fresh()->can_pickup, 'the tick is still on; the order is what refused');
+        $this->assertNull(Attendance::first()->signed_out_at, 'the child was not signed out');
+    }
+
+    public function test_the_family_screen_marks_a_restricted_adult(): void
+    {
+        // And the tile says so before it is pressed, rather than taking the
+        // press and refusing it afterwards.
+        $child = $this->child('Noor', 'Toddler');
+        $person = $this->guardian('Jordan', '573164', '2290');
+
+        $this->clear($person, $child, restriction: 'Court order — must not collect');
+
+        $this->postJson(route('kiosk.unlock'), ['pin' => '573164'])
+            ->assertOk()
+            ->assertJsonPath('children.0.can_collect', false);
     }
 
     public function test_a_guardian_cannot_touch_a_child_who_is_not_theirs(): void
@@ -170,7 +227,7 @@ class KioskTest extends TestCase
         $grace = $this->guardian('Grace', '246810', '5581');
         $marcus = $this->guardian('Marcus', '246810', '9032');
         $graceChild = $this->child('Eli', 'PreK');
-        $grace->children()->attach($graceChild->id, ['can_collect' => true]);
+        $this->clear($grace, $graceChild);
 
         // Six digits cannot tell them apart, so the kiosk asks rather than guesses.
         $this->postJson(route('kiosk.unlock'), ['pin' => '246810'])
@@ -196,7 +253,7 @@ class KioskTest extends TestCase
             ->assertOk()
             ->assertJson(['status' => 'ok']);
 
-        $guardian = Guardian::first();
+        $guardian = Person::first();
         $guardian->forceFill(['failed_attempts' => 5, 'locked_until' => now()->addMinutes(5)])->save();
 
         $this->postJson(route('kiosk.unlock'), ['pin' => '481902'])
@@ -208,7 +265,7 @@ class KioskTest extends TestCase
     {
         $guardian = $this->guardian('Amira', '481902', '4417');
 
-        $row = (array) \DB::table('guardians')->first();
+        $row = (array) \DB::table('people')->first();
 
         $this->assertNotContains('481902', $row, 'the PIN is in the table in the clear');
         $this->assertTrue(Hash::check('481902', $row['pin_hash']));
@@ -295,28 +352,44 @@ class KioskTest extends TestCase
         $this->postJson(route('kiosk.unlock'), ['pin' => $pin])->assertOk()->assertJson(['status' => 'ok']);
     }
 
-    /** One guardian, one child, cleared to collect. */
+    /** One adult, one child, cleared to collect. */
     private function family(): array
     {
         $child = $this->child('Noor', 'Toddler');
         $guardian = $this->guardian('Amira', '481902', '4417');
-        $guardian->children()->attach($child->id, ['can_collect' => true]);
+
+        $this->clear($guardian, $child);
 
         return [$guardian, $child];
     }
 
-    private function guardian(string $name, string $pin, string $last4): Guardian
+    /**
+     * Somebody the door knows.
+     *
+     * A person now, not a guardian: the two tables of adults became one, so
+     * that a court order typed in the office reaches the kiosk. The PIN lives
+     * on the person with everything else about them.
+     */
+    private function guardian(string $name, string $pin, string $last4): Person
     {
-        $guardian = new Guardian([
-            'name' => $name,
-            'phone_last4' => $last4,
-            'pin_index' => Guardian::indexFor($pin),
-            'pin_hash' => Hash::make($pin),
+        $person = Person::create(['name' => $name, 'phone_last4' => $last4]);
+
+        $person->setPin($pin);
+        $person->forceFill(['phone_last4' => $last4])->save();
+
+        return $person;
+    }
+
+    /** Link an adult to a child, with or without leave to collect them. */
+    private function clear(Person $person, Child $child, bool $canCollect = true, ?string $restriction = null): ChildPerson
+    {
+        return ChildPerson::create([
+            'child_id' => $child->id,
+            'person_id' => $person->id,
+            'relationship' => 'Mother',
+            'can_pickup' => $canCollect,
+            'restriction' => $restriction,
         ]);
-
-        $guardian->save();
-
-        return $guardian;
     }
 
     private function child(string $first, string $room): Child

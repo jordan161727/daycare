@@ -52,13 +52,39 @@
 @php($enrollmentFields = ['classroom_override', 'classroom_override_from', 'status', 'enrolled_on', 'withdrawn_on', 'schedule_days', 'expected_hours_per_week', 'drop_off_time', 'pick_up_time'])
 @php($noteFields = ['other_notes', 'important_notes', 'alerts'])
 
-@php($steps = [
+{{--
+    Which shape the middle of the form takes.
+
+    On an existing child it is the People step: one row per adult, four ticks
+    each, and a person shared with a sibling linked rather than typed again.
+
+    On a new child it is still the old Parents and Emergency & pickup blocks.
+    A link needs a child to point at and there is not one yet — and, more to
+    the point, the PDF import pre-fills those very inputs on this form, so
+    taking them away here would drop the parents off every scanned enrollment
+    between now and the import being rewritten to produce people itself.
+
+    Both halves go when that happens; until then the create form is the one
+    place the old columns are still written.
+--}}
+@php($usesPeopleStep = $child !== null)
+
+@php($steps = array_values(array_filter([
     ['label' => 'Basics', 'blurb' => 'Who the child is, and how their place at the centre is set up.', 'fields' => array_merge(['photo'], $identityFields, $enrollmentFields)],
     ['label' => 'Child details', 'blurb' => 'Where they live, and the number to ring first.', 'fields' => array_values($sections['Contact'])],
-    ['label' => 'Parents', 'blurb' => 'Both guardians, in the same field order.', 'fields' => array_merge(array_values($sections['Mother / Legal Guardian']), array_values($sections['Father / Legal Guardian']))],
-    ['label' => 'Emergency & pickup', 'blurb' => 'Who may be called, and who may take this child home.', 'fields' => array_merge(array_values($sections['Emergency contacts']), array_values($sections['Authorized Pickup 1']), array_values($sections['Authorized Pickup 2']), array_values($sections['Authorized Pickup 3']))],
+
+    $usesPeopleStep
+        // Carries no fields of its own: a link is a row in another table and
+        // saves as it goes, so there is nothing here for "Save changes" to post.
+        ? ['label' => 'People', 'blurb' => 'Parents, guardians, pick-up adults and emergency contacts, in one list.', 'fields' => []]
+        : ['label' => 'Parents', 'blurb' => 'Both guardians, in the same field order.', 'fields' => array_merge(array_values($sections['Mother / Legal Guardian']), array_values($sections['Father / Legal Guardian']))],
+
+    $usesPeopleStep
+        ? null
+        : ['label' => 'Emergency & pickup', 'blurb' => 'Who may be called, and who may take this child home.', 'fields' => array_merge(array_values($sections['Emergency contacts']), array_values($sections['Authorized Pickup 1']), array_values($sections['Authorized Pickup 2']), array_values($sections['Authorized Pickup 3']))],
+
     ['label' => 'Notes', 'blurb' => 'Anything a relief teacher would need to be told.', 'fields' => $noteFields],
-])
+])))
 @php($last = count($steps) - 1)
 
 {{-- A rejected field four steps back is invisible on a stepper, so the form
@@ -392,8 +418,18 @@
                 </div>
             </div>
 
-            {{-- ---- 2 to 4: the repeated blocks of short fields ---- --}}
-            @foreach([1 => ['Contact'], 2 => ['Mother / Legal Guardian', 'Father / Legal Guardian'], 3 => ['Emergency contacts', 'Authorized Pickup 1', 'Authorized Pickup 2', 'Authorized Pickup 3']] as $stepIndex => $cards)
+            {{-- ---- 2: the repeated blocks of short fields ----
+
+                 The parent, emergency and pick-up blocks used to be drawn here
+                 too. They are people now, not columns, and the People step
+                 below is where they are set. The columns themselves are still
+                 on the table and still hold what they held — nothing on this
+                 form posts them any more, so a save leaves them exactly as the
+                 migration found them until they are dropped. --}}
+            @foreach($usesPeopleStep
+                ? [1 => ['Contact']]
+                : [1 => ['Contact'], 2 => ['Mother / Legal Guardian', 'Father / Legal Guardian'], 3 => ['Emergency contacts', 'Authorized Pickup 1', 'Authorized Pickup 2', 'Authorized Pickup 3']]
+            as $stepIndex => $cards)
                 <div @if($stepper) x-show="index === {{ $stepIndex }}" x-cloak @endif>
                     <h2 class="cs-title">{{ $steps[$stepIndex]['label'] }}</h2>
                     <p class="cs-blurb">{{ $steps[$stepIndex]['blurb'] }}</p>
@@ -420,7 +456,14 @@
                 </div>
             @endforeach
 
-            {{-- ---- 5. Notes: two boxes of prose, a card each ---- --}}
+            {{-- ---- 3. People: one row per adult, saved as it goes ---- --}}
+            @if($usesPeopleStep)
+                <div @if($stepper) x-show="index === 2" x-cloak @endif>
+                    @include('children.partials.people-step')
+                </div>
+            @endif
+
+            {{-- ---- 4. Notes: two boxes of prose, a card each ---- --}}
             <div @if($stepper) x-show="index === {{ $last }}" x-cloak @endif>
                 <h2 class="cs-title">{{ $steps[$last]['label'] }}</h2>
                 <p class="cs-blurb">{{ $steps[$last]['blurb'] }}</p>
@@ -586,4 +629,11 @@
             refresh();
         })();
     </script>
+
+    {{-- The People step and its drawer. Outside the step markup because the
+         drawer teleports over the whole form, and the component behind both is
+         one object — saving a person has to change the row that named them. --}}
+    @if($usesPeopleStep)
+        @include('children.partials.people-script')
+    @endif
 </form>

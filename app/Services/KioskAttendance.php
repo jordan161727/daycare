@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\ChildAttendancePunch;
-use App\Models\Guardian;
+use App\Models\Person;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,15 +26,18 @@ class KioskAttendance
     /**
      * @return array{status: string, time?: string, session?: string}
      */
-    public function punch(Child $child, string $direction, Guardian $guardian, string $device = null): array
+    public function punch(Child $child, string $direction, Person $person, string $device = null): array
     {
         // Re-checked here and not only in the browser. The tile's button was a
         // hint; this is the rule.
-        if ($direction === ChildAttendancePunch::OUT && ! $guardian->mayCollect($child)) {
+        if ($direction === ChildAttendancePunch::OUT && ! $person->mayCollect($child)) {
             return ['status' => 'not_authorised'];
         }
 
-        if (! $child->guardians()->whereKey($guardian->id)->exists()) {
+        // On this child's record at all. Being told about a child and being
+        // allowed to take them home are different permissions; the check above
+        // is the second, this is the first.
+        if (! $child->people()->whereKey($person->id)->exists()) {
             return ['status' => 'not_authorised'];
         }
 
@@ -48,7 +51,7 @@ class KioskAttendance
             return ['status' => 'not_enrolled'];
         }
 
-        return DB::transaction(function () use ($child, $direction, $guardian, $device, $date, $session) {
+        return DB::transaction(function () use ($child, $direction, $person, $device, $date, $session) {
             $attendance = Attendance::firstOrCreate(
                 ['child_id' => $child->id, 'attendance_date' => $date, 'session' => $session],
                 ['signed_in_at' => now()],
@@ -81,7 +84,7 @@ class KioskAttendance
 
             ChildAttendancePunch::create([
                 'child_id' => $child->id,
-                'guardian_id' => $guardian->id,
+                'person_id' => $person->id,
                 'direction' => $direction,
                 'occurred_at' => now(),
                 'service_date' => $date,

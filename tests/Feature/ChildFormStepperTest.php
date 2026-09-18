@@ -39,13 +39,16 @@ class ChildFormStepperTest extends TestCase
         $this->assertStringContainsString('cs-band', $html);
         $this->assertStringContainsString('LAN 1001 · Infant · Active', $html);
 
-        // Five steps, numbered, and a counter that says how many there are.
-        foreach (['Basics', 'Child details', 'Parents', 'Emergency &amp; pickup', 'Notes'] as $label) {
+        // Four steps on an existing child, numbered, and a counter that says
+        // how many there are. Parents and Emergency & pickup are one People
+        // step now — sixty columns that asked for the same grandmother twice,
+        // replaced by one row per person.
+        foreach (['Basics', 'Child details', 'People', 'Notes'] as $label) {
             $this->assertStringContainsString($label, $html);
         }
 
-        $this->assertSame(5, substr_count($html, 'class="cs-tab"'));
-        $this->assertStringContainsString('of 5', $html);
+        $this->assertSame(4, substr_count($html, 'class="cs-tab"'));
+        $this->assertStringContainsString('of 4', $html);
 
         // The band already names the child, so the page header above it is gone.
         $this->assertStringNotContainsString('Update Ada', $html);
@@ -59,18 +62,37 @@ class ChildFormStepperTest extends TestCase
 
         // Steps are hidden with x-show, which is display:none — the input is in
         // the DOM and in the POST. Were they rendered lazily, saving a name on
-        // step 1 would blank every answer on steps 2 to 5.
+        // step 1 would blank every answer on the steps after it.
         $this->assertStringContainsString('name="important_notes"', $html);
         $this->assertStringContainsString('Peanut allergy', $html);
+
+        // Notes is the last step, and its fields are here while step 1 is showing.
+        $this->assertStringContainsString('x-show="index === 3"', $html);
+
+        // The People step is the exception, and deliberately so: a link is a
+        // row in another table, saved as it goes, so it posts nothing with the
+        // form and has no fields to lose.
+        $this->assertStringNotContainsString('name="pickup_3_license_number"', $html);
+    }
+
+    public function test_a_new_child_still_gets_the_old_parent_blocks(): void
+    {
+        // The People step needs a child to link to, and the PDF import
+        // pre-fills these very inputs — so until the import is rewritten to
+        // produce people itself, this is where a scanned form's parents land.
+        $html = $this->actingAs($this->admin)->get(route('children.create'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('name="mother_name"', $html);
         $this->assertStringContainsString('name="pickup_3_license_number"', $html);
-        $this->assertStringContainsString('x-show="index === 4"', $html);
+        $this->assertStringContainsString('Emergency &amp; pickup', $html);
+        $this->assertStringNotContainsString('Linked people', $html);
     }
 
     public function test_the_form_opens_on_the_step_holding_the_rejected_field(): void
     {
         $child = $this->makeChild();
 
-        // Mother's name sits on step 3, which is index 2.
+        // The nickname sits on Child details, which is index 1.
         $this->actingAs($this->admin)
             ->from(route('children.edit', $child))
             ->put(route('children.update', $child), [
@@ -78,15 +100,15 @@ class ChildFormStepperTest extends TestCase
                 'first_name' => $child->first_name,
                 'last_name' => $child->last_name,
                 'status' => 'Active',
-                'mother_name' => str_repeat('a', 300),
+                'nickname' => str_repeat('a', 300),
             ])
-            ->assertSessionHasErrors('mother_name');
+            ->assertSessionHasErrors('nickname');
 
         $html = $this->actingAs($this->admin)->get(route('children.edit', $child))->assertOk()->getContent();
 
-        // Opening on step 1 would leave the error three sections out of sight,
-        // with nothing on screen to say why the save did not take.
-        $this->assertStringContainsString('x-data="{ index: 2 }"', $html);
+        // Opening on step 1 would leave the error a section out of sight, with
+        // nothing on screen to say why the save did not take.
+        $this->assertStringContainsString('x-data="{ index: 1 }"', $html);
         $this->assertStringContainsString('data-invalid="true"', $html);
     }
 

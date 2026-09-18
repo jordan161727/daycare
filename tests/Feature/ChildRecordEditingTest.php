@@ -39,7 +39,9 @@ class ChildRecordEditingTest extends TestCase
         $this->actingAs($this->teacher)
             ->get(route('children.edit', $this->child()))
             ->assertOk()
-            ->assertSee('Emergency &amp; pickup', false);
+            // The People step: who may collect this child is part of the record
+            // a room teacher keeps, not something to wait on the office for.
+            ->assertSee('Linked people', false);
     }
 
     public function test_a_teacher_may_not_touch_a_record_from_another_room(): void

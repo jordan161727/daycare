@@ -478,7 +478,14 @@
                          twice over. --}}
                     <template x-if="! isPhone">
                     <div class="overflow-x-auto">
-                        <table class="att-table w-full min-w-[72rem]">
+                        {{-- att-split when this week holds a room that books
+                             twice a day. It is what gives every row the height
+                             of a stacked AM/PM cell, so a School Age child and
+                             a Toddler line up across the week instead of the
+                             columns stepping in and out. Left off when no such
+                             room is on the sheet, because then the taller row
+                             would be empty space on every line. --}}
+                        <table class="att-table w-full min-w-[72rem] {{ $children->contains(fn ($row) => count($row->sessions()) > 1) ? 'att-split' : '' }}">
                             <thead>
                                 <tr>
                                     {{-- The LAN, not a row number: it is what the paper
