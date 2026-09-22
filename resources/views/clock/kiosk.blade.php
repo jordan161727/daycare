@@ -91,8 +91,12 @@
                 <template x-if="! staff && ! done">
                     <div class="p-7">
                         <div class="text-center">
-                            <h1 class="text-xl font-bold">Scan your card</h1>
-                            <p class="mt-1 text-[13px] text-slate-500">or key your 4-digit PIN below</p>
+                            @php($scanner = \App\Models\Setting::bool('kiosk.scanner', true))
+                            {{-- The heading has to match what the screen will
+                                 actually accept. With the scanner off, "Scan
+                                 your card" is an instruction that fails. --}}
+                            <h1 class="text-xl font-bold">{{ $scanner ? 'Scan your card' : 'Enter your PIN' }}</h1>
+                            <p class="mt-1 text-[13px] text-slate-500">{{ $scanner ? 'or key your 4-digit PIN below' : 'key your 4-digit PIN below' }}</p>
                         </div>
 
                         <form @submit.prevent="identify()" autocomplete="off" class="mt-6">
@@ -242,6 +246,33 @@ function staffClock() { return {
     init() {
         this.tick();
         setInterval(() => this.tick(), 10000);
+        this.holdScreenAwake();
+    },
+
+    /**
+     * Keep the tablet's screen on, unless the centre has said not to.
+     *
+     * A kiosk that has gone to sleep at shift change is a queue at the door
+     * while somebody hunts for the power button. The lock is dropped by the
+     * browser whenever the page is hidden, so it is taken again when the tab
+     * comes back — otherwise the first sleep is permanent.
+     *
+     * Wrapped throughout: the API needs a secure context and is missing on
+     * older tablets, and a kiosk must not fail to take a punch because it
+     * could not keep its own screen on.
+     */
+    async holdScreenAwake() {
+        if (@js(\App\Models\Setting::bool('kiosk.allow_sleep', false)) || ! ('wakeLock' in navigator)) return;
+
+        const take = async () => {
+            try { await navigator.wakeLock.request('screen'); } catch {}
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') take();
+        });
+
+        take();
     },
 
     tick() {

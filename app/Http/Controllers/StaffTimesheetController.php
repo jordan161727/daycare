@@ -217,6 +217,14 @@ class StaffTimesheetController extends Controller
             return null;
         }
 
+        // Attendance Only: the centre takes an arrival and nothing else, so
+        // every day is open by design. Flagging them all would put an amber
+        // dot against the whole centre every day, and a warning everybody sees
+        // daily is one nobody reads.
+        if (! SettingController::tracksTime()) {
+            return self::ON_TIME;
+        }
+
         // Open and the day is over: somebody went home without clocking out.
         // Today's open day is just somebody still at work.
         if ($day['open'] && $date < today()->toDateString()) {

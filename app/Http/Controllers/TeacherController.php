@@ -218,6 +218,7 @@ class TeacherController extends Controller
             // defaults for anything left blank.
             'employment' => ['nullable', Rule::in(StaffRule::EMPLOYMENT)],
             'job_role' => ['nullable', Rule::in(User::JOB_ROLES)],
+            'department_id' => ['nullable', 'exists:departments,id'],
             'title' => ['nullable', Rule::in(ClassroomAssignment::rooms())],
             'legal_name' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:40'],

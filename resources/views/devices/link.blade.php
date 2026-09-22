@@ -8,7 +8,7 @@
      or open it here if this page is already on the tablet. --}}
 
 <div class="mx-auto max-w-lg" x-data="{ copied: false, plain: false }">
-    <a href="{{ route('devices.index') }}" class="text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">&larr; Devices</a>
+    <a href="{{ route('settings.devices') }}" class="text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400">&larr; Devices</a>
 
     <section class="glass-card mt-4 rounded-2xl p-6 text-center">
         <h1 class="text-xl font-bold">{{ $device->name }}</h1>
@@ -45,7 +45,7 @@
         </div>
 
         <p class="mt-5 rounded-xl bg-amber-50 px-3 py-2 text-left text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-            Anyone with this address can open the clock screen on this device&rsquo;s name. They still need a card or a PIN to record anything &mdash; but if it has gone somewhere it should not have, <a href="{{ route('devices.index') }}" class="font-semibold underline">re-pair the device</a> and this link stops working.
+            Anyone with this address can open the clock screen on this device&rsquo;s name. They still need a card or a PIN to record anything &mdash; but if it has gone somewhere it should not have, <a href="{{ route('settings.devices') }}" class="font-semibold underline">re-pair the device</a> and this link stops working.
         </p>
     </section>
 </div>

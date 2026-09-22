@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
@@ -35,6 +36,7 @@ class User extends Authenticatable
         'password_changed_at',
         'role',
         'job_role',
+        'department_id',
         'classroom',
         'classrooms',
         'name_format',
@@ -307,6 +309,18 @@ class User extends Authenticatable
      * so a filter that only looked at the column would offer "Teacher" and
      * then return nobody at all — which is exactly what it did.
      */
+    /**
+     * The part of the centre they belong to, where the centre runs departments.
+     *
+     * Nullable and staying that way: a centre with no departments should not be
+     * made to invent one to hire somebody, and every report that groups by
+     * department prints the unassigned as exactly that.
+     */
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
     public function scopeJobRoleIs($query, string $role)
     {
         return $query->where(fn ($outer) => $outer

@@ -99,7 +99,7 @@
                      shade larger from lg up, where it is carrying the whole
                      brand on its own. --}}
                 <img src="{{ asset('images/littleangels-logo.png') }}"
-                     alt="Little Angels Day Care Center"
+                     alt="{{ $companyName }}"
                      width="531" height="228" class="auth-rise mx-auto mb-8 h-12 w-auto lg:h-14">
 
                 <div class="auth-rise flex items-center justify-between gap-4">

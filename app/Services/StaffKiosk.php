@@ -2,7 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\LoginEvent;
+use App\Models\Setting;
 use App\Models\StaffDevice;
+use App\Http\Controllers\SettingController;
 use App\Models\TimePunch;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -48,8 +51,27 @@ class StaffKiosk
      */
     public function identify(?string $card, ?string $pin): array
     {
+        $found = $this->look($card, $pin);
+
+        // Written down whichever way it went. A card presented at a lobby
+        // screen is somebody naming themselves, and the failures are the
+        // reason the record is worth keeping — five wrong PINs against one
+        // number is the thing a director wants to be able to see afterwards.
+        $this->record($found, filled($card) ? self::METHOD_CARD : self::METHOD_PIN);
+
+        return $found;
+    }
+
+    /** The lookup itself, with nothing recorded. */
+    private function look(?string $card, ?string $pin): array
+    {
+        // Enforced here rather than only in the screen's wording: turning the
+        // scanner off has to stop a card working, or a centre that switched it
+        // off after losing one would still be letting that card in.
         if (filled($card)) {
-            return $this->byCard($card);
+            return Setting::bool('kiosk.scanner', true)
+                ? $this->byCard($card)
+                : ['status' => 'not_found'];
         }
 
         if (filled($pin)) {
@@ -57,6 +79,27 @@ class StaffKiosk
         }
 
         return ['status' => 'not_found'];
+    }
+
+    /**
+     * Note who was recognised, or that somebody was not.
+     *
+     * The card and the PIN themselves never reach this — only which kind was
+     * presented. A log that recorded the secret would be a list of every PIN
+     * in the centre, which is worse than having no log.
+     *
+     * Guarded: a clock that would not take a punch because it could not write
+     * a log line is a clock somebody has to work around.
+     */
+    private function record(array $found, string $method): void
+    {
+        rescue(fn () => LoginEvent::create([
+            'user_id' => $found['user']->id ?? null,
+            'outcome' => $found['status'] === 'ok' ? LoginEvent::KIOSK : LoginEvent::KIOSK_FAILED,
+            'method' => $method,
+            'ip_address' => request()->ip(),
+            'user_agent' => mb_substr((string) request()->userAgent(), 0, 500),
+        ]), null, false);
     }
 
     /**
@@ -145,10 +188,14 @@ class StaffKiosk
             TimeClock::OFF => [
                 ['action' => 'clock_in', 'label' => 'Clock In', 'tone' => 'go'],
             ],
-            TimeClock::WORKING => [
+            // Attendance Only: they have arrived and that is the whole of what
+            // this centre records, so there is nothing left to press. Offering
+            // a clock-out that nothing reads would invite somebody to press it
+            // and believe their hours were being counted.
+            TimeClock::WORKING => SettingController::tracksTime() ? [
                 ['action' => 'break_start', 'label' => 'Start Break', 'tone' => 'hold'],
                 ['action' => 'clock_out', 'label' => 'Clock Out', 'tone' => 'stop'],
-            ],
+            ] : [],
             TimeClock::BREAK => [
                 ['action' => 'break_end', 'label' => 'End Break', 'tone' => 'hold'],
             ],

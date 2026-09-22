@@ -17,14 +17,16 @@ use Illuminate\Http\Request;
  */
 class StaffDeviceController extends Controller
 {
+    /**
+     * The page moved into Settings; the actions did not.
+     *
+     * Kept as a redirect rather than deleted, because a director's bookmark to
+     * /devices should land on the devices page rather than on a 404 — and the
+     * pairing instructions that went out with the tablets say /devices.
+     */
     public function index()
     {
-        return view('devices.index', [
-            'devices' => StaffDevice::orderByDesc('is_active')->orderBy('name')->get(),
-            // Shown once, immediately after pairing, and never again — see
-            // StaffDevice::issueToken.
-            'issued' => session('issued_device'),
-        ]);
+        return redirect()->route('settings.devices');
     }
 
     public function store(Request $request)
@@ -43,7 +45,7 @@ class StaffDeviceController extends Controller
 
         // Through the session rather than the URL: a pairing link in an address
         // bar is one in a history, a proxy log and a shared screen.
-        return redirect()->route('devices.index')->with('issued_device', [
+        return redirect()->route('settings.devices')->with('issued_device', [
             'id' => $device->id,
             'name' => $device->name,
             'url' => route('clock.kiosk', ['token' => $token]),
@@ -60,7 +62,7 @@ class StaffDeviceController extends Controller
 
         $device->fill($data)->save();
 
-        return redirect()->route('devices.index')->with('success', $device->name.' updated.');
+        return redirect()->route('settings.devices')->with('success', $device->name.' updated.');
     }
 
     /**
@@ -105,7 +107,7 @@ class StaffDeviceController extends Controller
     {
         $token = $device->issueToken();
 
-        return redirect()->route('devices.index')->with('issued_device', [
+        return redirect()->route('settings.devices')->with('issued_device', [
             'id' => $device->id,
             'name' => $device->name,
             'url' => route('clock.kiosk', ['token' => $token]),
@@ -122,6 +124,6 @@ class StaffDeviceController extends Controller
     {
         $device->forceFill(['is_active' => false])->save();
 
-        return redirect()->route('devices.index')->with('success', $device->name.' has been retired.');
+        return redirect()->route('settings.devices')->with('success', $device->name.' has been retired.');
     }
 }

@@ -2,9 +2,16 @@
 
 namespace App\Providers;
 
+use App\Listeners\RecordLoginEvent;
+use Illuminate\Auth\Events\Failed;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
+use App\Models\Setting;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,6 +29,27 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        /*
+         * Every sign-in, sign-out and failed attempt, written down.
+         *
+         * Hung off the framework's own events rather than off the login
+         * controller, so a second way in cannot skip the log. See
+         * RecordLoginEvent for why each write is guarded.
+         */
+        Event::listen(Login::class, [RecordLoginEvent::class, 'handleLogin']);
+        Event::listen(Logout::class, [RecordLoginEvent::class, 'handleLogout']);
+        Event::listen(Failed::class, [RecordLoginEvent::class, 'handleFailed']);
+
+        /*
+         * The centre's name, on every screen that prints or displays it.
+         *
+         * A composer rather than View::share, so the settings table is only
+         * read when a view is actually rendered — a console command and an
+         * API response have no name to print and should not pay for one.
+         */
+        View::composer('*', function ($view) {
+            $view->with('companyName', Setting::get('company.name', config('daycare.company.name')));
+        });
         /*
          * The signed-out screens — the door kiosk and the staff time clock —
          * are the only routes in this app that answer without a login, so they

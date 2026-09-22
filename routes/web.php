@@ -1,5 +1,7 @@
 <?php
 use App\Http\Controllers\ChildImportController;
+use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\SettingController;
 use App\Http\Controllers\ChildrenController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\ChildController;
@@ -22,6 +24,7 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\StaffCardController;
 use App\Http\Controllers\StaffClockController;
 use App\Http\Controllers\StaffDeviceController;
+use App\Http\Controllers\StaffReportController;
 use App\Http\Controllers\StaffTimesheetController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoomScheduleController;
@@ -238,6 +241,37 @@ Route::get('/staff-timesheets', [StaffTimesheetController::class, 'index'])->nam
 // Before nothing in particular, but kept next to the screen it mirrors:
 // the file carries pay rates, so it stays inside the director-only group.
 Route::get('/staff-timesheets/export', [StaffTimesheetController::class, 'export'])->name('staff.timesheets.export');
+
+/*
+ * The reports somebody else asks for: a fortnight of hours per person, chosen
+ * from a list and handed on. Director-only for the same reason as the grid it
+ * sits beside — it can be asked to print pay.
+ */
+Route::get('/staff-reports', [StaffReportController::class, 'index'])->name('staff.reports');
+Route::get('/staff-reports/export', [StaffReportController::class, 'export'])->name('staff.reports.export');
+
+/*
+ * The parts of the centre. A department is a line on the org chart and the
+ * grouping every hours report totals by, so creating one belongs here with the
+ * rest of the director-only staff screens.
+ */
+Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
+Route::get('/departments/create', [DepartmentController::class, 'create'])->name('departments.create');
+Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
+Route::get('/departments/{department}/edit', [DepartmentController::class, 'edit'])->name('departments.edit');
+Route::put('/departments/{department}', [DepartmentController::class, 'update'])->name('departments.update');
+Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])->name('departments.destroy');
+
+/*
+ * Settings. Director only, and not only because of what is on the page: the
+ * attendance mode changes how hours are recorded for everybody, which is a
+ * bigger act than editing any one person's record.
+ */
+Route::get('/settings', [SettingController::class, 'company'])->name('settings.company');
+Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
+Route::get('/settings/administrators', [SettingController::class, 'administrators'])->name('settings.administrators');
+Route::get('/settings/devices', [SettingController::class, 'devices'])->name('settings.devices');
+Route::get('/settings/login-history', [SettingController::class, 'history'])->name('settings.history');
 
 Route::get('/devices', [StaffDeviceController::class, 'index'])->name('devices.index');
 Route::post('/devices', [StaffDeviceController::class, 'store'])->name('devices.store');

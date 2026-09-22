@@ -217,7 +217,7 @@ class PrintAttendanceTest extends TestCase
         // The grey is the information: a browser that saved ink by dropping
         // backgrounds would print every child as scheduled every day.
         $this->assertStringContainsString('print-color-adjust:exact', $html);
-        $this->assertStringContainsString('Little Angels Day Care — weekly attendance', $html);
+        $this->assertStringContainsString(config('daycare.company.name').' — weekly attendance', $html);
 
         // Black and white, out of one block of variables rather than a scatter
         // of hexes — which is what let this page go from sky to grey without a
@@ -265,7 +265,7 @@ class PrintAttendanceTest extends TestCase
         $html = $response->getContent();
         $this->assertSame(1, substr_count($html, '<div class="sheet">'));
         $this->assertStringNotContainsString('break-after:page', $html);
-        $this->assertStringContainsString('Little Angels Day Care — September 2026', $html);
+        $this->assertStringContainsString(config('daycare.company.name').' — September 2026', $html);
     }
 
     /**

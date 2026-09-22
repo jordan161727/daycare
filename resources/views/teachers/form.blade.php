@@ -63,6 +63,23 @@
                 <p class="mt-1 text-xs text-slate-500">Shown on the staff list and the timesheets. Separate from the room below.</p>
                 <x-input-error :messages="$errors->get('job_role')" /></label>
 
+            {{-- The part of the centre, which is none of the three above:
+                 Kitchen holds several jobs, and a cook and a dishwasher are one
+                 department and two roles. Only offered where departments have
+                 been set up — an empty dropdown is a question with no answer. --}}
+            @php($departments = \App\Models\Department::orderBy('name')->get())
+            @if($departments->isNotEmpty())
+                <label class="block"><span class="mb-2 block text-sm font-semibold">Department</span>
+                    <select name="department_id" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                        <option value="">Not set</option>
+                        @foreach($departments as $option)
+                            <option value="{{ $option->id }}" @selected((int) old('department_id', $teacher->department_id) === $option->id)>{{ $option->name }}</option>
+                        @endforeach
+                    </select>
+                    <p class="mt-1 text-xs text-slate-500">What the hours reports total them under.</p>
+                    <x-input-error :messages="$errors->get('department_id')" /></label>
+            @endif
+
             <label class="block"><span class="mb-2 block text-sm font-semibold">Room they lead</span>
                 <select name="title" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                     <option value="">Not set</option>

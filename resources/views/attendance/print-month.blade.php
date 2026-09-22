@@ -136,9 +136,9 @@ tr.vf td.nm{color:var(--ink-faint);font-size:7.5px;}
 
 <div class="hd">
     <div class="brand">
-        <img src="{{ asset('images/littleangels-logo.png') }}" alt="Little Angels Day Care Center" width="531" height="228">
+        <img src="{{ asset('images/littleangels-logo.png') }}" alt="{{ $companyName }}" width="531" height="228">
         <div>
-            <div class="title">Little Angels Day Care — {{ $monthLabel }}</div>
+            <div class="title">{{ $companyName }} — {{ $monthLabel }}</div>
             <div class="sub">{{ $days->count() }} open days · <b>{{ $monthAttended }}</b> of {{ $monthTotal }} expected days attended{{ $closedNotes->isNotEmpty() ? ' · closed '.$closedNotes->implode(' · ') : '' }}</div>
         </div>
     </div>

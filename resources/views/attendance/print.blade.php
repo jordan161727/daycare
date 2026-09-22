@@ -151,9 +151,9 @@ tr.vf td{height:17px;} tr.vf td.nm{color:var(--ink-faint);font-size:8.5px;}
      itself would push the header down mid-render. --}}
 <div class="hd">
     <div class="brand">
-        <img src="{{ asset('images/littleangels-logo.png') }}" alt="Little Angels Day Care Center" width="531" height="228">
+        <img src="{{ asset('images/littleangels-logo.png') }}" alt="{{ $companyName }}" width="531" height="228">
         <div class="brand-text">
-            <div class="title">Little Angels Day Care — weekly attendance</div>
+            <div class="title">{{ $companyName }} — weekly attendance</div>
             <div class="sub">Week of {{ $weekLabel }} · schedule pre-printed · fill a box only when the child arrives{{ $closedNotes->isNotEmpty() ? ' · '.$closedNotes->implode(' · ') : '' }}</div>
         </div>
     </div>

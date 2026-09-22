@@ -138,7 +138,7 @@ class StaffCardTest extends TestCase
     {
         $this->actingAs($this->admin)
             ->post(route('devices.store'), ['name' => 'Front desk kiosk', 'location' => 'Lobby'])
-            ->assertRedirect(route('devices.index'))
+            ->assertRedirect(route('settings.devices'))
             ->assertSessionHas('issued_device');
 
         $device = StaffDevice::firstOrFail();

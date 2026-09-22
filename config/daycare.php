@@ -10,6 +10,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Company
+    |--------------------------------------------------------------------------
+    |
+    | The centre's name, as it reads on the sign-in page, the kiosk and every
+    | printed sheet. This is the default; a director can override it under
+    | Settings, and clearing that box comes back here.
+    |
+    | Not config('app.name'), which is the Laravel application's name and is
+    | used for mail envelopes and the like. A centre renaming itself should not
+    | have to reason about what else APP_NAME is wired into.
+    |
+    */
+
+    'company' => [
+        'name' => env('DAYCARE_COMPANY_NAME', 'Little Angels Day Care Center'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Province
     |--------------------------------------------------------------------------
     |
