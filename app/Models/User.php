@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -33,6 +34,7 @@ class User extends Authenticatable
         'must_change_password',
         'password_changed_at',
         'role',
+        'job_role',
         'classroom',
         'classrooms',
         'name_format',
@@ -59,6 +61,8 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        // The clock's own credentials, which no screen ever needs.
+        'card_index', 'card_hash', 'kiosk_pin_index', 'kiosk_pin_hash',
     ];
 
     /**
@@ -84,6 +88,9 @@ class User extends Authenticatable
             // do arithmetic on it already cast at the point they use it.
             'pay_rate' => 'decimal:2',
             'evaluation_score' => 'decimal:1',
+            'card_issued_at' => 'datetime',
+            'kiosk_locked_until' => 'datetime',
+            'kiosk_failed_attempts' => 'integer',
         ];
     }
 
@@ -249,5 +256,193 @@ class User extends Authenticatable
         $initials = Str::substr($words[0], 0, 1).(count($words) > 1 ? Str::substr(end($words), 0, 1) : '');
 
         return Str::upper($initials);
+    }
+
+    /* ---- the time clock at the door ----
+
+       Credentials that open the clock and nothing else. Not the password: the
+       screen is in a lobby with a queue behind it, and a password typed there
+       stops being one. Same shape as the guardians' door PINs — an HMAC index
+       to find the row by, a hash to prove it with — so the table on its own is
+       neither a list of cards nor a list of PINs. */
+
+    /**
+     * What somebody does, as distinct from what they may open.
+     *
+     * `role` is the account — admin or teacher — and it decides which screens
+     * they see. This is the job, and it decides nothing: it is what a rota, a
+     * timesheet and a staff list read to tell one teacher from another.
+     *
+     * Validated against this list so the filters on the staff screens have
+     * something finite to offer, rather than a column of one-off spellings.
+     */
+    public const JOB_ROLES = [
+        'Director',
+        'Lead Teacher',
+        'Assistant',
+        'Floater',
+        'Substitute',
+        'Cook',
+        'Administrator',
+    ];
+
+    /**
+     * The job, falling back to the account role for anybody without one.
+     *
+     * Every existing staff member is in that position, so the fallback is the
+     * difference between a staff list that reads sensibly the moment this
+     * ships and one that is a column of dashes until somebody edits sixteen
+     * records.
+     */
+    public function jobRole(): string
+    {
+        return filled($this->job_role) ? $this->job_role : ucfirst((string) $this->role);
+    }
+
+    /**
+     * Narrow to people whose job reads as this.
+     *
+     * Has to match jobRole() rather than the column alone. Everybody hired
+     * before the field existed has it empty and reads as their account role,
+     * so a filter that only looked at the column would offer "Teacher" and
+     * then return nobody at all — which is exactly what it did.
+     */
+    public function scopeJobRoleIs($query, string $role)
+    {
+        return $query->where(fn ($outer) => $outer
+            ->where('job_role', $role)
+            ->orWhere(fn ($fallback) => $fallback
+                ->where(fn ($unset) => $unset->whereNull('job_role')->orWhere('job_role', ''))
+                ->where('role', strtolower($role))));
+    }
+
+    /**
+     * The jobs a given set of people actually read as, for a filter to offer.
+     *
+     * Built from the people rather than from JOB_ROLES, so the list never
+     * offers a job nobody holds and filters to an empty page.
+     *
+     * @param  \Illuminate\Support\Collection<int, self>  $people
+     */
+    public static function jobRolesAmong($people)
+    {
+        return $people->map(fn (self $person) => $person->jobRole())->unique()->sort()->values();
+    }
+    /** How many wrong PINs before the clock stops answering to that number. */
+    public const KIOSK_MAX_ATTEMPTS = 5;
+
+    public const KIOSK_LOCKOUT_MINUTES = 5;
+
+    /**
+     * The staff number as it is printed and read aloud — S-1001.
+     *
+     * Derived from the row rather than stored, so it cannot drift from it and
+     * there is no second thing to allocate when somebody is hired.
+     */
+    public function staffId(): string
+    {
+        return 'S-'.str_pad((string) $this->id, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * What a secret is looked up by.
+     *
+     * Keyed on the app key, so a stolen table is not a list of four-digit
+     * numbers to try offline. Deliberately not unique for PINs: two people
+     * choosing 1234 is a collision to resolve at the screen, not an error to
+     * refuse at the form.
+     */
+    public static function kioskIndexFor(string $secret): string
+    {
+        return hash_hmac('sha256', $secret, config('app.key'));
+    }
+
+    /**
+     * Whether somebody else already answers to these four digits.
+     *
+     * A single indexed lookup, which is the other thing the HMAC index buys:
+     * the hash cannot be searched, but the index can, so asking "is this PIN
+     * taken" costs one row rather than a bcrypt check against every member of
+     * staff.
+     *
+     * It does tell whoever is setting it that *somebody* holds that number.
+     * With four digits and a handful of staff that is a small thing to give
+     * away, and much smaller than the alternative: two people on one PIN means
+     * the clock cannot tell them apart, so it has to stop and ask — every
+     * morning, to both of them, for as long as the collision stands.
+     */
+    public static function kioskPinTaken(string $pin, ?self $except = null): bool
+    {
+        return static::where('kiosk_pin_index', static::kioskIndexFor($pin))
+            ->when($except?->exists, fn ($query) => $query->whereKeyNot($except->getKey()))
+            ->exists();
+    }
+    /**
+     * Issue a card, and hand its code back once.
+     *
+     * The code is what the QR encodes. It is returned rather than stored,
+     * because a card whose number can be read back out of the database is one
+     * anybody with database access can clone. Reprinting means regenerating,
+     * which also — correctly — retires the old card.
+     */
+    public function issueCard(): string
+    {
+        $code = Str::random(40);
+
+        $this->forceFill([
+            'card_index' => static::kioskIndexFor($code),
+            'card_hash' => Hash::make($code),
+            'card_issued_at' => now(),
+        ])->save();
+
+        return $code;
+    }
+
+    public function hasCard(): bool
+    {
+        return filled($this->card_hash);
+    }
+
+    /** Set the four digits somebody keys in when the card is in a coat pocket. */
+    public function setKioskPin(string $pin): void
+    {
+        $this->forceFill([
+            'kiosk_pin_index' => static::kioskIndexFor($pin),
+            'kiosk_pin_hash' => Hash::make($pin),
+            'kiosk_failed_attempts' => 0,
+            'kiosk_locked_until' => null,
+        ])->save();
+    }
+
+    public function hasKioskPin(): bool
+    {
+        return filled($this->kiosk_pin_hash);
+    }
+
+    public function kioskIsLocked(): bool
+    {
+        return $this->kiosk_locked_until !== null && $this->kiosk_locked_until->isFuture();
+    }
+
+    /** Count a wrong try, and stop answering after too many. */
+    public function noteKioskFailure(): void
+    {
+        $attempts = (int) $this->kiosk_failed_attempts + 1;
+
+        $this->forceFill([
+            'kiosk_failed_attempts' => $attempts,
+            'kiosk_locked_until' => $attempts >= self::KIOSK_MAX_ATTEMPTS
+                ? now()->addMinutes(self::KIOSK_LOCKOUT_MINUTES)
+                : $this->kiosk_locked_until,
+        ])->save();
+    }
+
+    public function clearKioskFailures(): void
+    {
+        if ($this->kiosk_failed_attempts === 0 && $this->kiosk_locked_until === null) {
+            return;
+        }
+
+        $this->forceFill(['kiosk_failed_attempts' => 0, 'kiosk_locked_until' => null])->save();
     }
 }

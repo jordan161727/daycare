@@ -123,7 +123,21 @@
         </span>
     </div>
 
-    <div class="relative flex h-full flex-col justify-between p-10 xl:p-14">
+    {{-- Two rows: everything the page puts first, centred in the height that is
+         left, and a last block sitting on the floor.
+
+         A grid rather than a flex column, because the two ways of doing this in
+         flex both fail. justify-between spreads the blocks to the edges, which
+         read as spread only while there were three of them — with two it pins
+         the words to the ceiling. And justify-center with an mt-auto footer is
+         worse than it looks: an auto margin swallows every pixel of free space
+         before justify-content gets any, so the centring silently stops
+         working and the words go back to the top.
+
+         grid-rows-[1fr_auto] says the thing outright. The first row takes the
+         height the footer does not want, and place-items-center puts the words
+         in the middle of it. --}}
+    <div class="relative grid h-full grid-rows-[1fr_auto] place-items-center gap-8 p-10 text-center xl:p-14">
         {{ $slot }}
     </div>
 </div>

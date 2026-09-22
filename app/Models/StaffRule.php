@@ -56,6 +56,59 @@ class StaffRule extends Model
         'CAN_OPEN' => [],
     ];
 
+    /**
+     * What each rule is called on screen, and which heading it sits under.
+     *
+     * The constants are what the solver reads and they are not going to
+     * change; these are what a director reads. "AVAILABLE_WINDOW" and
+     * "FIXED_END" are precise and mean nothing to somebody opening this page
+     * to say that Grace leaves at three on Fridays, and a picker of seventeen
+     * shouted-out names is one people choose from by guessing.
+     *
+     * Grouped by the question being answered rather than by whether the rule
+     * is hard or soft — that distinction matters to the scheduler and not to
+     * the person filling the form in, who is thinking about a day, an amount
+     * of time, or a room.
+     */
+    public const GROUPS = [
+        'When they can work' => [
+            'UNAVAILABLE_DAY' => 'Cannot work on a day',
+            'AVAILABLE_WINDOW' => 'Only between certain hours',
+            'AVAILABLE_AFTER' => 'Cannot start before a time',
+            'FIXED_SHIFT' => 'Always works set hours',
+            'FIXED_END' => 'Must stay until a time',
+            'CAN_OPEN' => 'May open the centre',
+        ],
+        'How much they work' => [
+            'REQUIRED_HOURS' => 'Owed a set number of hours',
+            'MAX_HOURS' => 'Never more than full time',
+            'HALF_DAYS' => 'A number of half days',
+            'PREFERRED_FULL_DAYS' => 'Prefers a number of full days',
+        ],
+        'Rooms and people' => [
+            'ROOM_PREFERENCE' => 'Prefers a room',
+            'ROOM_FORBIDDEN' => 'Never in a room',
+            'NO_PAIR' => 'Never scheduled with someone',
+            'NEEDS_SUPERVISION' => 'Never left alone',
+        ],
+        'What they would rather' => [
+            'PREFERRED_START' => 'Prefers to start at a time',
+            'PREFERRED_DAY_OFF' => 'Prefers a day off',
+        ],
+    ];
+
+    /** The plain-English name of one rule type, or the constant if it has none. */
+    public static function label(string $type): string
+    {
+        foreach (self::GROUPS as $options) {
+            if (isset($options[$type])) {
+                return $options[$type];
+            }
+        }
+
+        return str_replace('_', ' ', $type);
+    }
+
     /** Rule types whose value_text names another staff member. */
     public const STAFF_VALUED = ['NO_PAIR'];
 

@@ -15,21 +15,15 @@
          above it carries the mark the panel would have shown. --}}
     <div class="grid min-h-screen lg:grid-cols-[54fr_46fr]">
         <x-sky-panel class="hidden lg:block">
-            {{-- The lockup already says "Little Angels / Day Care Center" — it
-                 is a wordmark, not a symbol — so it stands alone here rather
-                 than beside a caption repeating it. Cropped into a square tile
-                 it lost its own name and became a smudge.
+            {{-- No lockup here any more: the mark sits above the form instead,
+                 on every screen size rather than only on a phone.
 
-                 Light glass rather than the dark chips below it: the mark is
-                 pale blue angels and blue lettering outlined in near-black,
-                 drawn to sit on white, and on a smoked panel the outline goes
-                 muddy. Same file the sidebar uses, at its own aspect. --}}
-            <div class="w-fit rounded-2xl bg-white/75 px-6 py-4 ring-1 ring-white/60 backdrop-blur-md dark:bg-night-950/75 dark:ring-white/15">
-                <img src="{{ asset('images/littleangels-logo.png') }}"
-                     alt="Little Angels Day Care Center"
-                     width="531" height="228" class="h-16 w-auto xl:h-[74px]">
-            </div>
-
+                 It was on a pane of light glass in this corner because the
+                 logo is pale blue lettering outlined in near-black, drawn to
+                 sit on white — the panel needed a white card behind it to keep
+                 the outline from going muddy against the sky. Above the form
+                 it is already on the page's own background and needs none of
+                 that, and the picture is left to be a picture. --}}
             <div class="max-w-[640px] rounded-3xl bg-slate-800/30 p-8 ring-1 ring-white/20 backdrop-blur-md dark:bg-night-950/45 xl:p-10">
                 @php
                     /*
@@ -70,7 +64,7 @@
                      headline now, and at 17px a short one reads as a caption
                      that lost its picture rather than as a second thought. The
                      longer alternates still sit comfortably at this size. --}}
-                <p class="mt-5 max-w-[440px] text-[19px] leading-relaxed text-white/85 xl:text-[20px]">{!! $subheads[$tone] !!}</p>
+                <p class="mx-auto mt-5 max-w-[440px] text-[19px] leading-relaxed text-white/85 xl:text-[20px]">{!! $subheads[$tone] !!}</p>
 
             </div>
 
@@ -78,6 +72,9 @@
                  support desk and no status board to point at yet, and a footer
                  of three dead anchors is worse than a caption. Make them
                  anchors the day the pages exist. --}}
+            {{-- The panel's second row, so it sits on the floor without an auto
+                 margin — which would have eaten the space the words above are
+                 centred in. --}}
             <div class="flex w-fit gap-6 rounded-2xl bg-slate-800/25 px-6 py-3 text-sm font-medium text-white/85 ring-1 ring-white/20 backdrop-blur-md dark:bg-night-950/45">
                 <span>Privacy</span>
                 <span>Support</span>
@@ -92,11 +89,18 @@
                  eye is walked down the page. Somebody who has asked for less
                  motion gets none of it; see .auth-rise. --}}
             <div class="w-full max-w-[500px]">
-                {{-- Stands in for the panel on a phone, and carries the name
-                     the same way it does there: the mark alone, no caption. --}}
+                {{-- The mark, on every size now rather than only on a phone —
+                     it used to be a stand-in for the panel's lockup and is the
+                     only copy since that one came off.
+
+                     Centred over the column, and no caption: the logo is a
+                     wordmark that already reads "Little Angels / Day Care
+                     Center", so a line repeating it would be the name twice. A
+                     shade larger from lg up, where it is carrying the whole
+                     brand on its own. --}}
                 <img src="{{ asset('images/littleangels-logo.png') }}"
                      alt="Little Angels Day Care Center"
-                     width="531" height="228" class="auth-rise mb-8 h-12 w-auto lg:hidden">
+                     width="531" height="228" class="auth-rise mx-auto mb-8 h-12 w-auto lg:h-14">
 
                 <div class="auth-rise flex items-center justify-between gap-4">
                     <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Daycare Attendance</p>

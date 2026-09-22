@@ -55,6 +55,9 @@
 
 </div>
 
+{{-- Where components put the script they need, once, however many times the
+     component itself appears on the page. See the date-range picker. --}}
+@stack('scripts')
 
 </body>
 </html>

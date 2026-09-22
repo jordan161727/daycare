@@ -19,6 +19,10 @@ use App\Http\Controllers\TimeClockController;
 use App\Http\Controllers\TimePunchController;
 use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\StaffCardController;
+use App\Http\Controllers\StaffClockController;
+use App\Http\Controllers\StaffDeviceController;
+use App\Http\Controllers\StaffTimesheetController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoomScheduleController;
 use App\Http\Controllers\StaffRuleController;
@@ -44,18 +48,41 @@ Route::middleware('guest')->group(function () {
 
 
 /*
+ * The staff time clock on the wall, beside the door kiosk and signed out for
+ * the same reason: there is nobody to log in at a screen twelve people share.
+ * The card or the PIN is what authenticates, checked on every press, and the
+ * device has to have been paired before it takes any.
+ *
+ * Same rate limiter as the door — these are the two signed-out endpoints in
+ * the app, and four digits is four digits.
+ */
+Route::middleware('throttle:kiosk')->group(function () {
+    Route::get('/clock', [StaffClockController::class, 'index'])->name('clock.kiosk');
+    Route::post('/clock/punch', [StaffClockController::class, 'punch'])->name('clock.kiosk.punch');
+
+    // The one press here that checks a secret, and so the one that can be
+    // guessed at — held to its own tight budget. See the kiosk limiters.
+    Route::post('/clock/identify', [StaffClockController::class, 'identify'])
+        ->middleware('throttle:kiosk-secret')->name('clock.kiosk.identify');
+});
+
+/*
  * The door kiosk. Outside the auth group on purpose — there is nobody to log in
  * at a door, and a staff login left open on a lobby tablet would be worse than
  * none. The guardian's PIN is what authenticates, checked on every press.
  *
- * Rate limited because it is the one signed-out endpoint in the app: the row
- * lockout stops somebody working through one family's PIN, and this stops them
- * working through every six-digit number.
+ * Rate limited for the same reason as the clock above: the row lockout stops
+ * somebody working through one family's PIN, and this stops them working
+ * through every six-digit number.
  */
 Route::middleware('throttle:kiosk')->group(function () {
     Route::get('/kiosk', [KioskController::class, 'index'])->name('kiosk.index');
-    Route::post('/kiosk/unlock', [KioskController::class, 'unlock'])->name('kiosk.unlock');
     Route::post('/kiosk/punch', [KioskController::class, 'punch'])->name('kiosk.punch');
+
+    // The guardian's PIN — the guessable one. Its own budget, so a busy door
+    // cannot spend the staff clock's and neither can spend the screens'.
+    Route::post('/kiosk/unlock', [KioskController::class, 'unlock'])
+        ->middleware('throttle:kiosk-secret')->name('kiosk.unlock');
     Route::post('/kiosk/lock', [KioskController::class, 'lock'])->name('kiosk.lock');
 });
 
@@ -191,6 +218,39 @@ Route::post('/payroll/{batch}/slips/{slip}/send', [PayrollController::class, 'se
 // too — but every teacher can read the generated week, which is the point of
 // generating it.
 Route::post('/staff-schedule/generate', [StaffScheduleController::class, 'generate'])->name('staff-schedule.generate');
+
+/*
+ * The screens staff punch at, and the cards they punch with.
+ *
+ * Director only, both of them. A device can record hours somebody is paid for,
+ * and a card is somebody's identity at that device — issuing either is the
+ * same kind of act as setting a pay rate.
+ */
+/*
+ * The week, read every morning: who was in, when, and what does not add up.
+ *
+ * Separate from /timesheets, which is the fortnight that gets approved. The
+ * two answer different questions and are opened on different days — merging
+ * them would mean one screen doing neither job well.
+ */
+Route::get('/staff-timesheets', [StaffTimesheetController::class, 'index'])->name('staff.timesheets');
+
+// Before nothing in particular, but kept next to the screen it mirrors:
+// the file carries pay rates, so it stays inside the director-only group.
+Route::get('/staff-timesheets/export', [StaffTimesheetController::class, 'export'])->name('staff.timesheets.export');
+
+Route::get('/devices', [StaffDeviceController::class, 'index'])->name('devices.index');
+Route::post('/devices', [StaffDeviceController::class, 'store'])->name('devices.store');
+Route::put('/devices/{device}', [StaffDeviceController::class, 'update'])->name('devices.update');
+Route::get('/devices/{device}/link', [StaffDeviceController::class, 'link'])->name('devices.link');
+Route::get('/devices/{device}/link.svg', [StaffDeviceController::class, 'qr'])->name('devices.link.qr');
+Route::post('/devices/{device}/repair', [StaffDeviceController::class, 'repair'])->name('devices.repair');
+Route::delete('/devices/{device}', [StaffDeviceController::class, 'destroy'])->name('devices.destroy');
+
+Route::post('/teachers/{staff}/card', [StaffCardController::class, 'issue'])->name('staff.card.issue');
+Route::get('/teachers/{staff}/card.svg', [StaffCardController::class, 'show'])->name('staff.card.show');
+Route::get('/teachers/{staff}/card.png', [StaffCardController::class, 'download'])->name('staff.card.download');
+Route::post('/teachers/{staff}/clock-pin', [StaffCardController::class, 'pin'])->name('staff.card.pin');
 Route::get('/children/create', [ChildController::class, 'create'])->name('children.create');
 Route::post('/children', [ChildController::class, 'store'])->name('children.store');
 

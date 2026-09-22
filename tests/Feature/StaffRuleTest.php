@@ -23,6 +23,68 @@ class StaffRuleTest extends TestCase
         $this->teacher = User::create(['name' => 'Grace Lee', 'email' => 'grace@example.com', 'password' => 'password', 'role' => 'teacher']);
     }
 
+    public function test_times_are_picked_from_a_list_not_typed_into_a_spinner(): void
+    {
+        /*
+         * A native time input asks for hours, minutes and AM/PM in three
+         * separate hits and is genuinely awkward with a mouse. A rule is
+         * nearly always on a quarter hour inside the centre's own day, so
+         * those are the only times offered.
+         */
+        $html = $this->actingAs($this->admin)
+            ->get(route('teachers.show', $this->teacher))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringNotContainsString('type="time"', $html);
+
+        // Read in words, posted as H:i — which is what the validator wants.
+        $this->assertStringContainsString('>7:00 AM<', $html);
+        $this->assertStringContainsString('>6:00 PM<', $html);
+        $this->assertStringContainsString('value="07:00"', $html);
+
+        // Opening to closing, a step apart, and short enough to read.
+        preg_match_all('/<option value="(\d\d:\d\d)"/', $html, $found);
+
+        $times = array_values(array_unique($found[1]));
+
+        $this->assertSame('07:00', $times[0]);
+        $this->assertSame('18:00', end($times));
+        $this->assertContains('07:30', $times);
+
+        // Eleven hours at a quarter of an hour came to forty-five options — a
+        // list to hunt through rather than read.
+        $this->assertLessThanOrEqual(24, count($times), 'the list has to fit on a screen');
+    }
+
+    public function test_a_finer_step_can_be_asked_for(): void
+    {
+        // For a centre that genuinely schedules on the quarter.
+        config(['daycare.time_step' => 15]);
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('teachers.show', $this->teacher))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('value="07:15"', $html);
+    }
+
+    public function test_the_offered_times_follow_the_centres_own_hours(): void
+    {
+        // From config rather than hard-coded, so a centre that opens at six
+        // gets six o'clock without anybody editing a view.
+        config(['daycare.open' => 6 * 60, 'daycare.close' => 19 * 60]);
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('teachers.show', $this->teacher))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('value="06:00"', $html);
+        $this->assertStringContainsString('value="19:00"', $html);
+    }
+
     public function test_a_rule_stores_its_times_as_minutes(): void
     {
         $this->actingAs($this->admin)

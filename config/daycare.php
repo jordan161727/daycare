@@ -38,6 +38,17 @@ return [
     'close' => 18 * 60,    // 18:00
 
     /**
+     * How far apart the times offered when a rule asks for one.
+     *
+     * Half hours: eleven hours of opening at a quarter of an hour came to
+     * forty-five options, which is a scrolling list to hunt through for the
+     * one o'clock nearly everybody wants. Twenty-three fit on a screen.
+     *
+     * Drop it to 15 for a centre that genuinely schedules on the quarter.
+     */
+    'time_step' => 30,
+
+    /**
      * The earliest a staff member without the CAN_OPEN rule may start.
      *
      * Someone has to unlock the building, so a non-keyholder starting at

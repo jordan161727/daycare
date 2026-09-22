@@ -6,9 +6,11 @@ use App\Mail\TeacherWelcomeMail;
 use App\Models\Child;
 use App\Models\Classroom;
 use App\Models\StaffRule;
+use App\Models\TimePunch;
 use App\Models\User;
 use App\Services\ClassroomAssignment;
 use App\Services\TemporaryPassword;
+use App\Services\TimeClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -16,20 +18,76 @@ use Illuminate\Validation\Rule;
 
 class TeacherController extends Controller
 {
-    public function index()
+    public function index(Request $request, TimeClock $clock)
     {
-        $teachers = User::where('role', 'teacher')
-            ->orderBy('name')
-            ->paginate(10);
+        $role = trim((string) $request->input('role'));
+        $classroom = trim((string) $request->input('classroom'));
+        $status = trim((string) $request->input('status'));
+        $perPage = (int) $request->input('per_page', 10);
 
-        $teachers->getCollection()->transform(function (User $teacher) {
+        abort_unless(in_array($perPage, [10, 25, 50, 100], true), 404);
+        abort_unless(in_array($status, ['', 'in', 'out'], true), 404);
+
+        $teachers = User::where('role', 'teacher')
+            ->when($role !== '', fn ($query) => $query->jobRoleIs($role))
+            ->when($classroom !== '', fn ($query) => $query->where('classroom', $classroom))
+            ->orderBy('name')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $today = today()->toDateString();
+
+        $teachers->getCollection()->transform(function (User $teacher) use ($clock, $today) {
             $teacher->students_count = Child::whereIn('classroom', $teacher->assignedClassrooms())->count();
+
+            /*
+             * Where they stand right now, and what they last did.
+             *
+             * Three states, not two: somebody who has not punched at all today
+             * is a different fact from somebody who has gone home, and at nine
+             * in the morning it is the one a director acts on. Collapsing them
+             * into "Out" would hide the person who never arrived.
+             */
+            $day = $clock->day($teacher->id, $today);
+
+            $teacher->clock_state = $day['first_in'] === null
+                ? 'not_in'
+                : ($day['open'] ? 'in' : 'out');
+
+            $last = TimePunch::live()
+                ->where('user_id', $teacher->id)
+                ->orderByDesc('punched_at')
+                ->first();
+
+            $teacher->last_activity = $last === null ? null : [
+                'type' => $last->type,
+                'at' => $last->punched_at,
+            ];
+
             return $teacher;
         });
 
-        return view('teachers.index', compact('teachers'));
+        // Filtered after the page is built, because the state is worked out
+        // from punches rather than held on the row — there is nothing for SQL
+        // to filter on. A centre has tens of staff, not thousands.
+        if ($status !== '') {
+            $teachers->setCollection(
+                $teachers->getCollection()->where('clock_state', $status)->values()
+            );
+        }
+
+        return view('teachers.index', [
+            'teachers' => $teachers,
+            'role' => $role,
+            'classroom' => $classroom,
+            'status' => $status,
+            'perPage' => $perPage,
+            'roles' => User::jobRolesAmong(User::where('role', 'teacher')->get()),
+            'classrooms' => ClassroomAssignment::rooms(),
+        ]);
     }
 
+    /** The staff list as a spreadsheet, carrying the filters with it. */
     /**
      * The staff record: employment details and every scheduling rule on it.
      *
@@ -48,6 +106,11 @@ class TeacherController extends Controller
             'rules' => $teacher->staffRules->sortByDesc(fn ($rule) => $rule->isHard())->values(),
             'colleagues' => User::teachers()->whereKeyNot($teacher->getKey())->pluck('name'),
             'rooms' => ClassroomAssignment::rooms(),
+            // Whether the card just issued is still printable. The code behind
+            // it is hashed on the way in and cannot be read back, so the image
+            // exists only for the few minutes after issuing — see
+            // StaffCardController.
+            'cardReady' => StaffCardController::pendingFor($teacher),
         ]);
     }
 
@@ -154,6 +217,7 @@ class TeacherController extends Controller
             // moment it can log in, and the scheduler falls back to sensible
             // defaults for anything left blank.
             'employment' => ['nullable', Rule::in(StaffRule::EMPLOYMENT)],
+            'job_role' => ['nullable', Rule::in(User::JOB_ROLES)],
             'title' => ['nullable', Rule::in(ClassroomAssignment::rooms())],
             'legal_name' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:40'],

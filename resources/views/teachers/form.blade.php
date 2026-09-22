@@ -50,6 +50,19 @@
                 <p class="mt-1 text-xs text-slate-500">Sets default weekly hours. Substitutes are only scheduled to cover a ratio gap.</p>
                 <x-input-error :messages="$errors->get('employment')" /></label>
 
+            {{-- The job, which is not the account. `role` decides which
+                 screens somebody sees; this decides what a rota, a timesheet
+                 and the staff list call them. --}}
+            <label class="block"><span class="mb-2 block text-sm font-semibold">Role</span>
+                <select name="job_role" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
+                    <option value="">Not set</option>
+                    @foreach(\App\Models\User::JOB_ROLES as $option)
+                        <option value="{{ $option }}" @selected(old('job_role', $teacher->job_role) === $option)>{{ $option }}</option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-slate-500">Shown on the staff list and the timesheets. Separate from the room below.</p>
+                <x-input-error :messages="$errors->get('job_role')" /></label>
+
             <label class="block"><span class="mb-2 block text-sm font-semibold">Room they lead</span>
                 <select name="title" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                     <option value="">Not set</option>
