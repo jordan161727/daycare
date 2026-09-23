@@ -313,6 +313,11 @@ Route::post('/children', [ChildController::class, 'store'])->name('children.stor
 
 Route::get('/children/import',[ChildrenController::class,'showImport'])->name('children.import.form');
 
+// The spreadsheet the importer expects, empty. It is the documentation:
+// ninety columns are no use if nobody can find out what they are called.
+Route::get('/children/import/template', [ChildrenController::class, 'importTemplate'])
+    ->name('children.import.template');
+
 Route::post('/children/import',[ChildrenController::class,'import'])->name('children.import');
 });
 

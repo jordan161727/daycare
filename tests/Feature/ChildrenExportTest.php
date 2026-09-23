@@ -91,7 +91,11 @@ class ChildrenExportTest extends TestCase
             'Parents status', 'Responsible for payment',
             'Mother', 'Mother phone', 'Father', 'Father phone', 'Parent emails',
             'Guardians', 'Can pick up', 'Emergency contacts', 'Restrictions',
-            'Alerts', 'Notes', 'Important notes', 'Import status',
+            'Alerts', 'Notes', 'Important notes',
+            // How the family found the centre — asked on the registration form,
+            // so it travels with the rest of the record.
+            'Where advertised', 'Who referred',
+            'Import status',
         ], $sheet->headings());
 
         $row = $sheet->map($child);

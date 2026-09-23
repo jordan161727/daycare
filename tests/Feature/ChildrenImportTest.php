@@ -42,11 +42,22 @@ class ChildrenImportTest extends TestCase
             ['lan' => 'LAN-3', 'status' => 'Inactive', 'first_name' => 'Cara', 'last_name' => 'Reyes', 'dob' => null, 'age' => 5, 'classroom' => 'Roses'],
         ]));
 
-        $this->assertDatabaseCount('children', 2);
+        /*
+         * All three, including the inactive one.
+         *
+         * This used to drop any row not marked Active, which quietly threw
+         * away a centre's history: a child who left in June is still a child
+         * the centre has records for, and the app already has a status field
+         * and a withdrawal date to say so. Every screen filters on status, so
+         * they clutter nothing — and an import that silently discards rows is
+         * one nobody can reconcile against the file they uploaded.
+         */
+        $this->assertDatabaseCount('children', 3);
         $this->assertDatabaseHas('children', ['lan' => 'LAN-1', 'first_name' => 'Ana', 'classroom' => 'Sunflowers']);
         $this->assertDatabaseHas('children', ['lan' => 'LAN-2', 'last_name' => 'Cruz']);
-        $this->assertSame(1, $import->created);
+        $this->assertDatabaseHas('children', ['lan' => 'LAN-3', 'status' => 'Inactive']);
+        $this->assertSame(2, $import->created);
         $this->assertSame(1, $import->updated);
-        $this->assertSame(1, $import->skipped);
+        $this->assertSame(0, $import->skipped);
     }
 }

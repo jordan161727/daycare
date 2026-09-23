@@ -122,6 +122,10 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
             'Alerts',
             'Notes',
             'Important notes',
+            // How the family found the centre. Asked on the registration
+            // form, so it travels with the rest of the record.
+            'Where advertised',
+            'Who referred',
             // Whether a scanned enrollment has been read by a person yet.
             'Import status',
         ];
@@ -195,6 +199,8 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
                 ->implode("\n"),
             $child->other_notes,
             $child->important_notes,
+            $child->where_advertised,
+            $child->who_referred,
             $child->import_status,
         ];
     }
