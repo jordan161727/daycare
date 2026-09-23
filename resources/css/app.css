@@ -237,6 +237,121 @@
     .att-pencil:hover { @apply bg-slate-900/5 dark:bg-white/10; }
     .att-pencil:focus-visible { @apply outline-2 -outline-offset-2 outline-indigo-500; }
 
+    /* The same cell, sized for a grid rather than a week.
+
+       The door screen draws five days across and four lines down for every
+       child, so the register's 5.87rem box would put the sheet past the edge
+       of a laptop before the third column. Narrower and centred, and nothing
+       else changes — the dashed sky of an expected day and the solid emerald
+       of a recorded time are the register's, so the two screens read as one
+       app rather than as two designs of the same thing. */
+    .att-cell.att-grid {
+        width: auto; min-width: 3.2rem; height: 1.5333rem; padding: 0 0.4rem;
+        justify-content: center; font-weight: 600;
+    }
+    /* ---- The grid's own marks --------------------------------------------
+
+       The door screen and the month sheet draw the same four lines per child.
+       A time is printed as a time, not boxed: the sheet is read down a column
+       and a border round every hour turns thirty days into a wall of outlines.
+
+       Only the door screen has the second of these — a day still to be filled
+       in, sized like the chip under it so the four lines stay the same height
+       whether the day has been worked or not. */
+    .att-mark {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 2.6rem; height: 1.2rem; padding: 0 0.3rem;
+        border-radius: 0.3333rem; font-size: 0.7333rem; font-variant-numeric: tabular-nums;
+    }
+    .att-mark-time { @apply font-semibold text-emerald-700 dark:text-emerald-300; }
+    .att-mark-todo {
+        border-width: 1px; border-style: dashed; cursor: pointer;
+        font-size: 0.6667rem; font-weight: 700; text-transform: uppercase;
+        @apply border-sky-400 text-sky-600 hover:border-sky-500 hover:bg-sky-50 dark:border-sky-400/70 dark:text-sky-300 dark:hover:bg-sky-500/10;
+    }
+    .att-mark-todo:focus-visible { @apply outline-2 outline-offset-1 outline-indigo-500; }
+    /* ---- The check-in and month grids -----------------------------------
+
+       Four lines a child — in, its check, out, its check — across a week or a
+       month. Every size here is bought from the same budget: a screen is about
+       ninety rems wide, and a month wants thirty-one columns of it.
+
+       A time is the widest thing a cell holds, so the day column is sized to
+       "12:28p" and no wider. What was spent on the name and the row label is
+       spent down to what those actually need — a name has to be readable, a
+       label only has to say which of four lines you are on, and neither is
+       worth six days of the month.
+
+       Nothing may overflow its column: one long value would otherwise set the
+       width of every column on the grid. */
+    .att-grid-table { font-size: 0.7333rem; }
+    .att-grid-table th, .att-grid-table td {
+        padding-left: 0.1rem; padding-right: 0.1rem;
+        overflow: hidden; white-space: nowrap;
+    }
+
+    .att-day-col { width: 3.2rem; }
+
+    /* The name: two lines if it needs them, rather than a wider column for
+       the handful of long ones. */
+    .att-name-col {
+        width: 7.5rem; padding: 0.3333rem 0.4667rem;
+        line-height: 1.3; white-space: normal;
+    }
+
+    /* The row label. "health" at this size is the thing it has to fit. */
+    .att-line-col { width: 2.4rem; }
+
+    /* The marks follow the cell's own type size rather than the root's, so
+       they come down with it wherever the grid is set smaller. */
+    .att-grid-table .att-chip,
+    .att-grid-table .att-mark {
+        min-width: 0; width: 2.7rem; max-width: 100%; height: 1.25em;
+        margin-inline: auto; padding: 0 0.1em; font-size: 1em;
+    }
+    .att-grid-table .att-mark-todo { font-size: 0.85em; }
+    /* Not booked today, but still able to walk in. Grey rather than sky,
+       and a plus rather than a word: it is an offer, not an expectation. */
+    .att-grid-table .att-mark-spare,
+    .att-mark-spare {
+        @apply border-slate-200 text-slate-300 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-500
+               dark:border-white/10 dark:text-slate-600 dark:hover:border-white/30 dark:hover:bg-white/5 dark:hover:text-slate-300;
+    }
+    /* ---- The health chip ------------------------------------------------
+
+       The check taken at the door, sitting under the hour it belongs to. It
+       is a number rather than a colour alone, because the codes are read
+       aloud and written on paper sheets — and because a colour is no use to
+       somebody who cannot tell amber from green.
+
+       Three states and one modifier:
+
+         none    nothing recorded yet. Dashed, like an expected day on the
+                 sheet above it, because it means the same thing: this is a
+                 gap somebody has to close.
+         ok      code 0. Green, and quiet — most of the sheet is this.
+         sick    anything else. Amber, the sheet's own warning colour.
+         locked  a day gone by, for anybody but the director. */
+    /* Sized to match .att-mark above it, so a child's four lines — in, its
+       check, out, its check — are four boxes of one height and one width
+       rather than two big ones and two small. It was built at chip size for
+       a cell that no longer exists; on a grid it is a target somebody
+       presses, and it has to be reachable with a finger. */
+    .att-chip {
+        min-width: 2.6rem; height: 1.2rem; padding: 0 0.3rem;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-width: 1px; border-radius: 0.3333rem; cursor: pointer;
+        font-size: 0.7333rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .att-chip + .att-chip { margin-left: 0.1333rem; }
+    .att-chip-none { border-style: dashed; @apply border-slate-300 text-slate-400 dark:border-white/20 dark:text-slate-500; }
+    .att-chip-ok { border-style: solid; @apply border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
+    .att-chip-sick { border-style: solid; @apply border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100; }
+    .att-chip:hover:not(:disabled) { @apply brightness-95; }
+    .att-chip:focus-visible { @apply outline-2 outline-offset-1 outline-indigo-500; }
+    /* Not greyed into illegibility: a locked chip still has to be readable,
+       it just cannot be pressed. */
+    .att-chip-locked { cursor: default; opacity: 0.75; }
     /* Solid, like every other box. The dash was saying "not settled yet",
        which the caret and the green ground already say, and dotted means one
        thing on this sheet: expected, not arrived. */

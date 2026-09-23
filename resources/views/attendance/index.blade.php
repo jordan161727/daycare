@@ -95,6 +95,20 @@
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <h1 class="text-base font-bold tracking-tight sm:text-lg">Attendance</h1>
 
+                    {{-- Which reading of the register this is. The month is not
+                         a separate screen from the week — it is the same days
+                         counted a month at a time — so it sits here as a tab
+                         rather than as a second entry in the sidebar.
+
+                         A link and not a third Alpine view: a month is thirty
+                         columns of four lines for every child on the roll, and
+                         building that on every load of the register would be paid
+                         for by the screen somebody opens sixty times a day. --}}
+                    <div class="flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+                        <span class="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 shadow-sm dark:bg-night-700 dark:text-night-950" aria-current="page">Week</span>
+                        <a href="{{ route('attendance.month-sheet') }}" class="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100" title="The month on one page, with the health checks">Month</a>
+                    </div>
+
                     {{-- The week as one control: a step either side of the range
                          it is showing, rather than two buttons and a label apart.
                          Hairline dividers rather than gaps, so the three read as

@@ -392,7 +392,7 @@ class AttendanceController extends Controller
         ];
 
         // The month is its own page rather than five weekly ones stapled
-        // together � see AttendanceSheet::buildMonth for why the geometry has
+        // together � see AttendanceSheet::buildMonth for why the geometry has
         // to change rather than repeat.
         if ($range === 'month') {
             return view('attendance.print-month', $sheet->buildMonth($selectedDate, $children) + $shared);
@@ -540,6 +540,21 @@ class AttendanceController extends Controller
          * on any other day.
          */
         'signed_in_time' => ['nullable', 'date_format:H:i'],
+
+        /*
+         * The health check taken as the child came in.
+         *
+         * Optional here and required by the screen, which is a deliberate
+         * split. The sheet will not let a person save a check-in without
+         * choosing a code, because the point is that somebody looked. But the
+         * door kiosk signs children in with no member of staff present to
+         * judge a symptom, and a correction typed into last Tuesday is a
+         * check nobody performed — both of those record no code and read as
+         * "not recorded", which is true, rather than as 0, which would be a
+         * claim that somebody looked and saw nothing.
+         */
+        'health_code' => ['nullable', 'integer', 'between:0,255'],
+        'health_note' => ['nullable', 'string', 'max:120'],
     ]);
 
     $validated['session'] = $validated['session'] ?? 'FULL';
@@ -574,6 +589,20 @@ class AttendanceController extends Controller
         ]
     );
 
+    // The code goes on with the arrival, in the same breath, and writes its
+    // own audit entry — see HealthScreening. Only on a row being created:
+    // tapping an existing cell must not silently overwrite a code somebody
+    // recorded this morning.
+    if ($attendance->wasRecentlyCreated && $request->filled('health_code')) {
+        app(\App\Services\HealthScreening::class)->record(
+            $attendance,
+            \App\Models\HealthAudit::IN,
+            (int) $validated['health_code'],
+            $validated['health_note'] ?? null,
+            $request->user(),
+        );
+    }
+
     // A day already gone did not get this row by somebody tapping a cell with
     // the child in front of them, so the register should not pretend it did.
     $amendment = $attendance->wasRecentlyCreated
@@ -598,6 +627,9 @@ class AttendanceController extends Controller
             'classroom' => $attendance->child->classroom,
         ],
         'session' => $attendance->session,
+        'health_in_code' => $attendance->health_in_code,
+        'health_in_note' => $attendance->health_in_note,
+        'sick' => $attendance->isSick(),
     ]);
 }
 

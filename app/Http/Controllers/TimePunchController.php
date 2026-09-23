@@ -30,6 +30,27 @@ class TimePunchController extends Controller
     public function __construct(private TimeClock $clock) {}
 
     /** One person, one day: the punches, the arithmetic, and the history. */
+    /**
+     * The correction screen for one person on one day, found by date alone.
+     *
+     * The week grid knows who and when, and nothing about pay periods — it is
+     * read every morning and a period is a fortnightly thing nobody thinks
+     * about while looking at a Tuesday. So it links here, and this works out
+     * which period the day falls in and hands over.
+     *
+     * forDate creates the period if the fortnight has not been opened yet,
+     * which is the usual case when the thing being fixed happened today.
+     */
+    public function find(User $user, string $date)
+    {
+        validator(['date' => $date], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+        return redirect()->route('timesheets.day', [
+            'period' => TimesheetPeriod::forDate($date),
+            'user' => $user,
+            'date' => $date,
+        ]);
+    }
     public function show(TimesheetPeriod $period, User $user, string $date)
     {
         abort_unless($period->range()->contains($date), 404);

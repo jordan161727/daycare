@@ -1,4 +1,6 @@
 <?php
+use App\Http\Controllers\AssistanceController;
+use App\Http\Controllers\CheckInController;
 use App\Http\Controllers\ChildImportController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\SettingController;
@@ -10,8 +12,10 @@ use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\KioskController;
+use App\Http\Controllers\MonthSheetController;
 use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveRequestController;
@@ -43,6 +47,18 @@ Route::redirect('/', '/dashboard');
 // their CSRF token from here so a submit hours later is not met with "Page
 // Expired". Reachable while signed out too, so the login form can do the same.
 Route::get('/csrf-token', fn () => response()->json(['token' => csrf_token()]))->name('csrf.token');
+
+/*
+ * Help paying for day care, for parents.
+ *
+ * Signed out, and not because there is nobody to log in — because the people
+ * these are for do not have accounts here at all. A family finds them from the
+ * centre's website or a link a teacher texted them, reads a page and leaves.
+ * Nothing is submitted, nothing is stored, so there is no limiter: these are
+ * two static pages, and the only thing an unlimited GET costs is the render.
+ */
+Route::get('/child-care-assistance', [AssistanceController::class, 'index'])->name('assistance.index');
+Route::get('/child-care-assistance/apply', [AssistanceController::class, 'apply'])->name('assistance.apply');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
@@ -203,6 +219,13 @@ Route::get('/timesheets/{period}/export', [TimesheetController::class, 'export']
 
 // Correcting the clock. A supervisor's act, never the employee's own — a
 // punch somebody can quietly amend is not a record of anything.
+/*
+ * The correction screen, reached from the week grid — which knows the
+ * person and the day but nothing about which fortnight they fall in.
+ */
+Route::get('/timesheets/fix/{user}/{date}', [TimePunchController::class, 'find'])
+    ->name('timesheets.fix')->whereNumber('user');
+
 Route::get('/timesheets/{period}/staff/{user}/day/{date}', [TimePunchController::class, 'show'])->name('timesheets.day')->where('date', '\d{4}-\d{2}-\d{2}');
 Route::post('/timesheets/{period}/staff/{user}/day/{date}', [TimePunchController::class, 'store'])->name('timesheets.day.punch')->where('date', '\d{4}-\d{2}-\d{2}');
 Route::post('/timesheets/{period}/staff/{user}/punches/{punch}', [TimePunchController::class, 'amend'])->name('timesheets.punch.amend');
@@ -368,6 +391,42 @@ Route::get('/attendance/print', [AttendanceController::class, 'print'])
 
 Route::post('/attendance/sign-in', [AttendanceController::class, 'signIn'])
     ->name('attendance.signin');
+
+/*
+ * The health check taken at the door.
+ *
+ * Open to whoever may work the sheet, because the person who saw the child is
+ * the person who should write it down — a teacher who has to find a director
+ * before they can record "rash" records nothing at all. Which days each may
+ * write is decided inside, where a stale tab cannot get around it.
+ *
+ * POST rather than PATCH for the reason the rest of the board's routes give:
+ * the page talks through postJson, and method spoofing is read from form
+ * parameters that a JSON body does not populate.
+ */
+/*
+ * The door screen. Today and nothing else, on purpose: a screen that can
+ * also show last Tuesday is one somebody eventually checks a child in on
+ * last Tuesday. Corrections belong on the week sheet, where they are
+ * written to attendance_amendments.
+ */
+/*
+ * The month on one page: the paper sheet the centre already keeps, with the
+ * health check on it. Same audience as the register — whoever may see a
+ * child's row on screen may print it.
+ */
+Route::get('/attendance/month-sheet', [MonthSheetController::class, 'index'])->name('attendance.month-sheet');
+
+Route::get('/check-in', [CheckInController::class, 'index'])->name('check-in.index');
+Route::post('/check-in', [CheckInController::class, 'store'])->name('check-in.store');
+Route::post('/check-in/{attendance}/in', [CheckInController::class, 'in'])
+    ->name('check-in.in')->whereNumber('attendance');
+Route::post('/check-in/{attendance}/out', [CheckInController::class, 'out'])
+    ->name('check-in.out')->whereNumber('attendance');
+
+Route::get('/symptom-codes', [HealthController::class, 'codes'])->name('health.codes');
+Route::post('/attendance/{attendance}/health', [HealthController::class, 'update'])
+    ->name('attendance.health')->whereNumber('attendance');
 
 Route::middleware('role:admin,teacher')->group(function () {
     // Taking an arrival back off the register: the other half of a correction,

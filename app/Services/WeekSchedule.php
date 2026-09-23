@@ -261,6 +261,65 @@ class WeekSchedule
      * mind. Finished weeks and days already signed in are left exactly as they
      * are, as everywhere else.
      */
+    /**
+     * Bring a child's ticks into line with the days they are registered for.
+     *
+     * Runs when those days are changed. Only weeks that have not been worked
+     * are touched: a finished week is a record of what happened, and editing a
+     * profile in October must not rewrite September.
+     *
+     * A day the child actually attended is never un-ticked either, even in an
+     * open week. They were here; the plan saying otherwise afterwards would
+     * make the sheet disagree with itself.
+     *
+     * @return int How many ticks moved, for the caller to report.
+     */
+    public function resyncRegisteredDays(Child $child): int
+    {
+        if ($child->scheduleDays() === null) {
+            // Nobody has said which days this child comes, so there is nothing
+            // to bring anything into line with.
+            return 0;
+        }
+
+        $slots = ScheduleSlot::where('child_id', $child->id)
+            ->whereDate('slot_date', '>=', today()->startOfWeek(Carbon::MONDAY))
+            ->get()
+            ->reject(fn (ScheduleSlot $slot) => $this->isFrozen($slot->week_start->toDateString()));
+
+        if ($slots->isEmpty()) {
+            return 0;
+        }
+
+        // Days they were actually here. A tick that has an arrival behind it
+        // stays whatever it is.
+        $attended = Attendance::where('child_id', $child->id)
+            ->whereIn('attendance_date', $slots->map(fn ($slot) => $slot->slot_date->toDateString())->unique())
+            ->get()
+            ->map(fn (Attendance $row) => $row->attendance_date->toDateString().'|'.$row->session)
+            ->flip();
+
+        $moved = 0;
+
+        foreach ($slots as $slot) {
+            $date = $slot->slot_date->toDateString();
+
+            if ($attended->has($date.'|'.$slot->session)) {
+                continue;
+            }
+
+            $should = $child->attendsOn($date);
+
+            if ((bool) $slot->is_scheduled === $should) {
+                continue;
+            }
+
+            $slot->forceFill(['is_scheduled' => $should])->save();
+            $moved++;
+        }
+
+        return $moved;
+    }
     public function resyncSessions(Child $child): void
     {
         $sessions = $child->sessions();

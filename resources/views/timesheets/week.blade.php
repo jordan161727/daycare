@@ -136,15 +136,19 @@
                                             <span class="text-[10px] font-bold uppercase text-slate-400">In</span>
                                             <span class="text-right font-semibold">{{ $day['in'] ?? '—' }}</span>
                                             @if($day['status'])
-                                                <span class="h-1.5 w-1.5 rounded-full {{ [
-                                                    'on_time' => 'bg-emerald-500',
-                                                    'late' => 'bg-rose-500',
-                                                    'missing_out' => 'bg-amber-500',
-                                                ][$day['status']] }}" title="{{ [
-                                                    'on_time' => 'On time',
-                                                    'late' => 'Late',
-                                                    'missing_out' => 'Missing time out',
-                                                ][$day['status']] }}"></span>
+                                                {{-- A day that went wrong leads to the
+                                                     screen that puts it right. A day that
+                                                     went fine is a dot and nothing more:
+                                                     making every cell a link would bury
+                                                     the handful that need one. --}}
+                                                @if($day['status'] === \App\Http\Controllers\StaffTimesheetController::ON_TIME)
+                                                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" title="On time"></span>
+                                                @else
+                                                    <a href="{{ route('timesheets.fix', ['user' => $row['id'], 'date' => $fmt($date)]) }}"
+                                                       class="h-1.5 w-1.5 rounded-full ring-offset-1 transition hover:ring-2 focus-visible:ring-2 {{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'bg-rose-500 hover:ring-rose-300' : 'bg-amber-500 hover:ring-amber-300' }}"
+                                                       title="{{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'Late' : 'Missing time out' }} — open {{ $row['name'] }}&rsquo;s {{ $date->format('D j M') }} to put it right"
+                                                       aria-label="{{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'Late' : 'Missing time out' }}: correct {{ $row['name'] }} on {{ $date->format('D j M') }}"></a>
+                                                @endif
                                             @else
                                                 <span></span>
                                             @endif
@@ -171,7 +175,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
             <span>
                 Showing <span class="font-semibold">{{ $rows->count() }}</span> staff
-                &middot; Corrections are made on each day&rsquo;s punch screen, which records who made them.
+                &middot; Click an amber or red dot to open that day and put it right &mdash; a missed clock-out, a break nobody punched, a time that needs moving. Every change records who made it and why.
             </span>
             <span class="flex items-center gap-4">
                 <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> On time</span>

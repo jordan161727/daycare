@@ -8,6 +8,7 @@ use App\Models\Child;
 use App\Models\RoomSchedule;
 use App\Models\User;
 use App\Services\ClassroomAssignment;
+use App\Services\WeekSchedule;
 use App\Services\PeopleDirectory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -280,11 +281,35 @@ class ChildController extends Controller
     {
         abort_unless($this->isVisibleTo($child, $request->user()), 403);
 
+        $before = $child->scheduleDays();
+
         $child->update($this->validatedData($request, $child));
 
         $this->syncPhoto($request, $child);
 
-        return redirect()->route('children.index')->with('success', 'Child details updated successfully.');
+        /*
+         * The days they come, brought through to the weeks that have not
+         * happened yet.
+         *
+         * A week takes its ticks when it is opened, so without this a child
+         * registered for every day after the week was opened reads on the
+         * sheet as attending none of them — a dot against a day they are
+         * booked for. Finished weeks are left alone: those are a record of
+         * what happened, and editing a profile in October must not rewrite
+         * September.
+         */
+        $message = 'Child details updated successfully.';
+
+        if ($child->scheduleDays() !== $before) {
+            $moved = app(WeekSchedule::class)->resyncRegisteredDays($child);
+
+            if ($moved > 0) {
+                $message .= ' '.$moved.' '.\Illuminate\Support\Str::plural('day', $moved)
+                    .' on the attendance sheet updated to match.';
+            }
+        }
+
+        return redirect()->route('children.index')->with('success', $message);
     }
 
     /**

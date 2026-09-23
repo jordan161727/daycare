@@ -92,7 +92,7 @@ class StaffWeekGridTest extends TestCase
         $this->punch($staff, '2026-09-21 18:00', TimePunch::OUT);
 
         $html = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
-        $this->assertStringNotContainsString('title="Late"', $html);
+        $this->assertStringNotContainsString('title="Late', $html);
 
         // Rostered for eight, in at ten. Now it means something.
         StaffShift::create([
@@ -107,7 +107,7 @@ class StaffWeekGridTest extends TestCase
         ]);
 
         $html = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
-        $this->assertStringContainsString('title="Late"', $html);
+        $this->assertStringContainsString('title="Late', $html);
     }
 
     public function test_a_day_nobody_worked_carries_no_dot(): void
@@ -119,7 +119,7 @@ class StaffWeekGridTest extends TestCase
         $html = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
 
         $this->assertStringNotContainsString('title="On time"', $html);
-        $this->assertStringNotContainsString('title="Late"', $html);
+        $this->assertStringNotContainsString('title="Late', $html);
     }
 
     public function test_the_counters_describe_today_only(): void
@@ -264,7 +264,54 @@ class StaffWeekGridTest extends TestCase
         $this->assertStringNotContainsString('<input', $body);
         $this->assertStringNotContainsString('<button', $body);
 
-        $this->assertStringContainsString('Corrections are made on each day', $html);
+        // It does point at the screen that can, though. The grid's whole job is
+        // to show what did not go in properly, and until this said where to put
+        // that right, the answer was a sentence nobody read.
+        $this->assertStringContainsString('Click an amber or red dot', $html);
+    }
+
+    public function test_a_flagged_day_leads_to_the_screen_that_fixes_it(): void
+    {
+        /*
+         * The dot is what the eye lands on, so the dot is what takes somebody
+         * there. Only the ones that mean something are links: making every
+         * cell one would bury the handful that need it.
+         */
+        $staff = $this->staff('Patrick Ortiz');
+
+        // Monday, in and never out: the amber dot.
+        $this->punch($staff, '2026-09-21 08:12', TimePunch::IN);
+
+        $html = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
+
+        $this->assertStringContainsString(
+            route('timesheets.fix', ['user' => $staff->id, 'date' => '2026-09-21']),
+            $html,
+        );
+
+        // A day that went fine stays a dot and nothing more.
+        $this->punch($staff, '2026-09-22 08:00', TimePunch::IN);
+        $this->punch($staff, '2026-09-22 16:00', TimePunch::OUT);
+
+        $html = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString(
+            route('timesheets.fix', ['user' => $staff->id, 'date' => '2026-09-22']),
+            $html,
+        );
+    }
+
+    public function test_the_correction_screen_can_be_found_by_person_and_day(): void
+    {
+        // The grid knows who and when, and nothing about which fortnight a
+        // Tuesday falls in. This works that out and hands over — creating the
+        // period if the fortnight has not been opened yet, which is the usual
+        // case when the thing being fixed happened this week.
+        $staff = $this->staff('Rachel Kim');
+
+        $this->actingAs($this->admin)
+            ->get(route('timesheets.fix', ['user' => $staff->id, 'date' => '2026-09-21']))
+            ->assertRedirectContains('/day/2026-09-21');
     }
 
     private function staff(string $name): User
