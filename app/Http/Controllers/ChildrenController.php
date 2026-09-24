@@ -75,8 +75,18 @@ class ChildrenController extends Controller
         } catch (\Throwable $exception) {
             report($exception);
 
+            /*
+             * The reason, not a shrug.
+             *
+             * "Check that it is a valid Excel file" is a dead end when the
+             * file plainly is one. What actually goes wrong is a title row
+             * above the headings, or merged cells, or a sheet whose first row
+             * is blank — and each of those is a different thing to fix, so the
+             * message has to tell them apart.
+             */
             return back()->withErrors([
-                'file' => 'The file could not be imported. Check that it is a valid Excel or CSV file.',
+                'file' => 'The file could not be read: '.\Illuminate\Support\Str::limit($exception->getMessage(), 200)
+                    .' — the first row of the sheet must be the column headings, with no title or blank rows above it.',
             ]);
         }
 

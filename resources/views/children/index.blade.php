@@ -7,7 +7,12 @@
 <div x-data="{ search: '' }">
     @php($nextDirection = fn ($column) => $sort === $column && $direction === 'asc' ? 'desc' : 'asc')
     @php($sortUrl = fn ($column) => route('children.index', array_filter(['sort' => $column, 'direction' => $nextDirection($column), 'status' => $status])))
-    @php($arrow = fn ($column) => $sort === $column ? ($direction === 'asc' ? ' ↑' : ' ↓') : '')
+    {{-- The arrow the register uses: quieter than the heading it sits beside,
+         because it is the answer to "which way" and not part of the name of
+         the column. --}}
+    @php($arrow = fn ($column) => $sort === $column
+        ? '<span class="ml-1 text-[0.7333rem] leading-none opacity-60">'.($direction === 'asc' ? '↑' : '↓').'</span>'
+        : '')
 
     {{-- One line, the same shape as the attendance sheet's: what page this is,
          how the roll stands, and the two controls used on every visit. --}}
@@ -92,23 +97,23 @@
                 <thead>
                     <tr class="border-b border-slate-200 bg-slate-50/70 dark:border-white/10 dark:bg-white/5">
                         @php($head = 'px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400')
-                                                <th scope="col" class="{{ $head }} sticky left-0 z-20 w-[4rem] bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{{ $arrow('lan') }}</a></th>
-                        <th scope="col" class="{{ $head }} sticky left-[4rem] z-20 bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{{ $arrow('last_name') }}</a></th>
+                                                <th scope="col" class="{{ $head }} sticky left-0 z-20 w-[4rem] bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('lan') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">LAN{!! $arrow('lan') !!}</a></th>
+                        <th scope="col" class="{{ $head }} sticky left-[4rem] z-20 bg-slate-50 dark:bg-slate-900"><a href="{{ $sortUrl('last_name') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Student{!! $arrow('last_name') !!}</a></th>
                         {{-- Third, as on the attendance sheet. The two tables list
                              the same children and are read one after the other, so a
                              column that sits in a different place on each is one the
                              eye has to hunt for every time it changes screen. --}}
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('classroom') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Classroom{{ $arrow('classroom') }}</a></th>
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('classroom') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Classroom{!! $arrow('classroom') !!}</a></th>
                         {{-- Sorting is by date of birth either way, so the arrow sits
                              on the DOB column and the age beside it follows it. --}}
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('age') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Date of birth, year/month/day">DOB{{ $arrow('age') }}</a></th>
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('age') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Date of birth, year/month/day">DOB{!! $arrow('age') !!}</a></th>
                         <th scope="col" class="{{ $head }}">Age</th>
                         <th scope="col" class="{{ $head }}">Schedule</th>
                         {{-- Before Status, because it is the column that changes
                              what a teacher does this morning and Status is the one
                              that says whether they are here at all. --}}
                         <th scope="col" class="{{ $head }}">Alerts</th>
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('status') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Status{{ $arrow('status') }}</a></th>
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('status') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Status{!! $arrow('status') !!}</a></th>
                         <th scope="col" class="{{ $head }} text-right">Actions</th>
                     </tr>
                 </thead>

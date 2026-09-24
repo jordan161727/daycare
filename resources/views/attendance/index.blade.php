@@ -95,20 +95,6 @@
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <h1 class="text-base font-bold tracking-tight sm:text-lg">Attendance</h1>
 
-                    {{-- Which reading of the register this is. The month is not
-                         a separate screen from the week — it is the same days
-                         counted a month at a time — so it sits here as a tab
-                         rather than as a second entry in the sidebar.
-
-                         A link and not a third Alpine view: a month is thirty
-                         columns of four lines for every child on the roll, and
-                         building that on every load of the register would be paid
-                         for by the screen somebody opens sixty times a day. --}}
-                    <div class="flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-                        <span class="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 shadow-sm dark:bg-night-700 dark:text-night-950" aria-current="page">Week</span>
-                        <a href="{{ route('attendance.month-sheet') }}" class="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100" title="The month on one page, with the health checks">Month</a>
-                    </div>
-
                     {{-- The week as one control: a step either side of the range
                          it is showing, rather than two buttons and a label apart.
                          Hairline dividers rather than gaps, so the three read as
@@ -506,11 +492,16 @@
                                          register, the invoice and the office all name a
                                          child by. Frozen with the name against a sideways
                                          scroll on a tablet. --}}
-                                    <th scope="col" class="att-th att-col-lan sticky left-0 z-20 bg-white dark:bg-night-900" title="Learner account number">LAN</th>
-                                    <th scope="col" :aria-sort="sortDirection === 'asc' ? 'ascending' : 'descending'" class="att-th att-col-student sticky left-[4rem] z-20 bg-white dark:bg-night-900">
-                                        <button type="button" @click="toggleSort" class="group inline-flex items-center gap-1.5 transition hover:text-indigo-600 dark:hover:text-indigo-300" :title="sortDirection === 'asc' ? 'Sorted A–Z, click for Z–A' : 'Sorted Z–A, click for A–Z'">
+                                    <th scope="col" :aria-sort="sortedBy('lan') ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'" class="att-th att-col-lan sticky left-0 z-20 bg-white dark:bg-night-900">
+                                        <button type="button" @click="toggleSort('lan')" class="inline-flex items-center gap-1.5 transition hover:text-indigo-600 dark:hover:text-indigo-300" :title="sortedBy('lan') ? (sortDirection === 'asc' ? 'Sorted 1–9, click for 9–1' : 'Sorted 9–1, click for 1–9') : 'Sort by learner account number'">
+                                            <span>LAN</span>
+                                            <span x-show="sortedBy('lan')" class="text-[0.7333rem] leading-none opacity-60" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
+                                        </button>
+                                    </th>
+                                    <th scope="col" :aria-sort="sortedBy('name') ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'" class="att-th att-col-student sticky left-[4rem] z-20 bg-white dark:bg-night-900">
+                                        <button type="button" @click="toggleSort('name')" class="group inline-flex items-center gap-1.5 transition hover:text-indigo-600 dark:hover:text-indigo-300" :title="sortedBy('name') ? (sortDirection === 'asc' ? 'Sorted A–Z, click for Z–A' : 'Sorted Z–A, click for A–Z') : 'Sort by name'">
                                             <span>Student</span>
-                                            <span class="text-[0.7333rem] leading-none opacity-60" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
+                                            <span x-show="sortedBy('name')" class="text-[0.7333rem] leading-none opacity-60" x-text="sortDirection === 'asc' ? '↑' : '↓'"></span>
                                         </button>
                                     </th>
                                     {{-- Read down a column these compare at a glance, which
@@ -624,9 +615,9 @@
                     <template x-if="isPhone">
                     <div class="divide-y divide-slate-200 dark:divide-white/10">
                         <div class="flex items-center justify-between px-3 py-2">
-                            <button type="button" @click="toggleSort" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <button type="button" @click="toggleSort(sortBy)" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 <span>Student</span>
-                                <span class="text-[0.6667rem] leading-none text-slate-400" x-text="sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A'"></span>
+                                <span class="text-[0.6667rem] leading-none text-slate-400" x-text="sortedBy('lan') ? (sortDirection === 'asc' ? '▲ LAN' : '▼ LAN') : (sortDirection === 'asc' ? '▲ A–Z' : '▼ Z–A')"></span>
                             </button>
                             <span class="text-[0.7333rem] text-slate-400">{{ $weekDates->first()->format('M d') }} – {{ $weekDates->last()->format('M d') }}</span>
                         </div>
@@ -906,6 +897,10 @@ function weekPicker() { return {
 function attendanceApp() { return {
     search: '',
     room: '',
+    // Which column the sheet is ordered by, and which way. LAN to begin
+    // with, like the roll: it is the number on the cabinet and the parent
+    // letter, so it is what somebody arrives already holding.
+    sortBy: 'lan',
     sortDirection: 'asc',
     view: 'signin',
     recentOpen: false,
@@ -1078,26 +1073,47 @@ function attendanceApp() { return {
     },
 
     get matchingChildren() {
-        const key = `${this.search}|${this.room}|${this.sortDirection}|${this.rosterVersion}`;
+        const key = `${this.search}|${this.room}|${this.sortBy}|${this.sortDirection}|${this.rosterVersion}`;
 
         if (this.filteredCache?.key !== key) {
             this.filteredCache = {
                 key,
                 rows: this.childrenData
                     .filter(child => this.matchesChild(child))
-                    .sort((a, b) => this.byName(a, b)),
+                    .sort((a, b) => this.byColumn(a, b)),
             };
         }
 
         return this.filteredCache.rows;
     },
 
-    /* Last name then first, in whichever direction the header is set to. */
-    byName(a, b) {
+    /* The column the header is set to, in the direction it is set to. */
+    byColumn(a, b) {
+        const order = this.sortDirection === 'asc' ? 1 : -1;
+
+        if (this.sortBy === 'lan') {
+            /*
+             * A LAN is a string — a centre's numbering can carry a prefix —
+             * so compared as text it reads 1, 10, 100, 1001, 2. Numbers are
+             * compared as numbers, and anything that is not one falls to the
+             * end rather than scattering through the middle.
+             */
+            const left = Number(a.lan);
+            const right = Number(b.lan);
+            const leftIsNumber = a.lan !== '' && a.lan !== null && ! Number.isNaN(left);
+            const rightIsNumber = b.lan !== '' && b.lan !== null && ! Number.isNaN(right);
+
+            if (leftIsNumber && rightIsNumber) return (left - right) * order;
+            if (leftIsNumber) return -1;
+            if (rightIsNumber) return 1;
+
+            return String(a.lan ?? '').localeCompare(String(b.lan ?? '')) * order;
+        }
+
         const nameA = `${a.last_name} ${a.first_name}`.toLowerCase();
         const nameB = `${b.last_name} ${b.first_name}`.toLowerCase();
 
-        return this.sortDirection === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+        return nameA.localeCompare(nameB) * order;
     },
     // Everyone the search matches, not just the rows built so far — "showing
     // all 75" has to say 75 while the last of them are still being drawn.
@@ -1132,10 +1148,10 @@ function attendanceApp() { return {
     /* ---- setting the schedule is a whole-centre job: every child, every room,
             whatever the sign-in view happens to be filtered to ---- */
     get scheduleChildren() {
-        const key = `${this.sortDirection}|${this.rosterVersion}`;
+        const key = `${this.sortBy}|${this.sortDirection}|${this.rosterVersion}`;
 
         if (this.scheduleCache?.key !== key) {
-            this.scheduleCache = { key, rows: [...this.childrenData].sort((a, b) => this.byName(a, b)) };
+            this.scheduleCache = { key, rows: [...this.childrenData].sort((a, b) => this.byColumn(a, b)) };
         }
 
         return this.scheduleCache.rows;
@@ -1194,7 +1210,22 @@ function attendanceApp() { return {
     // them. Centred in the width the real values set, and a shade lighter, a
     // blank reads as the gap it is.
     blankClass(value) { return value ? '' : 'text-center text-slate-300 dark:text-slate-600'; },
-    toggleSort() { this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc'; },
+    /*
+     * Press a header to sort by it; press the one you are on to turn it
+     * round. A new column always starts ascending, because arriving at a
+     * column already reversed reads as a bug rather than a choice.
+     */
+    toggleSort(column = 'name') {
+        if (this.sortBy === column) {
+            this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+
+            return;
+        }
+
+        this.sortBy = column;
+        this.sortDirection = 'asc';
+    },
+    sortedBy(column) { return this.sortBy === column; },
     isPresent(childId, date, session) { return !!this.attendance?.[childId]?.[date]?.[session]; },
     sessionTime(childId, date, session) { return this.attendance?.[childId]?.[date]?.[session] ?? ''; },
     hasAnyAttendanceForDate(childId, date) { return !!this.attendance?.[childId]?.[date] && Object.keys(this.attendance[childId][date]).length > 0; },

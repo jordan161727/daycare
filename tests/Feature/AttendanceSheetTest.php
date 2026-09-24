@@ -37,15 +37,35 @@ class AttendanceSheetTest extends TestCase
         $response->assertSee('Student');
     }
 
-    public function test_the_student_header_toggles_the_sort_direction(): void
+    public function test_either_header_sorts_the_sheet_by_its_own_column(): void
     {
+        /*
+         * Two sortable columns now, so pressing one has to say which it is.
+         * A new column starts ascending — arriving at a column already
+         * reversed reads as a bug rather than a choice — and only the column
+         * actually in use carries the arrow.
+         */
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
             ->get(route('attendance.index'))
             ->assertOk()
-            ->assertSee('@click="toggleSort"', false)
-            ->assertSee("sortDirection === 'asc' ? 'ascending' : 'descending'", false);
+            ->assertSee("toggleSort('lan')", false)
+            ->assertSee("toggleSort('name')", false)
+            ->assertSee("sortedBy('lan')", false)
+            ->assertSee("sortedBy('name')", false);
+    }
+
+    public function test_the_sheet_opens_in_lan_order(): void
+    {
+        // The same order as the roll, because it is the same children read
+        // by the same people — and the LAN is what somebody arrives holding.
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $this->actingAs($this->admin)
+            ->get(route('attendance.index'))
+            ->assertOk()
+            ->assertSee("sortBy: 'lan'", false);
     }
 
     public function test_pagination_and_the_sort_and_show_dropdowns_are_gone(): void
@@ -96,7 +116,8 @@ class AttendanceSheetTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString('>LAN</th>', $html);
+        // A pressable heading now, so the text sits inside a button.
+        $this->assertStringContainsString('<span>LAN</span>', $html);
         $this->assertStringContainsString("x-text=\"child.lan || '—'\"", $html);
         // The rows are handed to Alpine as JSON, so the LAN has to be in them
         // as well as named in the markup that draws the column.
@@ -129,7 +150,7 @@ class AttendanceSheetTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('attendance.index'))
             ->assertOk()
-            ->assertSeeInOrder(['>LAN</th>', '>Student<', '>Classroom</th>', '>DOB</th>', '>Age</th>', '>Hours</th>'], escape: false);
+            ->assertSeeInOrder(['<span>LAN</span>', '>Student<', '>Classroom</th>', '>DOB</th>', '>Age</th>', '>Hours</th>'], escape: false);
 
         $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
 
@@ -159,7 +180,11 @@ class AttendanceSheetTest extends TestCase
 
         // Both sign-in layouts loop the same children and can both sort.
         $this->assertSame(2, substr_count($html, 'child in filteredChildren"'));
-        $this->assertSame(2, substr_count($html, '@click="toggleSort"'));
+        // The desktop grid has a sortable heading per column and the phone
+        // list one button that turns whichever column is in use around.
+        $this->assertSame(1, substr_count($html, "toggleSort('lan')"));
+        $this->assertSame(1, substr_count($html, "toggleSort('name')"));
+        $this->assertSame(1, substr_count($html, 'toggleSort(sortBy)'));
     }
 
     public function test_both_layouts_render_the_same_sign_in_controls(): void

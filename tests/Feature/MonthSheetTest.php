@@ -176,27 +176,27 @@ class MonthSheetTest extends TestCase
             ->assertSessionHasErrors('month');
     }
 
-    public function test_the_month_is_a_reading_of_the_register_not_a_screen_of_its_own(): void
+    public function test_the_sheet_stands_on_its_own_and_leads_back(): void
     {
         /*
-         * One entry in the sidebar, two readings of it. The month used to be
-         * its own nav item, which put a page opened at the end of a month
-         * beside the one opened every morning — and made them look like two
-         * different records of the same days.
+         * The register used to carry a Week/Month tab through to here. It was
+         * taken out — the month is read on the Check In grid, which draws the
+         * same days — so this page is reached by its address and by nothing
+         * else at present.
+         *
+         * What it must still do is lead somewhere: a printable sheet with no
+         * way off it is a dead end for whoever lands on it.
          */
+        $sheet = $this->sheet();
+
+        $this->assertStringContainsString(route('attendance.index'), $sheet);
+
+        // And the register no longer offers a way here, which is the thing
+        // that was removed rather than something that broke.
         $register = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString(route('attendance.month-sheet'), $register);
-
-        $nav = substr($register, (int) strpos($register, '<nav'), (int) strpos($register, '</nav>') - (int) strpos($register, '<nav'));
-
-        $this->assertStringNotContainsString(route('attendance.month-sheet'), $nav);
-        $this->assertStringContainsString(route('attendance.index'), $nav);
-
-        // And the way back, where a tab would be.
-        $this->assertStringContainsString(route('attendance.index'), $this->sheet());
+        $this->assertStringNotContainsString(route('attendance.month-sheet'), $register);
     }
-
     public function test_the_sheet_wears_the_apps_own_palette(): void
     {
         /*

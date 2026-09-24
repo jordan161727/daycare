@@ -399,6 +399,41 @@ class ChildrenFullImportTest extends TestCase
         $this->actingAs($this->admin)->get(route('children.index'))->assertOk();
     }
 
+    public function test_a_sheet_with_a_title_row_says_so_rather_than_failing_silently(): void
+    {
+        /*
+         * The commonest shape a real export takes: a title across the top, a
+         * blank line, then the headings. The package reads the title as the
+         * column names, every row misses, and the import reports nought
+         * created and no reason — which is worse than an error.
+         */
+        $import = $this->import([
+            ['LADC Enrollment Details'],
+            [''],
+            ['Child Name', 'Birth Date'],
+            ['Adkins, Maeve', '2022-04-18'],
+        ]);
+
+        $this->assertSame(0, Child::count());
+        $this->assertNotEmpty($import->errors);
+        $this->assertStringContainsString('None of the columns', $import->errors[0]);
+        // And what it actually found, so the fix is obvious.
+        $this->assertStringContainsString('ladc_enrollment_details', $import->errors[0]);
+        $this->assertStringContainsString('delete any title or blank rows', $import->errors[0]);
+    }
+
+    public function test_a_readable_sheet_reports_no_heading_complaint(): void
+    {
+        // The check must not fire on a file that is fine.
+        $import = $this->import([
+            ['Child Name', 'Birth Date'],
+            ['Adkins, Maeve', '2022-04-18'],
+        ]);
+
+        $this->assertSame(1, Child::count());
+        $this->assertSame([], $import->errors);
+    }
+
     /** Put rows through the real upload path, as a CSV. */
     private function import(array $rows): ChildrenImport
     {

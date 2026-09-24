@@ -3,6 +3,9 @@
 namespace App\Imports;
 
 use App\Models\Child;
+use App\Models\ChildPerson;
+use App\Models\Person;
+use App\Services\PersonMatcher;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
@@ -162,6 +165,27 @@ class ChildrenImport implements ToCollection, WithHeadingRow
     {
         $map = $this->columnMap();
 
+        /*
+         * Headings that mean nothing here.
+         *
+         * Almost always a title row sitting above the real headings, so the
+         * package read "Enrollment Details" and a row of nulls as the column
+         * names. Said plainly, with what was actually found, because the
+         * alternative is an import that reports nought rows and no reason.
+         */
+        $headings = $rows->isEmpty() ? [] : array_keys(collect($rows->first())->all());
+        $known = array_intersect($headings, array_keys($map));
+
+        if ($rows->isNotEmpty() && $known === []) {
+            $found = collect($headings)->filter()->take(6)->implode(', ');
+
+            $this->errors[] = 'None of the columns in this sheet were recognised. '
+                .($found === '' ? 'The first row appears to be blank.' : 'The first row reads: '.$found.'.')
+                .' The first row must be the column headings — delete any title or blank rows above it.';
+
+            return;
+        }
+
         foreach ($rows as $index => $row) {
             // The first row holds the headings, so the second is row 2.
             $rowNumber = $index + 2;
@@ -210,6 +234,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
 
             if ($child) {
                 $child->fill($data)->save();
+                $this->linkPeople($child, $data);
                 $this->updated++;
 
                 continue;
@@ -228,7 +253,9 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             // app's, not theirs — so one is issued here. See nextLan.
             $data['lan'] = $data['lan'] ?? $this->nextLan();
 
-            Child::create($data + ['status' => $data['status'] ?? 'Active']);
+            $child = Child::create($data + ['status' => $data['status'] ?? 'Active']);
+
+            $this->linkPeople($child, $data);
             $this->created++;
         }
     }
@@ -258,6 +285,175 @@ class ChildrenImport implements ToCollection, WithHeadingRow
         }
 
         $existing[] = ['type' => 'allergy', 'text' => trim($text)];
+
+        return $existing;
+    }
+    /**
+     * Turn the row's adults into people, and say what each is for this child.
+     *
+     * The mapping is the one the rest of the app already assumes — see
+     * CheckPeopleBackfill, which is the test that the original migration got it
+     * right:
+     *
+     *   mother / father      a guardian, and may collect
+     *   pickup 1, 2, 3       may collect
+     *   emergency 1, 2       an emergency contact, in that order
+     *
+     * One adult can be several of those. A mother who is also pickup 1 is one
+     * person with both facts on one link, not two rows — which is why the links
+     * are gathered by person first and written once.
+     */
+    private function linkPeople(Child $child, array $data): void
+    {
+        $roles = [];
+
+        foreach ([['mother', 'Mother'], ['father', 'Father']] as [$prefix, $relationship]) {
+            if (blank($data[$prefix.'_name'] ?? null)) {
+                continue;
+            }
+
+            $this->addRole($roles, [
+                'name' => $data[$prefix.'_name'],
+                'address' => $data[$prefix.'_address'] ?? null,
+                'home_phone' => $data[$prefix.'_home_phone'] ?? null,
+                'work_phone' => $data[$prefix.'_work_phone'] ?? null,
+                'cell' => $data[$prefix.'_cell'] ?? null,
+                'fax' => $data[$prefix.'_fax'] ?? null,
+                'email' => $data[$prefix.'_email'] ?? null,
+                'employer' => $data[$prefix.'_employer'] ?? null,
+                'title' => $data[$prefix.'_title'] ?? null,
+                'ssn' => $data[$prefix.'_ssn'] ?? null,
+            ], [
+                'relationship' => $relationship,
+                'is_guardian' => true,
+                'can_pickup' => true,
+            ]);
+        }
+
+        foreach ([1, 2, 3] as $slot) {
+            if (blank($data['pickup_'.$slot.'_name'] ?? null)) {
+                continue;
+            }
+
+            $this->addRole($roles, [
+                'name' => $data['pickup_'.$slot.'_name'],
+                'address' => $data['pickup_'.$slot.'_address'] ?? null,
+                'cell' => $data['pickup_'.$slot.'_telephone'] ?? null,
+                'alternate_phone' => $data['pickup_'.$slot.'_alternate'] ?? null,
+                'drivers_license' => $data['pickup_'.$slot.'_license_number'] ?? null,
+            ], [
+                'relationship' => $data['pickup_'.$slot.'_relationship'] ?? null,
+                'can_pickup' => true,
+            ]);
+        }
+
+        // In the order the form lists them, which is the order somebody rings.
+        foreach ([['emergency_contact', 1], ['secondary_emergency_contact', 2]] as [$column, $priority]) {
+            if (blank($data[$column] ?? null)) {
+                continue;
+            }
+
+            $this->addRole($roles, [
+                'name' => $data[$column],
+                // Only the first emergency block has a number and a licence on
+                // the centre's sheet; the second is a name and a relationship.
+                'cell' => $priority === 1 ? ($data['emergency_telephone'] ?? null) : null,
+                'drivers_license' => $priority === 1 ? ($data['emergency_license_number'] ?? null) : null,
+            ], [
+                'relationship' => $priority === 1 ? ($data['emergency_relationship'] ?? null) : null,
+                'is_emergency' => true,
+                'priority' => $priority,
+            ]);
+        }
+
+        foreach ($roles as $role) {
+            $person = $this->personFor($role['person']);
+
+            $link = ChildPerson::firstOrNew([
+                'child_id' => $child->id,
+                'person_id' => $person->id,
+            ]);
+
+            /*
+             * A flag already set is never turned off here. The sheet says what
+             * it knows; a tick somebody added in the app — or a restriction
+             * they wrote — is not something a spreadsheet should quietly
+             * withdraw.
+             */
+            $link->fill([
+                'relationship' => $link->relationship ?: ($role['link']['relationship'] ?? null),
+                'is_guardian' => ($link->is_guardian ?? false) || ($role['link']['is_guardian'] ?? false),
+                'can_pickup' => ($link->can_pickup ?? false) || ($role['link']['can_pickup'] ?? false),
+                'is_emergency' => ($link->is_emergency ?? false) || ($role['link']['is_emergency'] ?? false),
+                'priority' => $link->priority ?: ($role['link']['priority'] ?? null),
+                'source' => $link->exists ? $link->source : 'import',
+            ])->save();
+        }
+    }
+
+    /**
+     * Gather one adult's details and what they are, keyed by who they are.
+     *
+     * A mother who is also pickup 1 appears twice on the sheet and is one
+     * person here, so the two entries are folded together — the details from
+     * whichever block gave them, and every flag either block set.
+     */
+    private function addRole(array &$roles, array $person, array $link): void
+    {
+        $person = array_filter($person, fn ($value) => filled($value));
+
+        $key = Person::normalizeName($person['name'] ?? '');
+
+        if ($key === '') {
+            return;
+        }
+
+        if (! isset($roles[$key])) {
+            $roles[$key] = ['person' => $person, 'link' => $link];
+
+            return;
+        }
+
+        // Details already gathered win: the parent block is read first and
+        // carries more than a pickup slot does.
+        $roles[$key]['person'] += $person;
+        $roles[$key]['link'] = [
+            'relationship' => $roles[$key]['link']['relationship'] ?? ($link['relationship'] ?? null),
+            'is_guardian' => ($roles[$key]['link']['is_guardian'] ?? false) || ($link['is_guardian'] ?? false),
+            'can_pickup' => ($roles[$key]['link']['can_pickup'] ?? false) || ($link['can_pickup'] ?? false),
+            'is_emergency' => ($roles[$key]['link']['is_emergency'] ?? false) || ($link['is_emergency'] ?? false),
+            'priority' => $roles[$key]['link']['priority'] ?? ($link['priority'] ?? null),
+        ];
+    }
+
+    /**
+     * The person this is, whether the centre already has them or not.
+     *
+     * Matched through the same service the rest of the app uses — by mobile
+     * number first, then by name where neither has a number — so importing a
+     * second child does not make a second copy of their mother.
+     *
+     * An existing person is filled in rather than overwritten: the spreadsheet
+     * may carry a number the record lacks, and must not blank one the record
+     * has and the sheet does not.
+     */
+    private function personFor(array $details): Person
+    {
+        $existing = app(PersonMatcher::class)->findExisting($details);
+
+        if (! $existing) {
+            return Person::create($details);
+        }
+
+        foreach ($details as $field => $value) {
+            if (blank($existing->{$field})) {
+                $existing->{$field} = $value;
+            }
+        }
+
+        if ($existing->isDirty()) {
+            $existing->save();
+        }
 
         return $existing;
     }

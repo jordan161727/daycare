@@ -83,7 +83,10 @@ class ChildController extends Controller
     private function roster(): array
     {
         $allowedSorts = ['lan', 'first_name', 'last_name', 'age', 'classroom', 'status'];
-        $sort = trim((string) request('sort')) ?: 'last_name';
+        // The roll opens in LAN order: it is the number on the cabinet, the
+        // parent letter and every sheet the centre keeps, so it is what
+        // somebody arrives already holding.
+        $sort = trim((string) request('sort')) ?: 'lan';
         $direction = trim((string) request('direction')) ?: 'asc';
 
         abort_unless(in_array($sort, $allowedSorts, true), 404);
@@ -104,7 +107,19 @@ class ChildController extends Controller
             // with the latest date of birth.
             ->when($sort === 'age', fn ($query) => $query->orderByRaw(
                 'COALESCE(birth_date, dob) '.($direction === 'asc' ? 'desc' : 'asc')
-            ), fn ($query) => $query->orderBy($sort, $direction))
+            ))
+            /*
+             * A LAN is stored as a string, because a centre's numbering can
+             * carry a prefix and storing it as an integer would destroy one
+             * that does. Sorted as a string it reads 1, 10, 100, 1001, 2 —
+             * so it is cast for the sort alone. Anything non-numeric casts
+             * to nought and falls to the top, which is where a record with a
+             * malformed number should be.
+             */
+            ->when($sort === 'lan', fn ($query) => $query
+                ->orderByRaw('CAST(lan AS UNSIGNED) '.$direction)
+                ->orderBy('lan', $direction))
+            ->when(! in_array($sort, ['age', 'lan'], true), fn ($query) => $query->orderBy($sort, $direction))
             ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
             // The whole roll on one page. It used to page at ten, which put a
             // sixty-child centre six clicks from the child they were looking

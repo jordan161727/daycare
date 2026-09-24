@@ -111,9 +111,16 @@ class NameFormatTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin', 'name_format' => 'first_last']);
 
-        // Adams before Lovelace, even though "Zoe" sorts after "Ada".
+        /*
+         * Adams before Lovelace, even though "Zoe" sorts after "Ada".
+         *
+         * The sort is named rather than left to the default, because the
+         * subject here is the name format and nothing else: the roll opens in
+         * LAN order now, and a test of how a name reads should not quietly
+         * become a test of which column the page sorts by.
+         */
         $this->actingAs($admin)
-            ->get(route('children.index'))
+            ->get(route('children.index', ['sort' => 'last_name']))
             ->assertOk()
             ->assertSeeInOrder(['Zoe Adams', 'Ada Lovelace']);
     }
