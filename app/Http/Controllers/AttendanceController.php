@@ -112,8 +112,21 @@ class AttendanceController extends Controller
             $weekIsOpen = $scheduleWeek !== null && $weeks->isOpenFor($weekStartDate, $user);
 
             $scheduleMap = [];
+
+            // The hour a day to come is booked for, where one has been
+            // agreed. Kept apart from the ticks rather than folded in with
+            // them: the tick is a boolean the whole grid reads on every
+            // box, and most days have no hour at all.
+            $plannedMap = [];
+
             foreach (ScheduleSlot::where('week_start', $weekStartDate)->get() as $slot) {
-                $scheduleMap[$slot->child_id][$slot->slot_date->toDateString()][$slot->session] = (bool) $slot->is_scheduled;
+                $date = $slot->slot_date->toDateString();
+
+                $scheduleMap[$slot->child_id][$date][$slot->session] = (bool) $slot->is_scheduled;
+
+                if ($slot->planned_time) {
+                    $plannedMap[$slot->child_id][$date][$slot->session] = $slot->plannedTimeValue();
+                }
             }
 
             // Once a week has ended its pattern is a record, so the checklist and
@@ -195,6 +208,7 @@ class AttendanceController extends Controller
                 'scheduleWeek',
                 'scheduleMap',
                 'canEditSchedule',
+                'plannedMap',
                 'canOpenWeek',
                 'weekIsOpen',
                 'previousWeekStart',

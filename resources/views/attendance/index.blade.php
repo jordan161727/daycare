@@ -39,6 +39,15 @@
             'swatch' => '',
             'classes' => 'att-expected',
         ],
+        // The same dashed box as the state above, with the hour a day still
+        // to come is agreed for inside it. The box is what says "coming";
+        // the hour only says when, and it is pointedly not the emerald of
+        // an arrival — which is what this key exists to stop it reading as.
+        'due' => [
+            'label' => 'coming, at the hour agreed — not an arrival',
+            'swatch' => '8:00a',
+            'classes' => 'att-expected att-due',
+        ],
         'off' => [
             'label' => 'not scheduled — tap to sign in anyway',
             'swatch' => '·',
@@ -287,7 +296,7 @@
                                  and a switch says "in it" or "not" the way a button
                                  labelled Edit never quite did. --}}
                             <div x-show="view === 'signin'" class="att-mode" :data-edit="editing ? 'true' : 'false'">
-                                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : 'Live mode'" @click="editing = ! editing; cancelRetime()">
+                                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : 'Live mode'" @click="switchMode()">
                                     <span class="att-knob" x-html="editing ? icons.edit : icons.lock"></span>
                                 </button>
                                 <span class="att-mode-name" x-text="editing ? 'Edit mode' : 'Live mode'"></span>
@@ -904,7 +913,16 @@ function attendanceApp() { return {
     sortDirection: 'asc',
     view: 'signin',
     recentOpen: false,
-    editing: false,
+    /*
+     * Live or Edit is read from the address, not remembered in the page.
+     *
+     * Switching mode reloads the sheet — see switchMode() — so the mode has
+     * to be carried across that reload, and ?mode=edit is the plainest
+     * place to carry it: visible, sharable, gone when the tab is closed.
+     * Anybody without the power to edit lands in Live whatever the URL
+     * says; the switch is not drawn for them either.
+     */
+    editing: @js(request('mode') === 'edit' && ($canAmendAttendance || $canEditSchedule)),
     canAmend: @js($canAmendAttendance),
 
     /*
@@ -933,6 +951,52 @@ function attendanceApp() { return {
      */
     ready: false,
 
+    /* ---- saves in flight ----
+
+       Every tap saves itself the moment it is made, so nothing on this sheet
+       is ever waiting to be submitted. But a request takes a moment to cross
+       the wire, and switchMode() reloads the page — reloading with one still
+       out would throw that tap away. So the saves are counted on the way out
+       and back, and the switch waits for the count to reach zero. */
+    inFlight: 0,
+
+    post(url, body) {
+        this.inFlight++;
+
+        return window.postJson(url, body).finally(() => { this.inFlight--; });
+    },
+
+    /**
+     * Live ↔ Edit, by reloading the sheet.
+     *
+     * Flipping a flag would do, and did. The reload is deliberate: it means
+     * the sheet you arrive in is exactly what the server holds — every tick,
+     * every hour, every arrival re-read — rather than what this tab has been
+     * keeping up to date on its own. Switching mode is a natural moment to
+     * ask for that, because it is the moment the meaning of every cell
+     * changes and the moment somebody looks at the whole sheet again.
+     *
+     * The mode travels in the address so it is still the mode after the
+     * reload; date and room travel with it because they were already there.
+     */
+    async switchMode() {
+        this.cancelRetime();
+
+        // Let any save still on the wire land first.
+        while (this.inFlight > 0) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        const url = new URL(window.location.href);
+
+        if (this.editing) {
+            url.searchParams.delete('mode');
+        } else {
+            url.searchParams.set('mode', 'edit');
+        }
+
+        window.location.assign(url.toString());
+    },
     init() {
         window.matchMedia('(max-width: 767px)')
             .addEventListener('change', event => { this.isPhone = event.matches; });
@@ -996,7 +1060,7 @@ function attendanceApp() { return {
 
     get hint() {
         return this.editing
-            ? 'Tap a cell to cycle not attending → expected → time. The pencil types an exact time.'
+            ? 'Tap a cell to cycle not attending → expected → time. On a day still to come a tap is just expected ↔ not attending, and the pencil sets the hour they are due — which is the plan, not an arrival.'
             : 'Only ' + this.todayLabel + ' can be changed.';
     },
     // Which cells in this week were put right by hand rather than tapped on
@@ -1055,6 +1119,11 @@ function attendanceApp() { return {
     todayLabel: @js(today()->format('l, M j')),
     attendance: @js($attendanceMap),
     schedule: @js($scheduleMap),
+
+    // The hour a day still to come is booked for, where one has been agreed.
+    // Sparse on purpose: most booked days have no hour, and this is read on
+    // every one of four hundred boxes.
+    planned: @js($plannedMap),
     // The forecast, kept in its own map so it can never be mistaken for a tick.
     projection: @js((object) $projectionMap),
     projectionChildren: @js((object) $projectionChildren),
@@ -1398,7 +1467,7 @@ function attendanceApp() { return {
         this.saveError = '';
 
         try {
-            const response = await window.postJson("{{ route('attendance.schedule.classroom') }}", {
+            const response = await this.post("{{ route('attendance.schedule.classroom') }}", {
                 child_id: child.id,
                 classroom: room || null,
                 effective_from: room ? (from || this.today) : null,
@@ -1450,7 +1519,7 @@ function attendanceApp() { return {
         const reason = closing ? (prompt('Why is the centre closed? (holiday, snow day…)', 'Holiday') || 'Centre closed') : null;
 
         try {
-            const response = await window.postJson("{{ route('attendance.schedule.closure') }}", {date, closed: closing, reason});
+            const response = await this.post("{{ route('attendance.schedule.closure') }}", {date, closed: closing, reason});
             if (!response.ok) throw new Error('Could not change that day.');
 
             if (closing) {
@@ -1556,6 +1625,18 @@ function attendanceApp() { return {
     beginRetime(childId, date, session) {
         const present = this.isPresent(childId, date, session);
 
+        // A day still to come is typed into as well, and what is typed is
+        // the hour it is booked for. The field is the same field; where the
+        // value goes is decided on the way out, in commitRetime.
+        if (date > this.today) {
+            if (! this.canPlanTime(date) || ! this.isScheduled(childId, date, session)) return;
+
+            this.draft = this.plannedTime(childId, date, session) || '';
+            this.retiming = this.cellKey(childId, date, session);
+
+            return;
+        }
+
         if (present ? ! this.canRetime(childId, date, session) : ! (this.editing && this.canSignIn(date))) return;
 
         this.draft = present ? this.displayTime(childId, date, session) : '';
@@ -1578,6 +1659,11 @@ function attendanceApp() { return {
         this.cancelRetime();
 
         if (! value) return;
+
+        // Where the typed hour goes is the whole difference between the two
+        // halves of Edit mode: onto the plan for a day to come, into the
+        // register for today or a day gone.
+        if (date > this.today) return this.setPlannedTime(childId, date, session, value);
 
         return this.isPresent(childId, date, session)
             ? this.retime(childId, date, session, value)
@@ -1659,6 +1745,131 @@ function attendanceApp() { return {
         return String(hours).padStart(2, '0') + ':' + match[2];
     },
 
+    /* ---- the plan's own hour ----
+
+       A booked day can carry the hour it is booked for. It is not an arrival
+       and never becomes one by itself: nothing is written to `attendances`
+       until somebody actually walks in, so a Thursday with six planned hours
+       on it still reports nobody present. See ScheduleController::plannedTime.
+    */
+
+    /**
+     * Whether the child's own record names this weekday.
+     *
+     * Only ever used to word a tooltip. The registered days are where a
+     * box starts — WeekSchedule seeds the week from them — and after that
+     * the box is the answer, because the reason to open a future column is
+     * usually that this particular week is not the usual one. A child down
+     * for every weekday can be dotted off tomorrow in one tap, and this is
+     * how the cell explains itself when somebody hovers to check.
+     */
+    isRegisteredDay(childId, date) {
+        const child = this.childrenData.find(row => row.id === childId);
+
+        // A record that has never named a pattern does not disagree with
+        // anything, so there is nothing to point out.
+        return !! child && this.childDays(child) !== null && ! this.offPattern(child, date);
+    },
+
+    /** "08:00", or null for a day booked with no hour agreed. */
+    plannedTime(childId, date, session) {
+        return this.planned?.[childId]?.[date]?.[session] ?? null;
+    },
+    hasPlanned(childId, date, session) {
+        return this.plannedTime(childId, date, session) !== null;
+    },
+
+    /** "08:00" → "8:00a": the same short clock an arrival is drawn in. */
+    shortTime(value) {
+        const match = /^(\d{1,2}):(\d{2})/.exec(value || '');
+        if (! match) return '';
+
+        const hours = Number(match[1]);
+
+        return ((hours % 12) || 12) + ':' + match[2] + (hours < 12 ? 'a' : 'p');
+    },
+    plannedLabel(childId, date, session) {
+        return this.shortTime(this.plannedTime(childId, date, session));
+    },
+
+    /**
+     * Whether an hour may be put on this day.
+     *
+     * Days still to come only. Today and the days behind it have a real
+     * arrival time or a blank that means nobody came, and an intention printed
+     * over either would be read as the fact. The server draws the same line —
+     * this is the affordance, that is the rule.
+     */
+    canPlanTime(date) {
+        return this.editing && this.canEdit && date > this.today && ! this.isClosed(date);
+    },
+
+    /** Whether this box is currently showing a planned hour rather than a tick. */
+    isPlanned(childId, date, session) {
+        return date > this.today
+            && this.isScheduled(childId, date, session)
+            && this.hasPlanned(childId, date, session);
+    },
+
+    /**
+     * Put an hour on a booked day, or take it off.
+     *
+     * Optimistic, like the ticks beside it: the box moves and the request
+     * follows, because the alternative is a grid that lags a drag across a
+     * row. A refusal puts the old value back and says why.
+     */
+    async setPlannedTime(childId, date, session, value) {
+        if (! this.canPlanTime(date)) return;
+
+        const before = this.plannedTime(childId, date, session);
+
+        this.writePlanned(childId, date, session, value);
+
+        try {
+            const response = await this.post("{{ route('attendance.schedule.time') }}", {
+                child_id: childId,
+                slot_date: date,
+                session,
+                planned_time: value,
+            });
+
+            if (! response.ok) {
+                const problem = await response.json().catch(() => ({}));
+                const firstError = Object.values(problem.errors ?? {}).flat()[0];
+
+                throw new Error(firstError || problem.message || 'Could not set that hour.');
+            }
+
+            const data = await response.json();
+
+            this.writePlanned(childId, date, session, data.planned_time);
+
+            // An hour implies the day, and the server ticks it. Match that here
+            // rather than leaving a box showing an hour on a day marked "not
+            // attending" until the next reload.
+            if (data.is_scheduled && ! this.isScheduled(childId, date, session)) {
+                this.schedule[childId][date][session] = true;
+            }
+        } catch (error) {
+            this.writePlanned(childId, date, session, before);
+            this.notice = error.message;
+        }
+    },
+
+    /** The one place the sparse map is written, so Alpine always sees it move. */
+    writePlanned(childId, date, session, value) {
+        const forChild = {...(this.planned[childId] ?? {})};
+        const forDate = {...(forChild[date] ?? {})};
+
+        if (value === null || value === undefined || value === '') {
+            delete forDate[session];
+        } else {
+            forDate[session] = value;
+        }
+
+        forChild[date] = forDate;
+        this.planned = {...this.planned, [childId]: forChild};
+    },
     /**
      * What the cell shows: "11:54a", morning or afternoon, whole day or half.
      *
@@ -1691,14 +1902,22 @@ function attendanceApp() { return {
      * which box was pressed, so it is the tap target's identity as well.
      */
     cellAttrs(child, date, session) {
+        /*
+         * Only what never changes for the life of the element.
+         *
+         * An x-bind object is applied once, at mount, and never re-evaluated
+         * — Alpine turns each key into a static literal. That is fine for the
+         * identity of the box and for whether it can be tapped at all, because
+         * a mode switch reloads the whole sheet. It is not fine for anything
+         * that changes when the cell's state does: class, title and label are
+         * bound live in the partial instead. Putting the class here is how a
+         * tapped-off day kept its dashed box around the dot.
+         */
         const tappable = this.canTap(date);
 
         return {
-            'class': this.cellClass(child.id, date, session),
             'role': tappable ? 'button' : null,
             'tabindex': tappable ? 0 : null,
-            'aria-label': this.cellLabel(child, date, session),
-            'title': this.boxTitle(child.id, date, session),
             'data-cell': this.cellKey(child.id, date, session),
         };
     },
@@ -1721,7 +1940,21 @@ function attendanceApp() { return {
             html += '<span>' + this.esc(this.displayTime(child.id, date, session)) + '</span>';
         } else if (closed) {
             html += '<span aria-hidden="true">&mdash;</span>';
+        } else if (this.isPlanned(child.id, date, session)) {
+            // The hour a day to come is agreed for, inside the same dashed box
+            // an expected day already wears. It is the box that says "coming";
+            // the hour only says when.
+            html += '<span class="att-due">' + this.esc(this.plannedLabel(child.id, date, session)) + '</span>';
         } else if (! this.isScheduled(child.id, date, session)) {
+            /*
+             * The dot: not coming, on any day of the week.
+             *
+             * It reads the same either side of today, and that is the point. A
+             * future column briefly had a filled dot for "coming" and a hollow
+             * ring for "not", which made the dot mean one thing on Thursday and
+             * the opposite on Tuesday, in columns three inches apart. One mark,
+             * one meaning, across the whole sheet.
+             */
             html += '<span class="att-dot" aria-hidden="true"></span>';
         }
 
@@ -1732,6 +1965,12 @@ function attendanceApp() { return {
         if (this.canRetime(child.id, date, session)) {
             html += '<button type="button" class="att-pencil" data-pencil aria-label="'
                 + this.esc('Type an exact time for ' + child.name) + '">' + this.icons.pencil + '</button>';
+        } else if (this.canPlanTime(date) && this.isScheduled(child.id, date, session)) {
+            // On a booked day still to come the pencil is where the hour
+            // lives — set, changed or cleared — so the tap is left free to
+            // mean the one thing it should: coming, or not.
+            html += '<button type="button" class="att-pencil" data-pencil aria-label="'
+                + this.esc('Type the hour ' + child.name + ' is booked in for') + '">' + this.icons.pencil + '</button>';
         } else if (session !== 'FULL') {
             html += '<span class="att-pad" aria-hidden="true"></span>';
         }
@@ -1815,16 +2054,36 @@ function attendanceApp() { return {
             classes.push('att-none');
         }
 
-        if (present && date < this.today && this.sessionCount(childId) === 1) classes.push('att-history');
+        /*
+         * No quietening of days gone by.
+         *
+         * A past arrival used to lose its box — the time stayed, the outline
+         * went — so that the week read as a slope down into today. The centre
+         * asked for the opposite: the same three marks, drawn the same way,
+         * whichever column they are in. A box round a time means "they came"
+         * on Monday exactly as it does on Wednesday, and a reader correcting
+         * last week should see the same sheet they see today. What still
+         * quietens a column is being untouchable, and that is .att-locked.
+         */
         if (! this.canTap(date)) classes.push('att-locked');
 
         return classes.join(' ');
     },
 
     cellLabel(child, date, session) {
+        /*
+         * A day to come that has an hour on it says so, because "expected" and
+         * "expected at 8:30" are different amounts of knowing and the box looks
+         * the same for both. Everything else keeps the sheet's own words: the
+         * marks read the same either side of today, so the labels do too.
+         */
+        const ahead = this.isPlanned(child.id, date, session)
+            ? 'expected at ' + this.plannedLabel(child.id, date, session)
+            : null;
+
         const state = this.isPresent(child.id, date, session)
             ? this.displayTime(child.id, date, session)
-            : (this.isClosed(date) ? 'centre closed' : (this.isScheduled(child.id, date, session) ? 'expected' : 'not attending'));
+            : (this.isClosed(date) ? 'centre closed' : (ahead || (this.isScheduled(child.id, date, session) ? 'expected' : 'not attending')));
         const half = session === 'FULL' ? '' : ' ' + this.sessionLabel(session);
 
         return child.name + ' ' + this.dayLabel(date) + half + ': ' + state + (this.canTap(date) ? '' : ', locked');
@@ -1890,6 +2149,12 @@ function attendanceApp() { return {
     boxLabel(childId, date, session) {
         if (this.isPresent(childId, date, session)) return this.sessionTime(childId, date, session);
         if (this.isClosed(date)) return '—';
+
+        // Booked for an hour, on a day that has not happened. Drawn in the
+        // box an arrival would fill, in the outlined style of the plan — so
+        // it reads as the hour somebody is due rather than the hour they came.
+        if (this.isPlanned(childId, date, session)) return this.plannedLabel(childId, date, session);
+
         if (session !== 'FULL') return session;
 
         // An empty dashed box for a booked day, and a dot for a day nobody
@@ -1929,9 +2194,24 @@ function attendanceApp() { return {
         // In Edit an empty cell is the plan for the day, and the tap flips it.
         if (this.canSetExpected(date)) {
             if (date > this.today) {
-                return this.isScheduled(childId, date, session)
-                    ? 'Expected. Tap: not attending.'
-                    : 'Not attending. Tap: expected.';
+                if (! this.isScheduled(childId, date, session)) {
+                    // Said on the cell that overrides it. A record saying
+                    // Mon–Fri and a dot on Thursday is not a contradiction —
+                    // it is somebody having been told the child is off.
+                    return this.isRegisteredDay(childId, date)
+                        ? 'Not attending, though their record says this is one of their days. Tap: expected.'
+                        : 'Not attending. Tap: expected.';
+                }
+
+                if (this.hasPlanned(childId, date, session)) {
+                    return 'Expected at ' + this.plannedLabel(childId, date, session)
+                        + ' — the hour agreed, not an arrival. Nobody is marked present.'
+                        + '\nTap: not attending. Pencil: change the hour.';
+                }
+
+                return this.canPlanTime(date)
+                    ? 'Expected. Tap: not attending. Pencil: the hour they are due.'
+                    : 'Expected. Tap: not attending.';
             }
 
             return this.isScheduled(childId, date, session)
@@ -2131,7 +2411,7 @@ function attendanceApp() { return {
         this.saving = true;
         this.saveError = '';
         try {
-            const response = await window.postJson("{{ route('attendance.schedule.update') }}", {
+            const response = await this.post("{{ route('attendance.schedule.update') }}", {
                 week_start: this.weekStart,
                 is_scheduled: value,
                 slots,
@@ -2165,8 +2445,13 @@ function attendanceApp() { return {
     /**
      * Move the box along.
      *
-     *   ahead of today   dot ↔ expected             (the plan)
+     *   ahead of today   dot → expected → hour → dot (the plan)
      *   today or gone    dot → expected → time → dot (the plan, then the fact)
+     *
+     * The two read alike on purpose and mean different things. On a day to
+     * come the hour is what the child is booked in for and nothing is
+     * written to the register; on today or a day gone it is the hour they
+     * actually arrived, and an attendance row says so.
      *
      * The step onto "time" records an arrival: now if it is today, the hour
      * the day was agreed for if it has gone. The step off it takes the
@@ -2178,7 +2463,27 @@ function attendanceApp() { return {
         const expected = this.isScheduled(childId, date, session);
 
         if (date > this.today) {
-            if (this.canSetExpected(date)) this.toggleOne(childId, date, session);
+            if (! this.canSetExpected(date)) return;
+
+            /*
+             * Coming, or not coming. One tap, both ways.
+             *
+             * This is the question a future column is actually opened to
+             * answer, and the commonest answer is the awkward one: a child
+             * whose record says every weekday, off tomorrow. Their
+             * registered days are what the box started as, not a thing the
+             * box has to argue with — one tap and it is a dot.
+             *
+             * The hour used to sit between the two as a middle step, which
+             * put a second tap in front of the excuse to save a keystroke
+             * on the rarer job. It is on the pencil instead.
+             */
+            if (expected && this.hasPlanned(childId, date, session)) {
+                // A day nobody is coming on has no hour either.
+                this.setPlannedTime(childId, date, session, null);
+            }
+
+            this.toggleOne(childId, date, session);
 
             return;
         }
@@ -2219,7 +2524,7 @@ function attendanceApp() { return {
         if (value === this.timeValue(this.sessionTime(childId, date, session))) return;
 
         try {
-            const response = await window.postJson("{{ route('attendance.signin.retime') }}", {
+            const response = await this.post("{{ route('attendance.signin.retime') }}", {
                 child_id: childId,
                 attendance_date: date,
                 session,
@@ -2249,7 +2554,7 @@ function attendanceApp() { return {
     },
     async removeSignIn(childId, date, session) {
         try {
-            const response = await window.postJson("{{ route('attendance.signin.remove') }}", {
+            const response = await this.post("{{ route('attendance.signin.remove') }}", {
                 child_id: childId,
                 attendance_date: date,
                 session,
@@ -2276,7 +2581,7 @@ function attendanceApp() { return {
         }
 
         try {
-            const response = await window.postJson("{{ route('attendance.signin') }}", {
+            const response = await this.post("{{ route('attendance.signin') }}", {
                 child_id: childId,
                 attendance_date: date,
                 session,

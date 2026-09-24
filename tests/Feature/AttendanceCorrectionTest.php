@@ -277,7 +277,8 @@ class AttendanceCorrectionTest extends TestCase
             ->getContent();
 
         $this->assertStringContainsString('role="switch" class="att-switch"', $html);
-        $this->assertStringContainsString('@click="editing = ! editing; cancelRetime()"', $html);
+        // The switch reloads the sheet in the other mode — see ModeSwitchReloadsTest.
+        $this->assertStringContainsString('@click="switchMode()"', $html);
         $this->assertStringContainsString("x-text=\"editing ? 'Edit mode' : 'Live mode'\"", $html);
 
         // Locked columns say so in their header rather than by being grey.
@@ -301,7 +302,7 @@ class AttendanceCorrectionTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('attendance.index', ['date' => '2026-09-09']))
             ->assertOk()
-            ->assertDontSee('@click="editing = ! editing"', false);
+            ->assertDontSee('@click="switchMode()"', false);
     }
 
     /**
@@ -322,7 +323,7 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertStringContainsString('the schedule is locked', $html);
 
         // The record of what happened in it is not.
-        $this->assertStringContainsString('@click="editing = ! editing; cancelRetime()"', $html);
+        $this->assertStringContainsString('@click="switchMode()"', $html);
     }
 
     /**

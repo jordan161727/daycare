@@ -7,7 +7,13 @@
 
       live    today only: expected → time (a sign-in at the door)
       edit    any day gone or today: dot → expected → time → dot
-              a day still to come: dot ↔ expected
+              a day still to come: dot → expected → hour → dot
+
+    The two read alike and mean different things. On a day gone or today the
+    time is when the child arrived and there is a row in `attendances` to
+    prove it; on a day to come it is the hour they are booked in for and
+    there is nothing in the register at all. The first is emerald and solid,
+    the second sky and dashed — see .att-due.
 
     In Edit a time carries a pencil down its right edge; press it and the time
     becomes a field to type the exact hour into. Enter or leaving saves,
@@ -71,14 +77,37 @@
                             @keydown.page-up.prevent="nudgeDraft(60)"
                             @keydown.page-down.prevent="nudgeDraft(-60)"
                             @blur="commitRetime(child.id, '{{ $iso }}', session)"
-                            :aria-label="child.name + ', arrival time ' + sessionLabel(session) + ' {{ $date->format('M j') }}'"
+                            {{-- The same field, two jobs. On a day still to
+                                 come it is the hour they are booked in for,
+                                 and saying "arrival time" there would tell a
+                                 screen reader the opposite of the truth. --}}
+                            :aria-label="child.name + ('{{ $iso }}' > today ? ', booked in for ' : ', arrival time ') + sessionLabel(session) + ' {{ $date->format('M j') }}'"
                         >
                     </div>
                 </template>
 
-                {{-- The box. What it is, and what is in it. --}}
+                {{-- The box. What it is, and what is in it.
+
+                     Three attributes are bound on their own rather than inside
+                     the x-bind object, and the split is load-bearing. Alpine
+                     applies an x-bind object ONCE: each key becomes a static
+                     literal at mount and is never evaluated again. x-html, by
+                     contrast, is live. So with the class in the object, a tap
+                     that turned a booked day into "not attending" swapped the
+                     contents to a dot and left the dashed box around it — a
+                     child at the centre reported exactly that. The class, the
+                     title and the label all change with the cell's state, so
+                     they are real :bindings, which Alpine re-runs and, for the
+                     class, undoes. What stays in the object is what genuinely
+                     never changes for the life of the element. --}}
                 <template x-if="! isRetiming(child.id, '{{ $iso }}', session)">
-                    <div x-bind="cellAttrs(child, '{{ $iso }}', session)" x-html="cellInner(child, '{{ $iso }}', session)"></div>
+                    <div
+                        x-bind="cellAttrs(child, '{{ $iso }}', session)"
+                        :class="cellClass(child.id, '{{ $iso }}', session)"
+                        :title="boxTitle(child.id, '{{ $iso }}', session)"
+                        :aria-label="cellLabel(child, '{{ $iso }}', session)"
+                        x-html="cellInner(child, '{{ $iso }}', session)"
+                    ></div>
                 </template>
             </div>
         </template>

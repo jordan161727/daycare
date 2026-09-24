@@ -67,6 +67,91 @@ class ScheduleController extends Controller
     }
 
     /**
+     * Put an hour on a day still to come, or take it off again.
+     *
+     * The other half of a booking. "Expected on Thursday" is the day; this is
+     * the hour, and a room cannot staff a morning knowing only the first.
+     *
+     * Three things it is deliberately not:
+     *
+     *   Not an arrival. No row is written to `attendances`, so Thursday's
+     *   headcount, its ratios and its bill stay empty until somebody actually
+     *   walks in. The plan and the record are different facts and the whole
+     *   reason the register is trustworthy is that it only ever held the
+     *   second one.
+     *
+     *   Not for today or for a day gone. Those have a real arrival time, or
+     *   they have a blank that means nobody came. An intention printed over
+     *   either would be read as the fact.
+     *
+     *   Not a tick on its own. An hour implies the day: giving a time for a
+     *   child marked "not attending" and leaving them not attending is a state
+     *   nobody meant, so the tick goes on with it.
+     */
+    public function plannedTime(Request $request)
+    {
+        $data = $request->validate([
+            'child_id' => ['required', 'integer'],
+            'slot_date' => ['required', 'date_format:Y-m-d'],
+            'session' => ['required', Rule::in(['AM', 'PM', 'FULL'])],
+            // Null clears it — booked, hour no longer agreed — which is a
+            // different answer from never having set one but stores the same.
+            'planned_time' => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $weekStart = ScheduleWeek::startOf($data['slot_date']);
+
+        abort_unless(ScheduleWeek::where('week_start', $weekStart)->exists(), 404, 'That week has not been opened yet.');
+        abort_if($this->weeks->isFrozen($weekStart), 422, 'That week has ended and can no longer be edited.');
+
+        if ($data['slot_date'] <= now()->toDateString()) {
+            return response()->json([
+                'message' => Carbon::parse($data['slot_date'])->format('l, M j')
+                    .' has already begun — its times are the hours children arrived, not hours they are booked for.',
+            ], 422);
+        }
+
+        $child = Child::find($data['child_id']);
+
+        abort_unless($child && $request->user()->canAccessClassroom($child->classroom), 403);
+
+        if (! $child->isEnrolledOn($data['slot_date'])) {
+            return response()->json([
+                'message' => $child->displayName().' is not on the roll on '
+                    .Carbon::parse($data['slot_date'])->format('l, M j').'.',
+            ], 422);
+        }
+
+        if (in_array($data['slot_date'], ClosureDay::inWeek($weekStart), true)) {
+            return response()->json([
+                'message' => 'The centre is closed on '.Carbon::parse($data['slot_date'])->format('l, M j').'.',
+            ], 422);
+        }
+
+        $slot = ScheduleSlot::where('child_id', $child->id)
+            ->where('slot_date', $data['slot_date'])
+            ->where('session', $data['session'])
+            ->first();
+
+        abort_unless($slot, 404, 'There is no booking to put an hour on.');
+
+        $slot->planned_time = $data['planned_time'];
+
+        // An hour means they are coming. Clearing it says nothing either way,
+        // so the tick is left exactly as it was.
+        if ($data['planned_time'] !== null) {
+            $slot->is_scheduled = true;
+        }
+
+        $slot->save();
+
+        return response()->json([
+            'success' => true,
+            'planned_time' => $slot->plannedTimeValue(),
+            'is_scheduled' => (bool) $slot->is_scheduled,
+        ]);
+    }
+    /**
      * Shut the centre for a day, or open it again — a holiday, a snow day.
      *
      * One request grays out every child in every room, which is the only sane

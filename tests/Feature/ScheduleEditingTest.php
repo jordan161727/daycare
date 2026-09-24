@@ -351,10 +351,22 @@ class ScheduleEditingTest extends TestCase
 
         // Every day, with the permission that ticks the checklist.
         $this->assertStringContainsString('return this.editing && this.canEdit;', $html);
-        $this->assertStringContainsString('if (this.canSetExpected(date)) this.toggleOne(childId, date, session);', $html);
 
-        // Ahead of today the cycle is the plan only: no step onto "time".
-        $this->assertStringContainsString("if (date > this.today) {\n            if (this.canSetExpected(date)) this.toggleOne(childId, date, session);\n\n            return;", $html);
+        /*
+         * Ahead of today the tap is the plain yes/no and nothing else.
+         *
+         * That is the question a future column is opened to answer, and the
+         * commonest answer is the awkward one: a child whose record says every
+         * weekday, off tomorrow. One tap has to reach the dot, so the hour they
+         * are booked in for lives on the pencil rather than as a middle step —
+         * see the pencil assertions below and PlannedArrivalTimeTest.
+         */
+        $this->assertStringContainsString('this.toggleOne(childId, date, session);', $html);
+        $this->assertStringContainsString('this.setPlannedTime(childId, date, session, null);', $html);
+
+        // And a typed hour on a future day is routed to the plan before signing
+        // in is ever considered.
+        $this->assertStringContainsString('if (date > this.today) return this.setPlannedTime(childId, date, session, value);', $html);
 
         // The hour is typed through the pencil, never tomorrow: the field
         // opens only where an arrival could be recorded.

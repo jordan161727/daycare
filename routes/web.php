@@ -450,6 +450,10 @@ Route::middleware('role:admin,teacher')->group(function () {
     // never creates it.
     Route::post('/attendance/week/open', [AttendanceController::class, 'openWeek'])->name('attendance.week.open');
     Route::post('/attendance/schedule', [ScheduleController::class, 'update'])->name('attendance.schedule.update');
+
+    // The hour a booked day is booked for. Beside the tick it completes,
+    // and nowhere near the sign-in routes — it writes no attendance.
+    Route::post('/attendance/schedule/time', [ScheduleController::class, 'plannedTime'])->name('attendance.schedule.time');
     Route::post('/attendance/schedule/closure', [ScheduleController::class, 'closure'])->name('attendance.schedule.closure');
 });
 

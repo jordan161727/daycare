@@ -177,9 +177,9 @@ class AttendanceSignInRulesTest extends TestCase
         // rule fell back to "unable to sign in" — which is exactly the wording
         // that helps least, on exactly the errors whose wording helps most.
         $this->assertStringContainsString('Object.values(problem.errors ?? {}).flat()[0]', $html);
-        // Sign in, take off, and move the hour: three requests, one way of
-        // reading whichever rule refused.
-        $this->assertSame(3, substr_count($html, 'Object.values(problem.errors ?? {}).flat()[0]'));
+        // Sign in, take off, move the hour, and book a day still to come in for
+        // an hour: four requests, one way of reading whichever rule refused.
+        $this->assertSame(4, substr_count($html, 'Object.values(problem.errors ?? {}).flat()[0]'));
     }
 
     private function signIn(Child $child, array $overrides = [])

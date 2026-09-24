@@ -85,8 +85,11 @@ class AttendanceCellDesignTest extends TestCase
         $this->assertStringContainsString("classes.push('att-unplanned')", $html);
         $this->assertStringContainsString('class="att-dot"', $html);
 
-        // A day gone by reads quieter; a column this mode cannot touch, quieter still.
-        $this->assertStringContainsString("classes.push('att-history')", $html);
+        // A day gone by is drawn exactly like today — a past arrival keeps its
+        // box. It used to shed it (att-history) so the week sloped down into
+        // today; the centre asked for the same marks in every column. The only
+        // thing that still quietens a column is being untouchable.
+        $this->assertStringNotContainsString("classes.push('att-history')", $html);
         $this->assertStringContainsString("classes.push('att-locked')", $html);
 
         // The old wording is gone: a cell says the time or says it is expected.
@@ -163,7 +166,12 @@ class AttendanceCellDesignTest extends TestCase
 
         // What a tap does, in the mode you are in, from one place.
         $this->assertStringContainsString('x-text="hint"', $html);
-        $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time. The pencil types an exact time.', $html);
+        // It names the two jobs separately now. On a day gone or today a tap
+        // walks the full cycle and the time it lands on is an arrival; on a day
+        // still to come a tap is only the yes/no, and the hour lives on the
+        // pencil because it is the plan rather than a record.
+        $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time.', $html);
+        $this->assertStringContainsString('the pencil sets the hour they are due — which is the plan, not an arrival', $html);
         $this->assertStringContainsString("'Only ' + this.todayLabel + ' can be changed.'", $html);
 
         // Read on the first morning and never again, so the sheet does not open
@@ -358,19 +366,25 @@ class AttendanceCellDesignTest extends TestCase
         // The partial is not empty of calls, or this test proves nothing.
         $this->assertNotEmpty($called);
 
-        // The box states what it is through these two rather than through a
-        // dozen bindings of its own — four hundred boxes, and what each costs
-        // to build is most of what the sheet costs to open.
+        // The box states what it is through a handful of bindings rather than
+        // twenty — four hundred boxes, and what each costs to build is most of
+        // what the sheet costs to open. The static identity goes through the
+        // object; the contents through x-html.
         $this->assertContains('cellAttrs', $called);
         $this->assertContains('cellInner', $called);
 
-        // And the checks that used to be written on the box are still made,
-        // one level in. The locked-column check is what went missing before,
-        // so it is named here rather than left to the loop below.
+        // And the class is bound LIVE, on its own, never through the object.
+        // Alpine applies an x-bind object once at mount and freezes each key,
+        // so a class in there stuck at whatever the cell was first drawn as —
+        // a tapped-off day kept its dashed box around the dot. The locked-
+        // column check stays one level in, because it is stable for the life
+        // of the element (a mode switch reloads the sheet).
+        $this->assertContains('cellClass', $called, 'the class must be a live :class binding in the partial');
+
         preg_match('/cellAttrs\s*\([^)]*\)\s*\{.*?\n    \},/s', $component, $attrs);
         $this->assertNotEmpty($attrs, 'cellAttrs() should be defined on the component');
         $this->assertStringContainsString('canTap(date)', $attrs[0], 'the locked-column check is what went missing before');
-        $this->assertStringContainsString('cellClass(child.id, date, session)', $attrs[0]);
+        $this->assertStringNotContainsString('cellClass(', $attrs[0], 'the class must not go back into the frozen x-bind object');
 
         foreach ($called as $method) {
             $defined = preg_match('/(?:^|\s)(?:get\s+)?'.preg_quote($method, '/').'\s*\([^)]*\)\s*\{/m', $component) === 1

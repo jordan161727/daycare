@@ -194,33 +194,73 @@
     .att-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
     .att-tag { width: 1rem; flex: none; padding-left: 0.2667rem; font-size: 0.6667rem; text-align: left; @apply text-slate-400 dark:text-slate-500; }
     .att-pad { width: 1rem; flex: none; }
+    /* Not attending.
+
+       Quiet on purpose. It is the commonest cell on a sheet sixty rows
+       deep, and anything louder shouts over the arrivals, which are what
+       anybody opening the sheet is looking for. It went black for a
+       morning and the whole page went heavy; this is the shade the centre
+       asked to have back. */
     .att-dot { width: 0.4667rem; height: 0.4667rem; border-radius: 50%; @apply bg-slate-300 dark:bg-slate-600; }
 
     /* The four marks, in the sheet's own colours. */
     /* Two pixels, not one: a single dashed pixel in sky-400 is a few pixels
        of colour spread over a gap, and at arm's length on a bright screen it
        read as an empty cell — which is the one thing it must not, because an
-       empty cell means the child is not expected. Dashed either way: that is
-       what separates "expected" from the solid box of an arrival. */
+       empty cell means the child is not expected. Dashed, like every box on
+       the sheet now — an arrival is told apart by its fill and the time in
+       it, not by the shape of its edge. */
     .att-expected { border-width: 2px; @apply border-dashed border-sky-500 bg-white hover:border-sky-600 dark:border-sky-400/80 dark:bg-transparent dark:hover:border-sky-300; }
+    /* The hour a day still to come is booked for.
+
+       It sits inside the dashed box of .att-expected and takes that box's
+       sky rather than the emerald of an arrival, because those are the two
+       facts most worth never confusing: sky is the plan, emerald is that
+       somebody walked through the door. Lighter than the times beside it
+       too — a column of intentions should not read as loudly as a column
+       of records. */
+    .att-due { font-variant-numeric: tabular-nums; @apply text-sky-700 dark:text-sky-200; }
+    /* Pinned, not inherited. The hour sits inside .att-expected and takes
+       its dashes from it, but "an expected box is dashed" is the one rule
+       the whole future column is read by, so it is written where the hour
+       is too — a solid box round an hour would read as an arrival. */
+    .att-expected:has(.att-due) { border-style: dashed; }
+    /* The dot rides in front of the hour and needs air between the two, or
+       it reads as part of the number. Sky, like the hour it belongs to —
+       the slate dot of an empty cell would look like a fleck of dirt on a
+       box that has something in it. */
+
+    .att-locked .att-due { @apply text-slate-400 dark:text-slate-500; }
+
     .att-none { @apply border-transparent bg-transparent text-slate-300 hover:text-indigo-500 dark:text-slate-600 dark:hover:text-indigo-300; }
-    .att-time { @apply border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
+    /* Dashed like every other box on the sheet. The outline used to be solid
+       to set an arrival apart from a booking, but a solid box beside dashed
+       ones read as a different kind of thing rather than a different state —
+       and on a locked column, where both go grey, the two shapes were the
+       only difference and the difference meant nothing. The fill and the
+       time inside are what say "they came"; the outline just says "box". */
+    .att-time { border-width: 2px; @apply border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
     .att-time .att-tag { @apply text-emerald-700 dark:text-emerald-200; }
     .att-time.att-unplanned { @apply border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100; }
     .att-time.att-unplanned .att-tag { @apply text-amber-800 dark:text-amber-100; }
     .att-closed { @apply text-rose-300 hover:text-rose-500 dark:text-rose-500/50 dark:hover:text-rose-300; }
     .att-closed .att-dot { @apply bg-rose-200 dark:bg-rose-500/40; }
 
-    /* A day gone by reads quieter than today: the time stays, the box does not,
-       until the pointer is over it. */
-    .att-history.att-time { @apply border-transparent bg-transparent text-slate-500 dark:text-slate-400; }
-    .att-cell.att-history.att-time:hover { @apply border-slate-400 bg-slate-50 dark:border-white/30 dark:bg-white/5; }
+    /* There is no .att-history any more. A past arrival used to shed its box
+       so the week read as a slope down into today; the centre asked for the
+       same three marks drawn the same way in every column, and a reader
+       correcting last week now sees the sheet they see today. The only thing
+       that still quietens a column is being untouchable — .att-locked, below. */
 
     /* Nothing to do here: the shape stays so the row still lines up, the
        colour goes so nobody reaches for it. */
     .att-locked { cursor: default; @apply text-slate-400 dark:text-slate-500; }
     .att-locked.att-expected, .att-locked.att-time { @apply border-slate-300 bg-transparent text-slate-400 dark:border-white/20 dark:text-slate-500; }
-    .att-locked .att-dot { @apply bg-slate-300 dark:bg-white/25; }
+    /* The dot is not quietened on a locked cell, the way the box and the
+       time are. It is the same fact in Live as in Edit — this child is not
+       coming — and a mark that changes weight when the mode changes reads
+       as a different mark. The box fades because it becomes untouchable;
+       the dot stays, because it was never a control. */
     .att-locked .att-tag { @apply text-slate-400 dark:text-slate-500; }
 
     /* The strip on the right of a time, in Edit: press it to type the exact
@@ -820,7 +860,6 @@
         from { transform: translateX(-200px) scale(var(--s, 1)); }
         to { transform: translateX(calc(100vw + 200px)) scale(var(--s, 1)); }
     }
-
 
     /*
      * The kiosk strength.
