@@ -64,8 +64,14 @@ class LayoutChromeTest extends TestCase
      * requests that really are waiting. Restore the count assertions with the
      * link.
      */
-    public function test_the_leave_nav_is_parked_for_both_roles(): void
+    public function test_the_directors_leave_queue_is_live_and_my_leave_is_parked(): void
     {
+        /*
+         * The sidebar as the centre set it on 2026-09-29: the director's
+         * queue is back, with the count of requests waiting on it; a
+         * teacher's own "My Leave" is still parked. So the count assertions
+         * come back with the link, as the note above always said they would.
+         */
         $admin = User::factory()->create(['role' => 'admin']);
         $teacher = User::factory()->create(['role' => 'teacher']);
 
@@ -80,14 +86,17 @@ class LayoutChromeTest extends TestCase
             ]);
         }
 
-        foreach ([$admin, $teacher] as $user) {
-            $this->actingAs($user)->get(route('dashboard'))->assertOk()
-                ->assertDontSee('Leave Requests')
-                ->assertDontSee('My Leave')
-                // Two requests are pending: the badge that would count them
-                // must not arrive on its own.
-                ->assertDontSee('rounded-full bg-amber-500', escape: false);
-        }
+        // The director: the queue, and the two waiting on it.
+        $this->actingAs($admin)->get(route('dashboard'))->assertOk()
+            ->assertSee('Leave Requests')
+            ->assertSee('rounded-full bg-amber-500', escape: false)
+            ->assertDontSee('My Leave');
+
+        // A teacher: neither link, and no badge that is not theirs to see.
+        $this->actingAs($teacher)->get(route('dashboard'))->assertOk()
+            ->assertDontSee('Leave Requests')
+            ->assertDontSee('My Leave')
+            ->assertDontSee('rounded-full bg-amber-500', escape: false);
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void

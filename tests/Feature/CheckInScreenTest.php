@@ -53,7 +53,10 @@ class CheckInScreenTest extends TestCase
             ->assertOk()
             ->assertSee('Check in')
             ->assertSee('Adkins', false)
-            ->assertSee('Symptom codes')
+            // The codes reach the page as data for the dialog's dropdown; the
+            // "Symptom codes" key that used to sit in the header came off at
+            // the centre's request.
+            ->assertDontSee('Symptom codes')
             ->assertSee('Vomiting');
     }
 
@@ -203,6 +206,82 @@ class CheckInScreenTest extends TestCase
         // And the dialog drives the same two endpoints the sheet does.
         $this->assertStringContainsString("leaving ? '/check-in/' + day.id + '/out' : '/check-in'", $html);
         $this->assertStringContainsString('Defaults to 0 · Normal', $html);
+    }
+
+    /*
+     * Edit mode is where the symptom codes are corrected, and a director can
+     * choose the day — the way the register lets a week be chosen. A day
+     * already gone opens in Edit, its checks are corrected through the health
+     * endpoint (codes only; the times are the register's), and nobody else is
+     * shown anything but today whatever the address says.
+     */
+    public function test_a_director_can_open_a_day_already_gone_to_edit_its_checks(): void
+    {
+        $html = $this->actingAs($this->admin)
+            ->get(route('check-in.index', ['date' => '2026-09-21']))
+            ->assertOk()
+            ->getContent();
+
+        // The roster is about that day, and it opens in Edit.
+        $this->assertStringContainsString("day: '2026-09-21'", $html);
+        $this->assertStringContainsString('editing: true,', $html);
+        $this->assertStringContainsString('Monday, Sep 21 · editing', $html);
+
+        // The day is chosen from a field that stops at today.
+        $this->assertStringContainsString('type="date" value="2026-09-21" max="'.today()->toDateString().'"', $html);
+
+        /*
+         * And the day is edited through the register, not beside it: the
+         * arrival through its sign-in, the times through its retime, the
+         * removal through its remove — each writing attendance_amendments —
+         * and the checks through the health endpoint. One record, one trail.
+         */
+        // @js writes the address single-quoted with its slashes escaped, so
+        // the assertion is on the route's own path in that form.
+        $this->assertStringContainsString("signIn: '", $html);
+        $this->assertStringContainsString('attendance\/sign-in\'', $html);
+        $this->assertStringContainsString('attendance\/sign-in\/retime\'', $html);
+        $this->assertStringContainsString('attendance\/sign-in\/remove\'', $html);
+        $this->assertStringContainsString("post(this.urls.signIn, {", $html);
+        $this->assertStringContainsString("post(this.urls.retime, { ...base, ...times })", $html);
+        $this->assertStringContainsString("window.postJson(this.urls.remove,", $html);
+        $this->assertStringContainsString("post('/attendance/' + day.id + '/health', { direction, code, note:", $html);
+        $this->assertStringContainsString('id="ci-in" type="time"', $html);
+        $this->assertStringContainsString('id="ci-out" type="time"', $html);
+        $this->assertStringContainsString('Not attending — remove this day', $html);
+    }
+
+    public function test_today_opens_live_with_the_day_field_hidden_until_edit(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString("day: '".today()->toDateString()."'", $html);
+        $this->assertStringContainsString('editing: false,', $html);
+        // The field is there for the director, behind the switch.
+        $this->assertStringContainsString('x-show="editing" x-cloak class="flex items-center gap-1.5', $html);
+    }
+
+    public function test_a_day_still_to_come_is_shown_as_today(): void
+    {
+        $html = $this->actingAs($this->admin)
+            ->get(route('check-in.index', ['date' => today()->addDays(3)->toDateString()]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString("day: '".today()->toDateString()."'", $html);
+    }
+
+    public function test_only_a_director_can_choose_the_day(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher', 'classroom' => 'PreK']);
+
+        $html = $this->actingAs($teacher)
+            ->get(route('check-in.index', ['date' => '2026-09-21']))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString("day: '".today()->toDateString()."'", $html);
+        $this->assertStringNotContainsString('type="date"', $html);
     }
 
     public function test_the_sheet_is_still_a_tab_away(): void

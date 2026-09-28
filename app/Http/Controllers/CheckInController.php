@@ -48,6 +48,27 @@ class CheckInController extends Controller
         $user = $request->user();
         $today = today()->toDateString();
 
+        /*
+         * The day the roster is about.
+         *
+         * Today, unless a director has asked for a day already gone — the
+         * way the register lets a week be chosen — to put its symptom codes
+         * right. Anybody else is shown today whatever the address says: a
+         * past day here is for correcting, and correcting is the director's.
+         */
+        $requested = (string) $request->input('date');
+        $date = $user->isAdmin() && preg_match('/^\d{4}-\d{2}-\d{2}$/', $requested) && strtotime($requested) !== false
+            ? Carbon::parse($requested)->toDateString()
+            : $today;
+
+        // Never a day that has not happened: there is nothing on it to edit,
+        // and a roster of a future day would invite arrivals that are guesses.
+        if ($date > $today) {
+            $date = $today;
+        }
+
+        $anchor = Carbon::parse($date);
+
         // Room decides which block a child is filtered into, so it has to be
         // current before anything is grouped.
         ClassroomAssignment::syncAll();
@@ -66,9 +87,10 @@ class CheckInController extends Controller
          */
         $span = $request->input('span') === self::MONTH ? self::MONTH : self::WEEK;
 
+        // Built around the day being looked at, so its rows are always here.
         [$start, $end] = $span === self::WEEK
-            ? [today()->startOfWeek(Carbon::MONDAY), today()->endOfWeek(Carbon::SUNDAY)]
-            : [today()->startOfMonth(), today()->endOfMonth()];
+            ? [$anchor->copy()->startOfWeek(Carbon::MONDAY), $anchor->copy()->endOfWeek(Carbon::SUNDAY)]
+            : [$anchor->copy()->startOfMonth(), $anchor->copy()->endOfMonth()];
 
         $days = collect(range(0, $start->diffInDays($end)))
             ->map(fn (int $offset) => $start->copy()->addDays($offset));
@@ -211,6 +233,8 @@ class CheckInController extends Controller
             // way in — this only decides whether the switch is offered.
             'canAmend' => $user->isAdmin(),
             'span' => $span,
+            // The day the roster shows. Today unless a director chose one.
+            'date' => $date,
             // The roster is what the screen opens on: one card a child, today
             // only, worked from a door. The four-line sheet is a tab away for
             // the glance sideways — did she come yesterday, is he in tomorrow.

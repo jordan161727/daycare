@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\Concerns\PlacesChildrenInRooms;
 use Tests\TestCase;
 
@@ -64,6 +65,12 @@ class ReportSheetTest extends TestCase
 
     public function test_sheet_shows_rooms_dates_and_dates_of_birth(): void
     {
+        // A fixed date of birth has to be read against a fixed today, or the
+        // child ages out of Infant on the calendar's own schedule: born
+        // 2025-03-28, she turned eighteen months — Transition — on
+        // 2026-09-28, and this test broke that morning with nothing changed.
+        $this->travelTo(Carbon::parse('2026-07-27 09:00:00'));
+
         $this->makeChild('Lovelace', 'Ada', 'Infant', '2025-03-28');
 
         $response = $this->actingAs($this->admin)

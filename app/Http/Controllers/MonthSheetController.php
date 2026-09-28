@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\MonthSheetExport;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\SymptomCode;
+use App\Models\User;
 use App\Services\ClassroomAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Maatwebsite\Excel\Facades\Excel;
 
 /**
  * The month on one page: the paper sheet the centre already keeps.
@@ -41,6 +44,53 @@ class MonthSheetController extends Controller
         $month = (int) ($request->input('month') ?: today()->month);
         $year = (int) ($request->input('year') ?: today()->year);
 
+        $sheet = $this->month($user, $month, $year);
+
+        return view('attendance.month-sheet', $sheet + [
+            'month' => $month,
+            'year' => $year,
+            'codes' => SymptomCode::active(),
+        ]);
+    }
+
+    /**
+     * The month as the paper form, as a workbook — a sheet per room.
+     *
+     * Same rows the page is drawn from, so the file and the screen cannot
+     * disagree; ?room= narrows it to one room's sheet, which is how the form
+     * is actually kept.
+     */
+    public function export(Request $request)
+    {
+        validator($request->only('month', 'year', 'room'), [
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'year' => ['nullable', 'integer', 'between:2000,2100'],
+            'room' => ['nullable', 'string', 'max:60'],
+        ])->validate();
+
+        $month = (int) ($request->input('month') ?: today()->month);
+        $year = (int) ($request->input('year') ?: today()->year);
+        $room = trim((string) $request->input('room')) ?: null;
+
+        $sheet = $this->month($request->user(), $month, $year);
+
+        $name = 'attendance-'.$sheet['start']->format('Y-m').($room ? '-'.str_replace(' ', '-', strtolower($room)) : '').'.xlsx';
+
+        return Excel::download(
+            new MonthSheetExport($sheet['rows'], $sheet['days'], $sheet['perDay'], $month, $year, $room),
+            $name,
+        );
+    }
+
+    /**
+     * The month, built once for the page and the file.
+     *
+     * Public so the export and its tests can ask for it directly.
+     *
+     * @return array{rows: \Illuminate\Support\Collection, days: \Illuminate\Support\Collection, perDay: array<string, int>, monthTotal: int, start: Carbon, stats: array, roomChips: \Illuminate\Support\Collection}
+     */
+    public function month(User $user, int $month, int $year): array
+    {
         $start = Carbon::create($year, $month, 1)->startOfDay();
         $end = $start->copy()->endOfMonth();
 
@@ -144,18 +194,9 @@ class MonthSheetController extends Controller
             $perDay[$iso] = $rows->filter(fn (array $row) => ($row['byDay'][$iso]['in'] ?? null) !== null)->count();
         }
 
-        return view('attendance.month-sheet', [
-            'rows' => $rows,
-            'days' => $days,
-            'perDay' => $perDay,
-            'monthTotal' => array_sum($perDay),
-            'month' => $month,
-            'year' => $year,
-            'start' => $start,
-            'stats' => $stats,
-            'roomChips' => $roomChips,
-            'codes' => SymptomCode::active(),
-        ]);
+        $monthTotal = array_sum($perDay);
+
+        return compact('rows', 'days', 'perDay', 'monthTotal', 'start', 'stats', 'roomChips');
     }
 
     /**

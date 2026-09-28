@@ -24,9 +24,30 @@
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 class="text-xl font-bold tracking-tight">Check in</h1>
-        <span class="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">
-            {{ \Illuminate\Support\Carbon::parse($today)->format('l, M j') }}
+        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $date === $today ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200' }}">
+            {{ \Illuminate\Support\Carbon::parse($date)->format('l, M j') }}{{ $date === $today ? '' : ' · editing' }}
         </span>
+
+        @if($canAmend)
+            {{-- The day to look at, as the register lets a week be chosen.
+                 Only in Edit: Live is today at the door and nothing else. A
+                 new day is a new page — the rows are the server's — so the
+                 choice is in the address and a bookmark to it stays put. --}}
+            <label x-show="editing" x-cloak class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <span class="sr-only">Day to edit</span>
+                <input type="date" value="{{ $date }}" max="{{ $today }}" @change="goTo($event.target.value)"
+                       class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800">
+            </label>
+            @if($date !== $today)
+                {{-- The way back. A day already gone is a detour; today is where
+                     this screen lives, and it should be one press away. --}}
+                <a href="{{ route('check-in.index') }}" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Today</a>
+            @endif
+            {{-- The month this day is in, as the paper form: a sheet per room,
+                 four lines a child, a column a day, the totals along the foot. --}}
+            <a x-show="editing" x-cloak href="{{ route('attendance.month-sheet.export', ['month' => \Illuminate\Support\Carbon::parse($date)->month, 'year' => \Illuminate\Support\Carbon::parse($date)->year]) }}"
+               class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Export month</a>
+        @endif
 
         {{-- No Week/Month tabs here, at the centre's request: this screen is
              today's roster and nothing else on the face of it. The four-line
@@ -56,22 +77,6 @@
             </div>
         @endif
 
-        <button type="button" @click="legendOpen = ! legendOpen" :aria-expanded="legendOpen"
-                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">
-            <span class="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"></span>
-            Symptom codes
-        </button>
-    </div>
-
-    <div x-show="legendOpen" x-cloak class="glass-card mt-3 rounded-2xl p-4">
-        <ul class="grid gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
-            @foreach($codes as $code)
-                <li class="flex items-center gap-2 text-sm">
-                    <span class="att-chip {{ $code['code'] === 0 ? 'att-chip-ok' : 'att-chip-sick' }}">{{ $code['code'] }}</span>
-                    <span>{{ $code['label'] }}{{ $code['requires_note'] ? ' (specify)' : '' }}</span>
-                </li>
-            @endforeach
-        </ul>
     </div>
 
     {{-- The sheet: four lines a child, a column a day. The other tab. It is
@@ -297,7 +302,10 @@
     </div>
 
     {{-- The card's dialog: the health code, and the clock. --}}
-    <template x-if="child">
+    {{-- Driven by a flag, not by the child being null: Alpine re-evaluates the
+         bindings inside an x-if on the way to removing them, and against a null
+         child every one of them threw. The child stays; the flag closes it. --}}
+    <template x-if="dialogOpen && child">
         <div class="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" :aria-labelledby="'child-name-' + child.id" @keydown.escape.window="closeChild()">
             <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" @click="closeChild()" aria-hidden="true"></div>
 
@@ -309,9 +317,77 @@
                 <p class="mt-0.5 text-sm text-slate-500 dark:text-slate-400" x-text="child.room + ' · ' + child.lan"></p>
                 <span class="mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold"
                       :class="isIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
-                      x-text="isIn(child) ? '✓ On premises · in at ' + today_of(child).in : (isOut(child) ? '○ Left at ' + today_of(child).out : '○ Currently out')"></span>
+                      x-text="isIn(child) ? '✓ On premises · in at ' + dayOf(child).in : (isOut(child) ? '○ Left at ' + dayOf(child).out : '○ Currently out')"></span>
 
-                <template x-if="! isOut(child)">
+                {{-- Correcting the checks. A day already gone, or Edit on a
+                     child who is already in today: the arrival check, and
+                     the leaving check once there is one. Codes only — the
+                     times on a day gone are the register's to correct. --}}
+                <template x-if="correcting(child)">
+                    <form class="mt-5 text-left" @submit.prevent="saveDay()">
+                        {{-- The times. Written through the register's own sign-in
+                             and retime endpoints, so a time set here is a time
+                             set on the register — same row, same amendment
+                             record of who changed it. A day with no arrival
+                             takes one from here for the same reason. --}}
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="ci-in" class="block text-sm font-semibold">In</label>
+                                <input id="ci-in" type="time" step="60" x-model="inTime" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums dark:border-white/10 dark:bg-night-800">
+                            </div>
+                            <div>
+                                <label for="ci-out" class="block text-sm font-semibold">Out</label>
+                                <input id="ci-out" type="time" step="60" x-model="outTime" :disabled="! inTime" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums disabled:opacity-40 dark:border-white/10 dark:bg-night-800">
+                            </div>
+                        </div>
+                        <p x-show="! dayOf(child)" class="mt-2 text-xs text-slate-500 dark:text-slate-400">No arrival is recorded for this day. Give an In time to record one.</p>
+
+                        <template x-if="dayOf(child) || inTime">
+                            <div class="mt-4 space-y-4">
+                                <div>
+                                    <label for="ci-code-in" class="block text-sm font-semibold">Arrival check</label>
+                                    <select id="ci-code-in" x-model.number="codeIn" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-night-800">
+                                        <template x-for="entry in codes" :key="'in-' + entry.code">
+                                            <option :value="entry.code" x-text="entry.code + ' · ' + entry.label"></option>
+                                        </template>
+                                    </select>
+                                    <textarea x-show="needsNote(codeIn)" x-cloak x-model="noteIn" rows="2" maxlength="120" placeholder="What was seen — required for “Other”"
+                                              class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-night-800"></textarea>
+                                </div>
+
+                                <template x-if="outTime">
+                                    <div>
+                                        <label for="ci-code-out" class="block text-sm font-semibold">Leaving check</label>
+                                        <select id="ci-code-out" x-model.number="codeOut" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-night-800">
+                                            <template x-for="entry in codes" :key="'out-' + entry.code">
+                                                <option :value="entry.code" x-text="entry.code + ' · ' + entry.label"></option>
+                                            </template>
+                                        </select>
+                                        <textarea x-show="needsNote(codeOut)" x-cloak x-model="noteOut" rows="2" maxlength="120" placeholder="What was seen — required for “Other”"
+                                                  class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-night-800"></textarea>
+                                    </div>
+                                </template>
+
+                                <p x-show="error" x-cloak class="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300" x-text="error"></p>
+
+                                <button type="submit" :disabled="saving || ! dayChanged()"
+                                        class="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                        x-text="saving ? 'Saving…' : (dayOf(child) ? 'Save changes' : 'Record arrival')"></button>
+                            </div>
+                        </template>
+
+                        {{-- Take the arrival off the day. Through the register's
+                             remove endpoint, which writes the removal down. --}}
+                        <template x-if="dayOf(child)">
+                            <button type="button" @click="removeDay()" :disabled="saving"
+                                    class="mt-3 w-full rounded-xl border border-rose-200 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-40 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10">
+                                Not attending — remove this day's arrival
+                            </button>
+                        </template>
+                    </form>
+                </template>
+
+                <template x-if="! correcting(child) && ! isOut(child)">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
                         <label for="ci-code" class="block text-sm font-semibold">Health code</label>
                         <select id="ci-code" x-model.number="code" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-night-800">
@@ -337,9 +413,10 @@
                     </form>
                 </template>
 
-                <template x-if="isOut(child)">
+                <template x-if="! correcting(child) && isOut(child)">
                     <p class="mt-5 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-500 dark:bg-white/5 dark:text-slate-400">
-                        Checked in at <b x-text="today_of(child).in"></b> and out at <b x-text="today_of(child).out"></b>. The codes can be corrected on the sheet.
+                        Checked in at <b x-text="dayOf(child).in"></b> and out at <b x-text="dayOf(child).out"></b>.
+                        @if($canAmend) Switch <b>Edit mode</b> on to correct the checks. @endif
                     </p>
                 </template>
             </div>
@@ -395,14 +472,15 @@ function checkInGrid() { return {
     codes: @js($codes),
     today: @js($today),
     canAmend: @js($canAmend),
-    editing: false,
+    // A day already gone is only ever here to be edited, so the switch
+    // starts on for one. Today opens Live, at the door.
+    editing: @js($date !== $today && $canAmend),
     icons: {
         lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
         edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
     },
     search: '',
     room: '',
-    legendOpen: false,
     picker: null,
     note: '',
     error: '',
@@ -414,11 +492,177 @@ function checkInGrid() { return {
        from those rows on each read rather than carried as a running total,
        so a card and the number above it can never disagree. */
     view: @js($view),
-    child: null,      // the card open in the dialog, if any
+    day: @js($date),  // the day the roster is about: today, or the one a director chose
+    child: null,      // the card last opened in the dialog
+    dialogOpen: false,
     code: 0,
+    codeIn: 0,        // the checks being corrected, and what they were
+    noteIn: '',
+    codeOut: 0,
+    noteOut: '',
+    inTime: '',       // the times, as the fields hold them: "08:05"
+    outTime: '',
+    was: null,
+    urls: {
+        signIn: @js(route('attendance.signin')),
+        retime: @js(route('attendance.signin.retime')),
+        remove: @js(route('attendance.signin.remove')),
+    },
+
+    /** "8:05a" as a time field wants it: "08:05". */
+    timeValue(short) {
+        const match = /^(\d{1,2}):(\d{2})([ap])$/.exec(short || '');
+        if (! match) return '';
+        let hours = Number(match[1]) % 12;
+        if (match[3] === 'p') hours += 12;
+        return String(hours).padStart(2, '0') + ':' + match[2];
+    },
     toast: '',
     toastTimer: null,
 
+    /** Another day: a new page, so the rows are the server's. */
+    goTo(date) {
+        if (! date) return;
+        window.location.assign('/check-in?date=' + date);
+    },
+
+    /**
+     * Whether the dialog is correcting checks rather than clocking.
+     *
+     * Always on a day already gone — nothing is clocked there. Today, only
+     * in Edit and only on a child who has already arrived: their arrival
+     * check can be put right (and the leaving one, once there is one). A
+     * child not yet in is clocked in, Edit or not, because that is what a
+     * card at the door is for.
+     */
+    correcting(row) {
+        if (this.day !== this.today) return true;
+        return this.editing && !! this.dayOf(row);
+    },
+
+    /** Whether anything in the form differs from what the day holds. */
+    dayChanged() {
+        if (! this.was) return this.inTime !== '';
+
+        return this.inTime !== this.timeValue(this.was.in)
+            || (this.outTime || '') !== this.timeValue(this.was.out)
+            || this.codeIn !== this.was.in_code || (this.noteIn || '') !== (this.was.in_note || '')
+            || (this.outTime && (this.codeOut !== this.was.out_code || (this.noteOut || '') !== (this.was.out_note || '')));
+    },
+
+    /**
+     * Save the day as the form has it.
+     *
+     * In order: the arrival, if the day had none (the register's sign-in,
+     * which takes the arrival check with it); the times, if they moved (the
+     * register's retime); the checks, if they changed (the health endpoint,
+     * which knows a past day is the director's). Every one of those writes
+     * its own audit entry, so a day edited here reads on the register exactly
+     * as if it had been edited there — because it was.
+     */
+    async saveDay() {
+        if (! this.child || this.saving || ! this.dayChanged()) return;
+
+        const row = this.child;
+        let day = this.dayOf(row);
+
+        if (! this.inTime) {
+            this.error = 'An In time is needed.';
+            return;
+        }
+
+        for (const [code, note] of [[this.codeIn, this.noteIn], ...(this.outTime ? [[this.codeOut, this.noteOut]] : [])]) {
+            if (this.needsNote(code) && ! (note || '').trim()) {
+                this.error = 'That code needs a short note saying what was seen.';
+                return;
+            }
+        }
+
+        this.saving = true;
+        this.error = '';
+
+        const post = async (url, body) => {
+            const response = await window.postJson(url, body);
+            const data = await response.json().catch(() => ({}));
+            if (! response.ok) {
+                throw new Error(Object.values(data.errors ?? {}).flat()[0] || data.message || 'That could not be saved.');
+            }
+            return data;
+        };
+
+        try {
+            const base = { child_id: row.id, attendance_date: this.day, session: row.session };
+
+            // 1. No arrival yet: record one, with its check, in one request.
+            if (! day) {
+                const made = await post(this.urls.signIn, {
+                    ...base, signed_in_time: this.inTime,
+                    health_code: this.codeIn, health_note: (this.noteIn || '').trim() || null,
+                });
+                day = { id: made.attendance_id, in: made.time, in_code: made.health_in_code, in_note: made.health_in_note, out: null, out_code: null, out_note: null };
+            }
+
+            // 2. The times, where they moved.
+            const times = {};
+            if (this.inTime !== this.timeValue(day.in)) times.signed_in_time = this.inTime;
+            if ((this.outTime || '') !== this.timeValue(day.out) && this.outTime) times.signed_out_time = this.outTime;
+
+            if (Object.keys(times).length) {
+                const moved = await post(this.urls.retime, { ...base, ...times });
+                day = { ...day, in: moved.time, out: moved.out_time };
+            }
+
+            // 3. The checks, where they changed.
+            const checks = [];
+            if (this.codeIn !== day.in_code || (this.noteIn || '') !== (day.in_note || '')) checks.push(['in', this.codeIn, this.noteIn]);
+            if (day.out && (this.codeOut !== day.out_code || (this.noteOut || '') !== (day.out_note || ''))) checks.push(['out', this.codeOut, this.noteOut]);
+
+            for (const [direction, code, note] of checks) {
+                const data = await post('/attendance/' + day.id + '/health', { direction, code, note: (note || '').trim() || null });
+                if (direction === 'out') { day = { ...day, out_code: data.code, out_note: data.note }; }
+                else { day = { ...day, in_code: data.code, in_note: data.note }; }
+            }
+
+            this.rows[row.id].byDay[this.day] = day;
+            this.rows = { ...this.rows };
+
+            this.closeChild();
+            this.toast = row.display + ': day saved';
+            clearTimeout(this.toastTimer);
+            this.toastTimer = setTimeout(() => { this.toast = ''; }, 4500);
+        } catch (error) {
+            this.error = error.message || 'That could not be saved. Check the connection and try again.';
+        } finally {
+            this.saving = false;
+        }
+    },
+
+    /** Take the arrival off the day, through the register's remove endpoint. */
+    async removeDay() {
+        if (! this.child || this.saving || ! this.dayOf(this.child)) return;
+
+        const row = this.child;
+        this.saving = true;
+        this.error = '';
+
+        try {
+            const response = await window.postJson(this.urls.remove, { child_id: row.id, attendance_date: this.day, session: row.session });
+            const data = await response.json().catch(() => ({}));
+            if (! response.ok) throw new Error(data.message || 'That could not be removed.');
+
+            delete this.rows[row.id].byDay[this.day];
+            this.rows = { ...this.rows };
+
+            this.closeChild();
+            this.toast = row.display + ': arrival removed';
+            clearTimeout(this.toastTimer);
+            this.toastTimer = setTimeout(() => { this.toast = ''; }, 4500);
+        } catch (error) {
+            this.error = error.message;
+        } finally {
+            this.saving = false;
+        }
+    },
     /** The rooms, in order, with their animal — from the rows themselves. */
     get rooms() {
         const seen = {};
@@ -435,12 +679,19 @@ function checkInGrid() { return {
             .sort((a, b) => a.display.localeCompare(b.display));
     },
 
-    today_of(row) { return row.byDay?.[this.today] ?? null; },
-    isIn(row) { const day = this.today_of(row); return !! (day && day.in && ! day.out); },
-    isOut(row) { const day = this.today_of(row); return !! (day && day.out); },
+    /** The row's record on the day being looked at. */
+    dayOf(row) { return row?.byDay?.[this.day] ?? null; },
+    isIn(row) { const day = this.dayOf(row); return !! (day && day.in && ! day.out); },
+    isOut(row) { const day = this.dayOf(row); return !! (day && day.out); },
     stateOf(row) {
-        if (this.isIn(row)) return 'In · ' + this.today_of(row).in;
-        if (this.isOut(row)) return 'Out · ' + this.today_of(row).out;
+        const day = this.dayOf(row);
+        if (this.day !== this.today) {
+            // A day gone is read, not lived: what happened, with its codes.
+            if (! day) return 'No arrival';
+            return 'In ' + day.in + (day.out ? ' · Out ' + day.out : '') + ' · code ' + (day.in_code ?? '—');
+        }
+        if (this.isIn(row)) return 'In · ' + day.in;
+        if (this.isOut(row)) return 'Out · ' + day.out;
         return 'Currently out';
     },
 
@@ -452,13 +703,26 @@ function checkInGrid() { return {
 
     openChild(id) {
         this.child = this.rows[id] ?? null;
+        this.dialogOpen = this.child !== null;
         this.code = 0;
         this.note = '';
         this.error = '';
+
+        // What the checks are now, so the form opens on them and Save only
+        // lights up when something is actually different.
+        const day = this.child ? this.dayOf(this.child) : null;
+        this.was = day ? { ...day } : null;
+        this.codeIn = day?.in_code ?? 0;
+        this.noteIn = day?.in_note || '';
+        this.codeOut = day?.out_code ?? 0;
+        this.noteOut = day?.out_note || '';
+        this.inTime = this.timeValue(day?.in);
+        this.outTime = this.timeValue(day?.out);
     },
 
     closeChild() {
-        this.child = null;
+        // The child is left in place — see the dialog's x-if.
+        this.dialogOpen = false;
         this.note = '';
         this.error = '';
     },
@@ -482,7 +746,7 @@ function checkInGrid() { return {
         }
 
         const row = this.child;
-        const day = this.today_of(row);
+        const day = this.dayOf(row);
         const leaving = this.isIn(row);
 
         this.saving = true;

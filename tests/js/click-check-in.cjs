@@ -23,10 +23,21 @@ const [, , pagePath, alpinePath] = process.argv;
 let html = fs.readFileSync(pagePath, 'utf8');
 const alpine = fs.readFileSync(alpinePath, 'utf8');
 
+// The network is stubbed: every postJson() call is recorded and answered as
+// the server would answer a clock-in, so the whole path from the button to
+// the card's new state runs without a server — and a broken handler throws
+// here instead of in a room at eight in the morning.
+const stub = `
+window.__posted = [];
+window.postJson = async (url, body) => {
+    window.__posted.push({ url, body });
+    return { ok: true, json: async () => ({ success: true, attendance_id: 1, session: 'FULL', in_at: '8:42a', out_at: null, health_in: body.health_code ?? 0, health_in_note: null, health_out: null, health_out_note: null }) };
+};`;
+
 html = html
     .replace(/<link[^>]+(preload|modulepreload|stylesheet)[^>]*>/g, '')
     .replace(/<script type="module"[^>]*><\/script>/g, '')
-    .replace('</body>', '<script>' + alpine + '</script></body>');
+    .replace('</body>', '<script>' + stub + '</script><script>' + alpine + '</script></body>');
 
 // Only errors from our own component matter. The layout's shell (appShell,
 // collapsed, dark…) lives in the bundle that is not loaded here.
@@ -59,6 +70,18 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 50));
             result.heading = dialog.querySelector('h2')?.textContent.trim() ?? null;
             result.options = dialog.querySelectorAll('select#ci-code option').length;
             result.button = dialog.querySelector('button[type="submit"]')?.textContent.trim() ?? null;
+
+            // Press Clock in. The form's @submit.prevent runs clockChild().
+            const form = dialog.querySelector('form');
+            if (form) {
+                form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+                await tick(); await tick(); await tick();
+            }
+
+            result.posted = window.__posted;
+            result.dialogAfter = !! doc.querySelector('[role="dialog"][aria-modal="true"]');
+            result.toast = doc.querySelector('[role="status"]')?.textContent.trim() ?? '';
+            result.cardState = doc.querySelector('button[aria-label*="Open attendance"] span.mt-2')?.textContent.trim() ?? null;
         }
     }
 

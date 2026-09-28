@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Attendance;
+use App\Models\AttendanceAmendment;
 use App\Models\Child;
 use App\Models\User;
 use App\Services\WeekSchedule;
@@ -38,6 +39,82 @@ class AttendanceCorrectionTest extends TestCase
 
         $this->travelTo(Carbon::parse(self::WEDNESDAY.' 09:00:00'));
         $this->admin = User::factory()->create(['role' => 'admin']);
+    }
+
+    /*
+     * The leaving time can be corrected too. It never could, anywhere: a child
+     * who left at four and was clocked out at six was a day paid wrong with
+     * nothing able to say so. Check In's Edit mode needed it, and it is the
+     * register's endpoint that does it — logged like any other retime.
+     */
+    public function test_the_leaving_time_can_be_moved(): void
+    {
+        $child = $this->makeChild();
+
+        Attendance::create([
+            'child_id' => $child->id,
+            'attendance_date' => '2026-09-14',
+            'session' => 'FULL',
+            'signed_in_at' => Carbon::parse('2026-09-14 08:00'),
+            'signed_out_at' => Carbon::parse('2026-09-14 18:00'),
+        ]);
+
+        $json = $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-14',
+                'session' => 'FULL',
+                'signed_out_time' => '16:00',
+            ])
+            ->assertOk()
+            ->json();
+
+        $attendance = Attendance::sole();
+
+        $this->assertSame('16:00', $attendance->signed_out_at->format('H:i'));
+        $this->assertSame('08:00', $attendance->signed_in_at->format('H:i'), 'the arrival is untouched');
+        $this->assertSame('4:00p', $json['out_time']);
+        $this->assertSame($attendance->id, $json['attendance_id']);
+
+        // Written down like any other move of a time on a day already gone.
+        $this->assertSame(AttendanceAmendment::RETIMED, AttendanceAmendment::sole()->action);
+    }
+
+    public function test_a_leaving_time_before_the_arrival_is_refused(): void
+    {
+        $child = $this->makeChild();
+
+        Attendance::create([
+            'child_id' => $child->id,
+            'attendance_date' => '2026-09-14',
+            'session' => 'FULL',
+            'signed_in_at' => Carbon::parse('2026-09-14 08:00'),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-14',
+                'session' => 'FULL',
+                'signed_out_time' => '07:30',
+            ])
+            ->assertStatus(422);
+
+        $this->assertNull(Attendance::sole()->signed_out_at);
+    }
+
+    public function test_a_retime_with_neither_time_is_refused(): void
+    {
+        $child = $this->makeChild();
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-14',
+                'session' => 'FULL',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['signed_in_time', 'signed_out_time']);
     }
 
     public function test_a_day_already_gone_this_week_can_be_put_right(): void

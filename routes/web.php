@@ -438,6 +438,11 @@ Route::post('/attendance/sign-in', [AttendanceController::class, 'signIn'])
  */
 Route::get('/attendance/month-sheet', [MonthSheetController::class, 'index'])->name('attendance.month-sheet');
 
+// The month as the paper form, as a workbook: a sheet per room, four lines a
+// child, a column a day, the totals along the foot. Built from the same rows
+// the page above draws, so the file and the screen cannot disagree.
+Route::get('/attendance/month-sheet/export', [MonthSheetController::class, 'export'])->name('attendance.month-sheet.export');
+
 Route::get('/check-in', [CheckInController::class, 'index'])->name('check-in.index');
 Route::post('/check-in', [CheckInController::class, 'store'])->name('check-in.store');
 Route::post('/check-in/{attendance}/in', [CheckInController::class, 'in'])

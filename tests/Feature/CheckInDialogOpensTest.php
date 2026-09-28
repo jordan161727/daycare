@@ -72,6 +72,23 @@ class CheckInDialogOpensTest extends TestCase
         $this->assertSame('Amelia Bennett', $result['heading']);
         $this->assertSame(12, $result['options'], 'Codes 0 to 11.');
         $this->assertSame('Clock in', $result['button']);
+
+        /*
+         * Then Clock in. The request the button makes is the whole point of
+         * the screen, and the one thing a rendered page cannot show: it once
+         * called a helper that no longer existed and would have thrown in a
+         * room at eight in the morning, with every other test green.
+         */
+        $this->assertCount(1, $result['posted'], 'Clock in should make exactly one request.');
+        $this->assertSame('/check-in', $result['posted'][0]['url']);
+        // School Age books a morning and an afternoon; a card at the door
+        // books the child's first session, the way the sheet does.
+        $this->assertSame(['child_id' => 1, 'session' => 'AM', 'health_code' => 0, 'health_note' => null], $result['posted'][0]['body']);
+
+        // And the card follows the answer: dialog closed, a toast, the card in.
+        $this->assertFalse($result['dialogAfter'], 'The dialog should close once the clock-in is saved.');
+        $this->assertSame('Amelia Bennett clocked in at 8:42a', $result['toast']);
+        $this->assertSame('In · 8:42a', $result['cardState']);
     }
 
     private function node(): ?string

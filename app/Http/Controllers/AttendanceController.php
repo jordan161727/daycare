@@ -311,7 +311,11 @@ class AttendanceController extends Controller
                 },
             ],
             'session' => 'nullable|in:AM,PM,FULL',
-            'signed_in_time' => ['required', 'date_format:H:i'],
+            // One or both. The out time was never correctable anywhere until
+            // Check In's Edit mode needed it: a child who left at four and was
+            // clocked out at six is a day paid wrong, and nothing could say so.
+            'signed_in_time' => ['nullable', 'required_without:signed_out_time', 'date_format:H:i'],
+            'signed_out_time' => ['nullable', 'required_without:signed_in_time', 'date_format:H:i'],
         ]);
 
         $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
@@ -329,10 +333,24 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        $attendance->signed_in_at = Carbon::parse(
-            $validated['attendance_date'].' '.$validated['signed_in_time'],
-            config('app.timezone')
-        );
+        $timezone = config('app.timezone');
+
+        if (filled($validated['signed_in_time'] ?? null)) {
+            $attendance->signed_in_at = Carbon::parse($validated['attendance_date'].' '.$validated['signed_in_time'], $timezone);
+        }
+
+        if (filled($validated['signed_out_time'] ?? null)) {
+            $attendance->signed_out_at = Carbon::parse($validated['attendance_date'].' '.$validated['signed_out_time'], $timezone);
+        }
+
+        // A departure before the arrival is not a correction of anything.
+        if ($attendance->signed_out_at !== null && $attendance->signed_out_at->lte($attendance->signed_in_at)) {
+            return response()->json([
+                'message' => 'The leaving time has to be after the arrival — '
+                    .Child::timeShort($attendance->signed_in_at->timezone($timezone)).'.',
+            ], 422);
+        }
+
         $attendance->save();
 
         // The new hour is what the register now says; the old one survives
@@ -346,7 +364,9 @@ class AttendanceController extends Controller
 
         return response()->json([
             'success' => true,
-            'time' => Child::timeShort($attendance->signed_in_at->timezone(config('app.timezone'))),
+            'attendance_id' => $attendance->id,
+            'time' => Child::timeShort($attendance->signed_in_at->timezone($timezone)),
+            'out_time' => Child::timeShort($attendance->signed_out_at?->timezone($timezone)),
             'amendment' => $amendment ? [
                 'action' => $amendment->action,
                 'by' => $request->user()->name,
@@ -628,6 +648,9 @@ class AttendanceController extends Controller
     return response()->json([
         'success' => true,
         'created' => $attendance->wasRecentlyCreated,
+        // The row's own id, so a screen that records the arrival can go on
+        // to record its checks against it without a reload.
+        'attendance_id' => $attendance->id,
         'time' => Child::timeShort($attendance->signed_in_at->timezone(config('app.timezone'))),
         'amendment' => $amendment ? [
             'action' => $amendment->action,

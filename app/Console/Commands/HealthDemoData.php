@@ -32,7 +32,9 @@ use Illuminate\Support\Carbon;
  */
 class HealthDemoData extends Command
 {
-    protected $signature = 'demo:health {--undo : Remove the demo days this wrote, and nothing else}';
+    protected $signature = 'demo:health
+        {--undo : Remove the demo days this wrote, and nothing else}
+        {--force : Skip the "running as production" question — for a script, or a local box whose .env says production}';
 
     protected $description = 'Write (or remove) demo attendance and health checks for the current month';
 
@@ -51,10 +53,11 @@ class HealthDemoData extends Command
 
     public function handle(): int
     {
-        if (app()->isProduction() && ! $this->option('undo')) {
+        if (app()->isProduction() && ! $this->option('undo') && ! $this->option('force')) {
             // Said plainly rather than refused: a staging box often runs with
             // APP_ENV=production, and the person typing this knows which one
-            // they are on better than the environment name does.
+            // they are on better than the environment name does. A shell with
+            // nobody at it answers "no"; --force is that person's yes.
             if (! $this->confirm('This app is running as production. Write demo attendance anyway?', false)) {
                 $this->warn('Nothing written.');
 
