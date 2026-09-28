@@ -44,10 +44,6 @@
                      this screen lives, and it should be one press away. --}}
                 <a href="{{ route('check-in.index') }}" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Today</a>
             @endif
-            {{-- The month this day is in, as the paper form: a sheet per room,
-                 four lines a child, a column a day, the totals along the foot. --}}
-            <a x-show="editing" x-cloak href="{{ route('attendance.month-sheet.export', ['month' => \Illuminate\Support\Carbon::parse($date)->month, 'year' => \Illuminate\Support\Carbon::parse($date)->year]) }}"
-               class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Export month</a>
         @endif
 
         {{-- No Week/Month tabs here, at the centre's request: this screen is
@@ -70,6 +66,16 @@
                     class="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-base leading-none text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
                     aria-label="Clear search">×</button>
         </div>
+
+        {{-- The month this day is in, as the paper form: a workbook, a sheet
+             per room, four lines a child, a column a day, the totals along
+             the foot. Live or Edit, whoever is at the door: the cards are the
+             door's reading of the room, and the file is what it hands to the
+             office. The same button the register's Card view carries. --}}
+        @php($exportMonth = \Illuminate\Support\Carbon::parse($date))
+        <a href="{{ route('attendance.month-sheet.export', ['month' => $exportMonth->month, 'year' => $exportMonth->year]) }}"
+           class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
+           title="{{ $exportMonth->format('F Y') }} as the paper sheet — a workbook, a sheet per room">Export</a>
 
 @if($canAmend)
             {{-- Edit unlocks the days already gone, so a check nobody

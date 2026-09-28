@@ -788,6 +788,29 @@ class CheckInScreenTest extends TestCase
         $this->actingAs($this->teacher)->get(route('check-in.index'))->assertOk();
     }
 
+    public function test_the_door_offers_the_months_export_live(): void
+    {
+        /*
+         * The Export used to be an Edit-only button, and so out of reach of
+         * the teacher standing at the door in Live. The file is the month as
+         * the paper form — what the door hands to the office — and there is
+         * nothing about it that needs Edit unlocked.
+         */
+        $html = $this->actingAs($this->teacher)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $export = e(route('attendance.month-sheet.export', ['month' => 9, 'year' => 2026]));
+
+        $this->assertStringContainsString('href="'.$export.'"', $html);
+        $this->assertStringContainsString('>Export</a>', $html);
+        $this->assertStringNotContainsString('x-show="editing" x-cloak href="'.$export, $html);
+        $this->assertStringNotContainsString('Export month', $html);
+
+        // The month follows the day being looked at.
+        $html = $this->actingAs($this->admin)->get(route('check-in.index', ['date' => '2026-08-12']))->assertOk()->getContent();
+
+        $this->assertStringContainsString('href="'.e(route('attendance.month-sheet.export', ['month' => 8, 'year' => 2026])).'"', $html);
+    }
+
     public function test_the_week_sheet_was_left_alone(): void
     {
         /*
