@@ -80,6 +80,51 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertSame(AttendanceAmendment::RETIMED, AttendanceAmendment::sole()->action);
     }
 
+    public function test_a_clock_out_today_is_a_retime_with_no_amendment(): void
+    {
+        /*
+         * The cards on the register clock a child out by giving retime the
+         * hour of now. Today it is the door recording a departure, not a
+         * correction of one, so the row moves and nothing is written to the
+         * amendment log — the same rule every write to today follows.
+         *
+         * A School Age child, because they are the ones who book a morning
+         * and an afternoon; every other room books one FULL session.
+         */
+        $child = $this->makeChild(['classroom' => 'School Age', 'birth_date' => '2018-03-04']);
+
+        Attendance::create([
+            'child_id' => $child->id,
+            'attendance_date' => self::WEDNESDAY,
+            'session' => 'AM',
+            'signed_in_at' => Carbon::parse(self::WEDNESDAY.' 08:05'),
+        ]);
+
+        $json = $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id,
+                'attendance_date' => self::WEDNESDAY,
+                'session' => 'AM',
+                'signed_out_time' => '11:30',
+            ])
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('11:30', Attendance::sole()->signed_out_at->format('H:i'));
+        $this->assertSame('11:30a', $json['out_time']);
+        $this->assertSame(0, AttendanceAmendment::count(), 'today is recorded, not amended');
+
+        // And the afternoon is its own row: a second arrival on the PM
+        // session leaves the morning's departure exactly where it was.
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin'), ['child_id' => $child->id, 'attendance_date' => self::WEDNESDAY, 'session' => 'PM', 'signed_in_time' => '12:30'])
+            ->assertOk();
+
+        $this->assertSame(2, Attendance::count());
+        $this->assertSame('11:30', Attendance::where('session', 'AM')->sole()->signed_out_at->format('H:i'));
+        $this->assertNull(Attendance::where('session', 'PM')->sole()->signed_out_at);
+    }
+
     public function test_a_leaving_time_before_the_arrival_is_refused(): void
     {
         $child = $this->makeChild();
@@ -322,6 +367,120 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertSame(1, Attendance::count());
     }
 
+    public function test_a_child_clocked_out_can_come_back_and_the_trip_out_is_kept(): void
+    {
+        /*
+         * Collected at eleven for the dentist, back at one, gone for good at
+         * four. One day, one row — DSS bills first in, last out — but the
+         * two hours out of the room were not care given, so they are written
+         * down: the departure the return closes, and the moment of coming
+         * back, on a return of their own.
+         */
+        $child = $this->makeChild();
+        $row = $this->arrive($child, self::WEDNESDAY);
+        $row->update(['signed_out_at' => Carbon::parse(self::WEDNESDAY.' 11:00')]);
+
+        $this->travelTo(Carbon::parse(self::WEDNESDAY.' 13:00:00'));
+
+        $json = $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.return'), [
+                'child_id' => $child->id,
+                'attendance_date' => self::WEDNESDAY,
+                'session' => 'FULL',
+            ])
+            ->assertOk()
+            ->json();
+
+        // The row is open again — every screen that reads "no out" as "still
+        // here" goes on being right — and the pair it closed is kept.
+        $row->refresh();
+        $this->assertNull($row->signed_out_at);
+        $this->assertSame(1, Attendance::count());
+        $this->assertSame([['11:00a', '1:00p']], $json['returns']);
+        $this->assertNull($json['out_time']);
+        $this->assertSame('11:00', $row->returns->sole()->left_at->format('H:i'));
+        $this->assertSame('13:00', $row->returns->sole()->returned_at->format('H:i'));
+        $this->assertSame($this->admin->id, $row->returns->sole()->performed_by);
+
+        // The next clock-out is the ordinary one, and it lands on the row.
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id, 'attendance_date' => self::WEDNESDAY, 'session' => 'FULL', 'signed_out_time' => '16:00',
+            ])
+            ->assertOk();
+
+        $this->assertSame('16:00', $row->fresh()->signed_out_at->format('H:i'));
+
+        // And the register hands the cards the whole day, trips included.
+        app(WeekSchedule::class)->open('2026-09-14');
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $this->assertStringContainsString('11:00a', $html);
+        $this->assertStringContainsString('1:00p', $html);
+        $this->assertStringContainsString('4:00p', $html);
+    }
+
+    public function test_a_child_still_in_the_room_has_nothing_to_come_back_from(): void
+    {
+        $child = $this->makeChild();
+        $this->arrive($child, self::WEDNESDAY);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.return'), [
+                'child_id' => $child->id, 'attendance_date' => self::WEDNESDAY, 'session' => 'FULL',
+            ])
+            ->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Ada Lovelace has not been clocked out on Wednesday, Sep 16, so there is nothing to come back from.']);
+
+        $this->assertNull(Attendance::sole()->signed_out_at);
+    }
+
+    public function test_a_return_on_a_day_gone_needs_its_hour_and_it_must_follow_the_departure(): void
+    {
+        // Yesterday's return cannot be "now": the time has to be given, and
+        // it has to be after the departure it closes.
+        $child = $this->makeChild();
+        $row = $this->arrive($child, '2026-09-15');
+        $row->update(['signed_out_at' => Carbon::parse('2026-09-15 11:00')]);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.return'), [
+                'child_id' => $child->id, 'attendance_date' => '2026-09-15', 'session' => 'FULL',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('returned_time');
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.return'), [
+                'child_id' => $child->id, 'attendance_date' => '2026-09-15', 'session' => 'FULL', 'returned_time' => '10:30',
+            ])
+            ->assertStatus(422)
+            ->assertJsonFragment(['message' => 'Coming back has to be after leaving — 11:00a.']);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.return'), [
+                'child_id' => $child->id, 'attendance_date' => '2026-09-15', 'session' => 'FULL', 'returned_time' => '13:00',
+            ])
+            ->assertOk();
+
+        $this->assertSame('13:00', $row->fresh()->returns->sole()->returned_at->format('H:i'));
+        $this->assertNull($row->fresh()->signed_out_at);
+    }
+
+    public function test_a_parent_cannot_bring_a_child_back_either(): void
+    {
+        $child = $this->makeChild();
+        $row = $this->arrive($child, self::WEDNESDAY);
+        $row->update(['signed_out_at' => Carbon::parse(self::WEDNESDAY.' 08:30')]);
+
+        $this->actingAs(User::factory()->create(['role' => 'parent']))
+            ->postJson(route('attendance.signin.return'), [
+                'child_id' => $child->id, 'attendance_date' => self::WEDNESDAY, 'session' => 'FULL',
+            ])
+            ->assertForbidden();
+
+        $this->assertNotNull($row->fresh()->signed_out_at);
+    }
+
     public function test_a_parent_cannot_reach_the_removal_route_at_all(): void
     {
         $child = $this->makeChild();
@@ -430,11 +589,13 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertStringNotContainsString('askBeforeTapping', $html);
     }
     /**
-     * At the door a tap is a child standing in front of you: today, an
-     * arrival, nothing else. A recorded arrival is left alone on the live
-     * sheet, so a passing elbow cannot delete a morning.
+     * At the door a tap is a child standing in front of you: today, and the
+     * one session's next step — in, then out, then back in. A School Age
+     * child's morning and afternoon boxes are two ins and two outs. Nothing
+     * on the live sheet is ever taken off it: the worst a passing elbow can
+     * do is clock a child out, and the next tap puts them back.
      */
-    public function test_the_live_sheet_only_ever_signs_in_today(): void
+    public function test_the_live_sheet_steps_todays_box_in_out_and_back(): void
     {
         $this->makeChild();
         app(WeekSchedule::class)->open('2026-09-14');
@@ -444,8 +605,16 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString("if (date === this.today && ! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);", $html);
         $this->assertStringContainsString('if (! this.editing) {', $html);
+        $this->assertStringContainsString('if (date !== this.today) return;', $html);
+        $this->assertStringContainsString('if (! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);', $html);
+        $this->assertStringContainsString('if (! this.isOut(childId, date, session)) return this.clockOut(childId, date, session);', $html);
+        $this->assertStringContainsString('return this.clockBack(childId, date, session);', $html);
+
+        // And the box says which, and shows both hours once it has them.
+        $this->assertStringContainsString("' — tap: clock out'", $html);
+        $this->assertStringContainsString("' — tap: clock in again'", $html);
+        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $html);
     }
     /**
      * A time in Edit carries a pencil; press it, or E, and the hour is typed.

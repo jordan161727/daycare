@@ -104,6 +104,7 @@
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <h1 class="text-base font-bold tracking-tight sm:text-lg">Attendance</h1>
 
+
                     {{-- The week as one control: a step either side of the range
                          it is showing, rather than two buttons and a label apart.
                          Hairline dividers rather than gaps, so the three read as
@@ -210,8 +211,16 @@
                              width it needs; a search box has none, so it takes
                              what the buttons leave and gives it back first. --}}
                         <label x-show="view === 'signin'" class="relative hidden min-w-0 flex-1 basis-40 sm:block sm:max-w-[13rem]">
-                            <svg class="pointer-events-none absolute left-2.5 top-1.5 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg>
-                            <input x-model="search" class="w-full rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-3 text-xs transition focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800" placeholder="Search name or LAN">
+                            <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" aria-hidden="true">🔍</span>
+                            {{-- Escape clears the box too — the key a hand reaches
+                                 for to get out of anything. --}}
+                            <input x-ref="sheetSearch" x-model="search" @keydown.escape="search = ''" class="w-full rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-7 text-xs transition focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800" placeholder="Search name or LAN">
+                            {{-- The way out of a search: one press, rather than
+                                 backspacing a name away. Only there while there is
+                                 something to clear. A bare ×, no disc behind it. --}}
+                            <button type="button" x-show="search" x-cloak @click="search = ''; $refs.sheetSearch.focus()"
+                                    class="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-base leading-none text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
+                                    aria-label="Clear search">×</button>
                         </label>
 
                         {{-- The week for the clipboard. Only once the week exists:
@@ -230,6 +239,18 @@
 
                              Lifted out of the card like every other panel on
                              this page: a glass card clips what hangs out of it. --}}
+
+                        {{-- The month as the paper sheet — a workbook, a sheet a
+                             room, four lines a child — for the month the week on
+                             screen falls in. Offered in Teacher attendance, beside
+                             Print: the cards are the door's reading of the room,
+                             and the file is what the door hands to the office. --}}
+                        @php($exportMonth = \Illuminate\Support\Carbon::parse($selectedDate))
+                        <a x-show="mode === 'avatar'" x-cloak
+                           href="{{ route('attendance.month-sheet.export', ['month' => $exportMonth->month, 'year' => $exportMonth->year]) }}"
+                           class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
+                           title="{{ $exportMonth->format('F Y') }} as the paper sheet — a workbook, a sheet per room">Export</a>
+
                         @if($weekIsOpen)
                             <div
                                 x-data="{
@@ -350,6 +371,25 @@
                             <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="menu" aria-haspopup="true" class="grid h-[1.7333rem] w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
                             <template x-teleport="body">
                             <div x-show="menu" x-cloak x-transition @click.outside="menu = false" :style="`top: ${y}px; left: ${x}px`" class="fixed z-50 w-56 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
+                                {{-- Attendance mode or avatar mode: the sheet, or the
+                                     same children as a card each for today. A switch
+                                     on this page rather than a link elsewhere — see
+                                     setMode() — and remembered for this viewer. --}}
+                                <div class="mb-2.5 space-y-1.5 border-b border-slate-100 pb-2.5 dark:border-white/10">
+                                    <span class="block text-[0.7333rem] font-semibold text-slate-500 dark:text-slate-400">View</span>
+                                    <template x-for="option in [['sheet', 'Table view'], ['avatar', 'Card view']]" :key="option[0]">
+                                        <button type="button" @click="setMode(option[0]); menu = false"
+                                                :class="mode === option[0]
+                                                    ? 'border-indigo-500 bg-indigo-50 font-semibold text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-100'
+                                                    : 'border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'"
+                                                :aria-current="mode === option[0] ? 'true' : null"
+                                                class="flex w-full items-center gap-2 rounded-lg border px-2 py-1 text-left text-xs transition">
+                                            <span class="w-3 shrink-0 text-center" x-text="mode === option[0] ? '✓' : ''"></span>
+                                            <span x-text="option[1]"></span>
+                                        </button>
+                                    </template>
+                                </div>
+
                                 {{-- How names read on this reader's own screens.
                                      The office works from surnames because that is
                                      how the paper file is ordered; the room works
@@ -493,7 +533,45 @@
                          a phone was building the grid it would never show, and a
                          desktop was building the cards, so every roll was drawn
                          twice over. --}}
-                    <template x-if="! isPhone">
+                    {{-- Avatar mode: the same children, a card each, for today.
+                         Drawn from filteredChildren so the room chips and the
+                         search box narrow it exactly as they narrow the sheet,
+                         and a tap on a card is a tap on that child's today cell
+                         — the same sign-in Live, the same cycle in Edit. --}}
+                    <template x-if="mode === 'avatar'">
+                        <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 xl:grid-cols-4 desktop:grid-cols-5">
+                            <template x-for="child in filteredChildren" :key="'card-' + child.id">
+                                {{-- Live, a tap steps the child through the day: in,
+                                     then out, a session at a time — and back in
+                                     again after that, see tapCard(). In Edit it is
+                                     the today cell's own cycle. Green while the
+                                     child is here; quiet once every session is out. --}}
+                                <button type="button"
+                                        @click="editing ? tapCell(child.id, today, sessionsOf(child)[0]) : tapCard(child)"
+                                        :title="cardTitle(child)"
+                                        :disabled="! canTap(today)"
+                                        class="group rounded-2xl border border-transparent px-2 py-4 text-center transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50/40 focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:border-transparent disabled:hover:bg-transparent dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
+                                        :aria-label="child.name + ', ' + roomLabel(child) + ': ' + cardState(child) + '. ' + cardTitle(child)">
+                                    <span class="relative mx-auto block h-24 w-24">
+                                        <span class="block h-24 w-24 overflow-hidden rounded-full ring-4 ring-white dark:ring-night-900"
+                                              :class="isHere(child) ? 'outline outline-[3px] outline-emerald-500' : (isDone(child) ? 'outline outline-2 outline-slate-300 dark:outline-white/20' : 'outline outline-2 outline-slate-200 dark:outline-white/10')"
+                                              x-html="child.avatar"></span>
+                                        <span x-show="isHere(child)" x-cloak class="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border-[3px] border-white bg-emerald-500 text-xs font-bold text-white dark:border-night-900" aria-hidden="true">✓</span>
+                                        <span x-show="isDone(child)" x-cloak class="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border-[3px] border-white bg-slate-400 text-xs font-bold text-white dark:border-night-900" aria-hidden="true">✓</span>
+                                    </span>
+                                    <span class="mt-3 block truncate text-[0.9333rem] font-semibold" x-text="child.name"></span>
+                                    <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" x-text="roomLabel(child)"></span>
+                                    <span class="mt-2 block text-xs"
+                                          :class="isHere(child) ? 'font-semibold text-emerald-700 dark:text-emerald-300' : (isDone(child) ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500')"
+                                          x-text="cardState(child)"></span>
+                                </button>
+                            </template>
+                            {{-- No empty-state line of its own: the one under the
+                                 layouts says it once, for every one of them. --}}
+                        </div>
+                    </template>
+
+                    <template x-if="! isPhone && mode === 'sheet'">
                     <div class="overflow-x-auto">
                         {{-- att-split when this week holds a room that books
                              twice a day. It is what gives every row the height
@@ -629,7 +707,7 @@
                     </template>
 
                     {{-- Phone layout: one card per child, one row per day. --}}
-                    <template x-if="isPhone">
+                    <template x-if="isPhone && mode === 'sheet'">
                     <div class="divide-y divide-slate-200 dark:divide-white/10">
                         <div class="flex items-center justify-between px-3 py-2">
                             <button type="button" @click="toggleSort(sortBy)" class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -931,6 +1009,168 @@ function attendanceApp() { return {
      * says; the switch is not drawn for them either.
      */
     editing: @js(request('mode') === 'edit' && ($canAmendAttendance || $canEditSchedule)),
+
+    /*
+     * Attendance mode or avatar mode: the sheet, or the same children as a
+     * card each for today. Two renderings of one set of rows — the cards tap
+     * through to the very same tapCell() the today column does, so a card
+     * and a cell can never disagree about a child or do different things.
+     *
+     * Remembered per viewer in the browser, because it is a preference about
+     * how this person likes to read the room, not a fact about the room.
+     * Storage can be missing or refuse (a private window, a kiosk with site
+     * data blocked), so every touch of it is guarded and the sheet is the
+     * answer when it is.
+     */
+    mode: 'sheet',
+
+    setMode(mode) {
+        this.mode = mode === 'avatar' ? 'avatar' : 'sheet';
+        this.cancelRetime();
+
+        try { localStorage.setItem('attendance.mode', this.mode); } catch { /* per-viewer convenience only */ }
+    },
+
+    /* ---- the cards, Live: in, then out, a session at a time ----
+
+       A card is tapped through the day the way the door sees it: the first
+       session's arrival, then its departure, then the next session's. A room
+       that books one FULL session gets one in and one out; School Age, which
+       books a morning and an afternoon, gets two of each — AM in, AM out, PM
+       in, PM out — every one its own row on the register. The arrival is the
+       sign-in the today column makes; the departure goes to the register's
+       retime with the hour of now, which is what a clock-out is. */
+
+    sessionsOf(child) { return child.sessions || ['FULL']; },
+    outTime(childId, date, session) { return this.out?.[childId]?.[date]?.[session] ?? null; },
+    isOut(childId, date, session) { return this.outTime(childId, date, session) !== null; },
+    returnsOf(childId, date, session) { return this.returns?.[childId]?.[date]?.[session] ?? []; },
+
+    /**
+     * The next thing a tap does: {session, action: 'in' | 'out' | 'back'}.
+     *
+     * In, then out, a session at a time; and once every session is out, a
+     * tap brings the child back on the last one — collected for the dentist
+     * at eleven and here again at one is still today.
+     */
+    cardStep(child) {
+        const sessions = this.sessionsOf(child);
+        for (const session of sessions) {
+            if (! this.isPresent(child.id, this.today, session)) return {session, action: 'in'};
+            if (! this.isOut(child.id, this.today, session)) return {session, action: 'out'};
+        }
+        return {session: sessions[sessions.length - 1], action: 'back'};
+    },
+
+    /** Here now: arrived for some session and not yet gone from it. */
+    isHere(child) {
+        return this.sessionsOf(child).some(s => this.isPresent(child.id, this.today, s) && ! this.isOut(child.id, this.today, s));
+    },
+
+    /** The day is complete: every session has an out. */
+    isDone(child) {
+        return this.sessionsOf(child).every(s => this.isPresent(child.id, this.today, s) && this.isOut(child.id, this.today, s));
+    },
+
+    tapCard(child) {
+        if (! this.canTap(this.today)) return;
+
+        const step = this.cardStep(child);
+        if (step.action === 'in') return this.signIn(child.id, this.today, step.session);
+        if (step.action === 'out') return this.clockOut(child.id, this.today, step.session);
+        if (step.action === 'back') return this.clockBack(child.id, this.today, step.session);
+    },
+
+    /**
+     * Back in after a clock-out. The server keeps the departure it closes on
+     * a return and empties the row's own, so here the out goes and the pair
+     * joins the list — and the next tap is a clock-out again.
+     */
+    async clockBack(childId, date, session) {
+        try {
+            const response = await this.post("{{ route('attendance.signin.return') }}", {
+                child_id: childId, attendance_date: date, session,
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (! response.ok) {
+                throw new Error(Object.values(data.errors ?? {}).flat()[0] || data.message || 'Could not clock back in.');
+            }
+
+            const forChild = {...(this.out[childId] ?? {})};
+            const {[session]: gone, ...rest} = forChild[date] ?? {};
+            forChild[date] = rest;
+            this.out = {...this.out, [childId]: forChild};
+
+            const trips = {...(this.returns[childId] ?? {})};
+            trips[date] = {...(trips[date] ?? {}), [session]: data.returns ?? []};
+            this.returns = {...this.returns, [childId]: trips};
+        } catch (error) {
+            this.notice = error.message;
+        }
+    },
+
+    /**
+     * Clock out: the register's retime, given the hour of now as the leaving
+     * time. Today's writes go through it without an amendment entry — it is
+     * the door recording a departure, not a correction of one.
+     */
+    async clockOut(childId, date, session) {
+        const now = new Date();
+        const at = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+        try {
+            const response = await this.post("{{ route('attendance.signin.retime') }}", {
+                child_id: childId, attendance_date: date, session, signed_out_time: at,
+            });
+            const data = await response.json().catch(() => ({}));
+
+            if (! response.ok) {
+                throw new Error(Object.values(data.errors ?? {}).flat()[0] || data.message || 'Could not clock out.');
+            }
+
+            const forChild = {...(this.out[childId] ?? {})};
+            forChild[date] = {...(forChild[date] ?? {}), [session]: data.out_time};
+            this.out = {...this.out, [childId]: forChild};
+        } catch (error) {
+            this.notice = error.message;
+        }
+    },
+
+    /**
+     * One session's times as they went: 8:05a–11:30a, 1:10p– — the first
+     * arrival, each trip out and back, and the latest departure if there is one.
+     */
+    sessionSpan(childId, date, session) {
+        let text = this.sessionTime(childId, date, session);
+        for (const [left, back] of this.returnsOf(childId, date, session)) text += '–' + left + ', ' + back;
+        return text + (this.isOut(childId, date, session) ? '–' + this.outTime(childId, date, session) : '');
+    },
+
+    /** What a card says under the name: today, every session it books. */
+    cardState(child) {
+        const sessions = this.sessionsOf(child);
+        const parts = sessions
+            .filter(s => this.isPresent(child.id, this.today, s))
+            .map(s => (s === 'FULL' ? '' : s + ' ') + this.sessionSpan(child.id, this.today, s));
+
+        if (parts.length) return (sessions.length === 1 && ! this.isOut(child.id, this.today, 'FULL') ? 'In · ' : '') + parts.join(' · ');
+        if (this.isClosed(this.today)) return 'Centre closed';
+
+        return this.isScheduled(child.id, this.today, sessions[0]) ? 'Expected' : 'Not attending';
+    },
+
+    /** What the next tap will do, said on the card. */
+    cardTitle(child) {
+        if (this.editing) return this.boxTitle(child.id, this.today, this.sessionsOf(child)[0]);
+
+        const step = this.cardStep(child);
+        const name = s => s === 'FULL' ? '' : ' (' + this.sessionLabel(s) + ')';
+
+        if (step.action === 'in') return 'Tap: clock in' + name(step.session);
+        if (step.action === 'out') return 'Tap: clock out' + name(step.session);
+        return 'Tap: clock in again' + name(step.session);
+    },
     canAmend: @js($canAmendAttendance),
 
     /*
@@ -1008,6 +1248,11 @@ function attendanceApp() { return {
     init() {
         window.matchMedia('(max-width: 767px)')
             .addEventListener('change', event => { this.isPhone = event.matches; });
+
+        // The way this viewer last read the room. Guarded: see setMode().
+        try {
+            if (localStorage.getItem('attendance.mode') === 'avatar') this.mode = 'avatar';
+        } catch { /* the sheet, then */ }
 
         this.buildAfterPaint();
     },
@@ -1126,6 +1371,12 @@ function attendanceApp() { return {
     today: @js(today()->toDateString()),
     todayLabel: @js(today()->format('l, M j')),
     attendance: @js($attendanceMap),
+    // Departures, by child, date and session — what the cards read to know
+    // whether a tap is a clock-in or a clock-out. Sparse: most cells have none.
+    out: @js((object) $outMap),
+    // The trips out and back between first in and last out, [[left, back],
+    // ...] by the same keys. What lets a card print 8:05a–11:30a, 1:10p–.
+    returns: @js((object) $returnsMap),
     schedule: @js($scheduleMap),
 
     // The hour a day still to come is booked for, where one has been agreed.
@@ -1675,7 +1926,9 @@ function attendanceApp() { return {
 
         if (present ? ! this.canRetime(childId, date, session) : ! (this.editing && this.canSignIn(date))) return;
 
-        this.draft = present ? this.displayTime(childId, date, session) : '';
+        // The arrival alone: the field types one hour, and the box's own
+        // text may by now carry the departure on the end of it.
+        this.draft = present ? this.sessionTime(childId, date, session) : '';
         this.retiming = this.cellKey(childId, date, session);
     },
     cancelRetime() {
@@ -1916,7 +2169,9 @@ function attendanceApp() { return {
      * format that fits the tightest cell fits every other.
      */
     displayTime(childId, date, session) {
-        return this.sessionTime(childId, date, session);
+        // With the departure on the end once there is one — "7:46a–11:30a" —
+        // and any trip out and back between: the session as it went.
+        return this.sessionSpan(childId, date, session);
     },
 
     /* ---- the box, in two bindings ----
@@ -2183,7 +2438,7 @@ function attendanceApp() { return {
     // the fact anybody opening this sheet is looking for — and everything else
     // is a placeholder standing in until then.
     boxLabel(childId, date, session) {
-        if (this.isPresent(childId, date, session)) return this.sessionTime(childId, date, session);
+        if (this.isPresent(childId, date, session)) return this.displayTime(childId, date, session);
         if (this.isClosed(date)) return '—';
 
         // Booked for an hour, on a day that has not happened. Drawn in the
@@ -2202,9 +2457,14 @@ function attendanceApp() { return {
     },
     boxTitle(childId, date, session) {
         if (this.isPresent(childId, date, session)) {
-            const note = this.isScheduled(childId, date, session)
-                ? 'Signed in ' + this.sessionTime(childId, date, session)
-                : 'Signed in ' + this.sessionTime(childId, date, session) + ' — not scheduled, still billable';
+            let note = this.isScheduled(childId, date, session)
+                ? 'Signed in ' + this.displayTime(childId, date, session)
+                : 'Signed in ' + this.displayTime(childId, date, session) + ' — not scheduled, still billable';
+
+            // Live today, the box is a clock: say what the next tap does.
+            if (! this.editing && date === this.today) {
+                note += this.isOut(childId, date, session) ? ' — tap: clock in again' : ' — tap: clock out';
+            }
 
             // Who put it right, and when. The register can be corrected now, so
             // it has to be able to say which rows were.
@@ -2466,13 +2726,17 @@ function attendanceApp() { return {
     tapCell(childId, date, session) {
         if (! this.canTap(date)) return;
 
-        // Live: today, at the door. A tap is an arrival and nothing else — a
-        // recorded one is left alone, so a passing elbow cannot delete a
-        // morning.
+        // Live: today, at the door. A tap steps the one session along — in,
+        // then out, then back in again — the way a card does, so a School
+        // Age child's morning and afternoon are two ins and two outs. Nothing
+        // is ever taken off the sheet here: a passing elbow can clock a
+        // child out, and the next tap puts them back with the trip recorded.
         if (! this.editing) {
-            if (date === this.today && ! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);
+            if (date !== this.today) return;
+            if (! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);
+            if (! this.isOut(childId, date, session)) return this.clockOut(childId, date, session);
 
-            return;
+            return this.clockBack(childId, date, session);
         }
 
         return this.cycle(childId, date, session);

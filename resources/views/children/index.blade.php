@@ -51,8 +51,15 @@
 
             <div class="ml-auto flex items-center gap-1.5">
                 <label class="relative hidden sm:block">
-                    <svg class="pointer-events-none absolute left-2.5 top-1.5 h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z"/></svg>
-                    <input x-model="search" class="w-44 rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-3 text-xs transition focus:w-56 focus:ring-2 focus:ring-indigo-500 lg:w-56 dark:border-white/10 dark:bg-slate-800" placeholder="Search children">
+                    <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" aria-hidden="true">🔍</span>
+                    <input x-ref="childrenSearch" x-model="search" @keydown.escape="search = ''" class="w-44 rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-7 text-xs transition focus:w-56 focus:ring-2 focus:ring-indigo-500 lg:w-56 dark:border-white/10 dark:bg-slate-800" placeholder="Search children">
+                    {{-- The way out of a search: one press, rather than backspacing a
+                         name away. Only there while there is something to clear. A
+                         bare ×, no disc behind it. --}}
+                    <button type="button" x-show="search" x-cloak @click="search = ''; $refs.childrenSearch?.focus()"
+                            class="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-base leading-none text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
+                            aria-label="Clear search">×</button>
+
                 </label>
                 {{-- The roll as a spreadsheet.
 
@@ -82,7 +89,16 @@
         {{-- The search box is dropped below sm on the line above, so on a phone
              it takes the full width here instead of being missing. --}}
         <div class="mt-2.5 border-t border-slate-200/70 pt-2.5 sm:hidden dark:border-white/10">
-            <input x-model="search" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-white/10 dark:bg-slate-800" placeholder="Search children">
+            <label class="relative block">
+                <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" aria-hidden="true">🔍</span>
+                <input x-ref="childrenSearchPhone" x-model="search" @keydown.escape="search = ''" class="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-7 text-xs transition focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800" placeholder="Search children">
+                {{-- The way out of a search: one press, rather than backspacing a
+                     name away. Only there while there is something to clear. A
+                     bare ×, no disc behind it. --}}
+                <button type="button" x-show="search" x-cloak @click="search = ''; $refs.childrenSearchPhone?.focus()"
+                        class="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-base leading-none text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
+                        aria-label="Clear search">×</button>
+            </label>
         </div>
     </div>
 

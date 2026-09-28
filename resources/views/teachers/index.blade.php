@@ -61,8 +61,15 @@
 
     <section class="glass-card mt-5 overflow-hidden rounded-2xl">
         <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 dark:border-white/10">
-            <label class="ml-auto">
-                <input x-model="search" class="w-56 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm dark:border-white/10 dark:bg-slate-800" placeholder="Search…">
+            <label class="relative ml-auto block">
+                <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" aria-hidden="true">🔍</span>
+                <input x-ref="teacherSearch" x-model="search" @keydown.escape="search = ''" class="w-56 rounded-lg border border-slate-200 bg-white py-1 pl-8 pr-7 text-xs transition focus:ring-2 focus:ring-indigo-500 dark:border-white/10 dark:bg-slate-800" placeholder="Search name or role">
+                {{-- The way out of a search: one press, rather than backspacing a
+                     name away. Only there while there is something to clear. A
+                     bare ×, no disc behind it. --}}
+                <button type="button" x-show="search" x-cloak @click="search = ''; $refs.teacherSearch?.focus()"
+                        class="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center text-base leading-none text-slate-400 transition hover:text-slate-700 dark:hover:text-slate-200"
+                        aria-label="Clear search">×</button>
             </label>
         </div>
 

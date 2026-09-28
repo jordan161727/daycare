@@ -18,7 +18,10 @@
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const [, , pagePath, alpinePath] = process.argv;
+// A third argument names the scenario: "today" (the default) clocks the
+// first card in; "edit" opens a day already gone, types a leaving time into
+// the dialog and presses Save, which is the direct-edit path.
+const [, , pagePath, alpinePath, scenario = 'today'] = process.argv;
 
 let html = fs.readFileSync(pagePath, 'utf8');
 const alpine = fs.readFileSync(alpinePath, 'utf8');
@@ -31,6 +34,14 @@ const stub = `
 window.__posted = [];
 window.postJson = async (url, body) => {
     window.__posted.push({ url, body });
+    // The register's retime answers with both times; the door answers with
+    // the row. Enough of each for the dialog to update the card.
+    if (url.includes('/retime')) {
+        return { ok: true, json: async () => ({ success: true, attendance_id: 1, time: '8:05a', out_time: body.signed_out_time ? '4:30p' : null }) };
+    }
+    if (url.includes('/health')) {
+        return { ok: true, json: async () => ({ success: true, direction: body.direction, code: body.code, note: body.note ?? null }) };
+    }
     return { ok: true, json: async () => ({ success: true, attendance_id: 1, session: 'FULL', in_at: '8:42a', out_at: null, health_in: body.health_code ?? 0, health_in_note: null, health_out: null, health_out_note: null }) };
 };`;
 
@@ -70,9 +81,28 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 50));
             result.heading = dialog.querySelector('h2')?.textContent.trim() ?? null;
             result.options = dialog.querySelectorAll('select#ci-code option').length;
             result.button = dialog.querySelector('button[type="submit"]')?.textContent.trim() ?? null;
+            // The session tabs a School Age child gets, and which one opened.
+            result.tabs = [...dialog.querySelectorAll('[data-session]')].map(tab => ({ text: tab.textContent.trim().replace(/\s+/g, ' '), selected: tab.getAttribute('aria-pressed') === 'true' }));
+            result.status = dialog.querySelector('span.mt-3 span, span.mt-3')?.textContent.trim() ?? null;
 
-            // Press Clock in. The form's @submit.prevent runs clockChild().
             const form = dialog.querySelector('form');
+
+            if (scenario === 'edit') {
+                // A day already gone: type a leaving time and save. The Out
+                // field is x-model'd, so an input event is what moves it.
+                const out = dialog.querySelector('#ci-out');
+                result.outFieldPresent = !! out;
+                result.inFieldValue = dialog.querySelector('#ci-in')?.value ?? null;
+                if (out) {
+                    out.value = '16:30';
+                    out.dispatchEvent(new window.Event('input', { bubbles: true }));
+                    await tick();
+                }
+                result.saveButton = dialog.querySelector('button[type="submit"]')?.textContent.trim() ?? null;
+                result.saveEnabled = ! (dialog.querySelector('button[type="submit"]')?.disabled ?? true);
+            }
+
+            // Press the form's button: Clock in today, Save on a day gone.
             if (form) {
                 form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
                 await tick(); await tick(); await tick();

@@ -87,8 +87,158 @@ class CheckInDialogOpensTest extends TestCase
 
         // And the card follows the answer: dialog closed, a toast, the card in.
         $this->assertFalse($result['dialogAfter'], 'The dialog should close once the clock-in is saved.');
-        $this->assertSame('Amelia Bennett clocked in at 8:42a', $result['toast']);
+        $this->assertSame('Amelia Bennett clocked in at 8:42a (morning)', $result['toast']);
         $this->assertSame('In · 8:42a', $result['cardState']);
+    }
+
+    public function test_on_a_day_already_gone_the_dialog_saves_through_the_register(): void
+    {
+        /*
+         * The direct-edit path, end to end in a headless DOM: open a past
+         * day, press the child's card, type a leaving time, press Save. What
+         * has to come out is one request to the register's retime — not the
+         * door, not the health endpoint — and the card reading the new time.
+         */
+        $node = $this->node();
+
+        if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {
+            $this->markTestSkipped('node and jsdom are needed to click the page.');
+        }
+
+        $this->travelTo(Carbon::parse('2026-09-25 09:00:00'));
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $child = Child::create([
+            'lan' => '3001', 'status' => 'Active', 'first_name' => 'Amelia', 'last_name' => 'Bennett',
+            'classroom' => 'School Age', 'birth_date' => '2018-03-04', 'schedule_days' => [1, 2, 3, 4, 5],
+        ]);
+
+        // An arrival on the 22nd with no departure: the day the director opens.
+        \App\Models\Attendance::create([
+            'child_id' => $child->id, 'attendance_date' => '2026-09-22', 'session' => 'AM',
+            'signed_in_at' => Carbon::parse('2026-09-22 08:05'), 'health_in_code' => 0,
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('check-in.index', ['date' => '2026-09-22']))->assertOk()->getContent();
+
+        $page = tempnam(sys_get_temp_dir(), 'checkin').'.html';
+        file_put_contents($page, $html);
+
+        $process = new Process(
+            [$node, base_path('tests/js/click-check-in.cjs'), $page, base_path('node_modules/alpinejs/dist/cdn.js'), 'edit'],
+            base_path(),
+            ['NODE_PATH' => base_path('node_modules')],
+        );
+        $process->setTimeout(60)->run();
+
+        @unlink($page);
+
+        $this->assertSame(0, $process->getExitCode(), "The click script failed:\n".$process->getErrorOutput());
+
+        $result = json_decode($process->getOutput(), true);
+
+        $this->assertIsArray($result, 'The click script returned no JSON: '.$process->getOutput());
+        $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
+
+        // The dialog opened in correcting mode, on the recorded arrival.
+        $this->assertTrue($result['dialog']);
+        $this->assertTrue($result['outFieldPresent'], 'a past day shows the time fields');
+        $this->assertSame('08:05', $result['inFieldValue'], 'the In field opens on the recorded arrival');
+        $this->assertSame('Save changes', $result['saveButton']);
+        $this->assertTrue($result['saveEnabled'], 'typing a leaving time lights Save');
+
+        /*
+         * Two requests, in the dialog's order. First the register's retime,
+         * carrying the typed time. Then the leaving check: a departure has a
+         * check taken with it, and the form's "0 · Normal" is that check —
+         * a departure with no reading would say nobody looked.
+         */
+        $this->assertCount(2, $result['posted']);
+        $this->assertStringEndsWith('/attendance/sign-in/retime', $result['posted'][0]['url']);
+        $this->assertSame(
+            ['child_id' => $child->id, 'attendance_date' => '2026-09-22', 'session' => 'AM', 'signed_out_time' => '16:30'],
+            $result['posted'][0]['body']
+        );
+        $this->assertSame('/attendance/1/health', $result['posted'][1]['url']);
+        $this->assertSame(['direction' => 'out', 'code' => 0, 'note' => null], $result['posted'][1]['body']);
+
+        // And the card follows the register's answer.
+        $this->assertFalse($result['dialogAfter']);
+        $this->assertSame('Amelia Bennett: day saved', $result['toast']);
+        $this->assertStringContainsString('Out 4:30p', $result['cardState']);
+    }
+
+    public function test_a_school_age_child_out_of_the_morning_opens_on_the_afternoon(): void
+    {
+        /*
+         * Two sessions, two clock-ins, two clock-outs. The morning is done —
+         * in at 8:05, out at 11:30 — so the dialog opens on the afternoon
+         * with Clock in, the morning's tab reading its two hours beside it,
+         * and the request it makes books the PM session.
+         */
+        $node = $this->node();
+
+        if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {
+            $this->markTestSkipped('node and jsdom are needed to click the page.');
+        }
+
+        $this->travelTo(Carbon::parse('2026-09-23 12:00:00'));
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $child = Child::create([
+            'lan' => '3001', 'status' => 'Active', 'first_name' => 'Amelia', 'last_name' => 'Bennett',
+            'classroom' => 'School Age', 'birth_date' => '2018-03-04', 'schedule_days' => [1, 2, 3, 4, 5],
+        ]);
+
+        \App\Models\Attendance::create([
+            'child_id' => $child->id, 'attendance_date' => '2026-09-23', 'session' => 'AM',
+            'signed_in_at' => Carbon::parse('2026-09-23 08:05'), 'signed_out_at' => Carbon::parse('2026-09-23 11:30'), 'health_in_code' => 0,
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $page = tempnam(sys_get_temp_dir(), 'checkin').'.html';
+        file_put_contents($page, $html);
+
+        $process = new Process(
+            [$node, base_path('tests/js/click-check-in.cjs'), $page, base_path('node_modules/alpinejs/dist/cdn.js')],
+            base_path(),
+            ['NODE_PATH' => base_path('node_modules')],
+        );
+        $process->setTimeout(60)->run();
+
+        @unlink($page);
+
+        $this->assertSame(0, $process->getExitCode(), "The click script failed:\n".$process->getErrorOutput());
+
+        $result = json_decode($process->getOutput(), true);
+
+        $this->assertIsArray($result, 'The click script returned no JSON: '.$process->getOutput());
+        $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
+        $this->assertTrue($result['dialog']);
+
+        // Two session cards: the morning done with its hours, the afternoon
+        // still to do and chosen. The one status line is for one-session rooms.
+        $this->assertSame(
+            [
+                ['text' => 'Morning ✓ Done 8:05a – 11:30a In · Out', 'selected' => false],
+                ['text' => 'Afternoon To do — : — Not clocked in', 'selected' => true],
+            ],
+            $result['tabs']
+        );
+        $this->assertNull($result['status']);
+        $this->assertSame('Clock in', $result['button']);
+
+        // And the clock-in books the afternoon, not the morning again.
+        $this->assertCount(1, $result['posted']);
+        $this->assertSame('/check-in', $result['posted'][0]['url']);
+        $this->assertSame('PM', $result['posted'][0]['body']['session']);
+        $this->assertSame('Amelia Bennett clocked in at 8:42a (afternoon)', $result['toast']);
+
+        // The roster card reads the day as one: on the premises again.
+        $this->assertSame('In · 8:05a', $result['cardState']);
     }
 
     private function node(): ?string

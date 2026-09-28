@@ -284,6 +284,35 @@ class CheckInScreenTest extends TestCase
         $this->assertStringNotContainsString('type="date"', $html);
     }
 
+    public function test_check_in_marks_itself_the_cards_and_links_to_the_sheet(): void
+    {
+        // The other half of the register's switch: Cards here, Sheet there,
+        // the day carried across.
+        $html = $this->actingAs($this->admin)
+            ->get(route('check-in.index', ['date' => '2026-09-21']))
+            ->assertOk()
+            ->getContent();
+
+        // In this screen's ⋯ menu: Card mode is ticked, Attendance mode is
+        // the link back to the register, with the day carried across.
+        $this->assertStringContainsString('<span>Card mode</span>', $html);
+        $this->assertStringContainsString('href="'.route('attendance.index', ['date' => '2026-09-21']).'"', $html);
+        $this->assertStringContainsString('<span>Attendance mode</span>', $html);
+    }
+
+    public function test_a_search_can_be_cleared_in_one_press(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('x-show="search" x-cloak @click="search = \'\'; $refs.checkInSearch?.focus()"', $html);
+        $this->assertStringContainsString('aria-label="Clear search">×</button>', $html);
+        $this->assertStringContainsString('x-ref="checkInSearch"', $html);
+
+        // A bare ×, no disc behind it; and Escape clears the box as well.
+        $this->assertStringNotContainsString('rounded-full text-slate-400 transition hover:bg-slate-100', $html);
+        $this->assertStringContainsString('x-model="search" @keydown.escape="search = \'\'"', $html);
+    }
+
     public function test_the_sheet_is_still_a_tab_away(): void
     {
         $html = $this->actingAs($this->admin)

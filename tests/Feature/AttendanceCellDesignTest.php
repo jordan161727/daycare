@@ -58,8 +58,9 @@ class AttendanceCellDesignTest extends TestCase
         $map = $response->viewData('attendanceMap');
         $this->assertSame('8:42a', $map[$child->id][self::MONDAY]['FULL']);
 
-        // And the cell is that time, with no second mark beside it.
-        $this->assertStringContainsString('return this.sessionTime(childId, date, session);', $response->getContent());
+        // And the cell is that time — with the departure on the end once
+        // there is one, and no other mark beside it.
+        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $response->getContent());
     }
 
     public function test_the_four_states_are_the_four_marks_on_the_sheet(): void
@@ -127,8 +128,8 @@ class AttendanceCellDesignTest extends TestCase
         // And its time is the compact form, because it shares the cell —
         // which is now the only form, so a whole day and a half day are the
         // same shape down one column.
-        $this->assertStringContainsString('displayTime(childId, date, session) {'."
-".'        return this.sessionTime(childId, date, session);', $html);
+        $this->assertStringContainsString('let text = this.sessionTime(childId, date, session);', $html);
+        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $html);
     }
 
     public function test_a_sheet_with_no_half_day_room_keeps_its_rows_compact(): void

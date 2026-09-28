@@ -195,7 +195,10 @@ class MonthSheetTest extends TestCase
         // that was removed rather than something that broke.
         $register = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
 
-        $this->assertStringNotContainsString(route('attendance.month-sheet'), $register);
+        // No link to this page from the register. As a bounded address, with
+        // its closing quote: the register does link to the month *export*,
+        // whose address begins with this one.
+        $this->assertStringNotContainsString('href="'.route('attendance.month-sheet').'"', $register);
     }
     public function test_the_sheet_wears_the_apps_own_palette(): void
     {

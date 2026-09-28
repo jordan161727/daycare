@@ -47,7 +47,7 @@ class AttendanceController extends Controller
             // week holds only a leaver still has one to filter by.
             $classrooms = $children->pluck('classroom')->filter()->unique()->values();
 
-            $attendanceRecords = Attendance::with('child')
+            $attendanceRecords = Attendance::with(['child', 'returns'])
                 // Date strings, not Carbon instances. attendance_date is a DATE
                 // column; a Carbon binds as 'Y-m-d H:i:s', and SQLite compares
                 // the two as text — so '2026-09-14' sorts before
@@ -64,11 +64,26 @@ class AttendanceController extends Controller
                 ->get();
 
             $attendanceMap = [];
+            // The departures, kept apart from the arrivals: the sheet reads
+            // arrivals on every cell and the cards read departures on every
+            // card, and neither should have to unpick the other's shape.
+            $outMap = [];
+            // And the trips out and back between the two, for the cards to
+            // print the day as it went: 8:05a–11:30a, 1:10p–. Sparser still.
+            $returnsMap = [];
             $timezone = config('app.timezone');
             foreach ($attendanceRecords as $attendance) {
                 $date = $attendance->attendance_date->toDateString();
                 $session = $attendance->session ?? 'FULL';
                 $attendanceMap[$attendance->child_id][$date][$session] = Child::timeShort($attendance->signed_in_at->timezone($timezone));
+
+                if ($attendance->signed_out_at !== null) {
+                    $outMap[$attendance->child_id][$date][$session] = Child::timeShort($attendance->signed_out_at->timezone($timezone));
+                }
+
+                if ($attendance->returns->isNotEmpty()) {
+                    $returnsMap[$attendance->child_id][$date][$session] = self::returnTimes($attendance, $timezone);
+                }
             }
 
             // Dashboard Statistics
@@ -199,6 +214,8 @@ class AttendanceController extends Controller
                 'classrooms',
                 'weekDates',
                 'attendanceMap',
+                'outMap',
+                'returnsMap',
                 'totalChildren',
                 'presentToday',
                 'absentToday',
@@ -473,9 +490,97 @@ class AttendanceController extends Controller
                 : 'Week opened. Nothing came before it, so the days start from each child\'s record.');
     }
 
+    /** A row's trips out and back, as short clock strings: [[left, back], ...]. */
+    private static function returnTimes(Attendance $attendance, string $timezone): array
+    {
+        return $attendance->returns
+            ->map(fn ($return) => [
+                Child::timeShort($return->left_at->timezone($timezone)),
+                Child::timeShort($return->returned_at->timezone($timezone)),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * A child clocked out who is back in the room.
+     *
+     * The row is not reopened by forgetting its departure: that hour becomes
+     * the left-at of a return, the moment of coming back its returned-at, and
+     * the row's own departure is cleared until the next clock-out sets it —
+     * so the row still reads first in, last out, and everything between is
+     * on the returns. See the attendance_returns migration.
+     *
+     * Today it is the door; for a day gone the time of return has to be
+     * given, since "now" is not on that day.
+     */
+    public function returnIn(Request $request)
+    {
+        $validated = $request->validate([
+            'child_id' => 'required|exists:children,id',
+            'attendance_date' => [
+                'required',
+                'date_format:Y-m-d',
+                function ($attribute, $value, $fail) {
+                    if ($value > now()->toDateString()) {
+                        $fail(Carbon::parse($value)->format('l, M j').' has not happened yet, '
+                            .'so nobody has come back on it.');
+                    }
+                },
+            ],
+            'session' => 'nullable|in:AM,PM,FULL',
+            'returned_time' => ['nullable', 'date_format:H:i', 'required_unless:attendance_date,'.now()->toDateString()],
+        ]);
+
+        $child = Child::visibleTo($request->user())->findOrFail($validated['child_id']);
+        $session = $validated['session'] ?? 'FULL';
+        $timezone = config('app.timezone');
+
+        $attendance = Attendance::where('child_id', $child->id)
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->where('session', $session)
+            ->first();
+
+        if (! $attendance || $attendance->signed_out_at === null) {
+            return response()->json([
+                'message' => $child->displayName().' has not been clocked out on '
+                    .Carbon::parse($validated['attendance_date'])->format('l, M j').', so there is nothing to come back from.',
+            ], 422);
+        }
+
+        $returnedAt = filled($validated['returned_time'] ?? null)
+            ? Carbon::parse($validated['attendance_date'].' '.$validated['returned_time'], $timezone)
+            : now();
+
+        if ($returnedAt->lte($attendance->signed_out_at)) {
+            return response()->json([
+                'message' => 'Coming back has to be after leaving — '
+                    .Child::timeShort($attendance->signed_out_at->timezone($timezone)).'.',
+            ], 422);
+        }
+
+        $attendance->returns()->create([
+            'left_at' => $attendance->signed_out_at,
+            'returned_at' => $returnedAt,
+            'performed_by' => $request->user()?->id,
+        ]);
+
+        $attendance->signed_out_at = null;
+        $attendance->save();
+        $attendance->load('returns');
+
+        return response()->json([
+            'success' => true,
+            'attendance_id' => $attendance->id,
+            'time' => Child::timeShort($attendance->signed_in_at->timezone($timezone)),
+            'out_time' => null,
+            'returns' => self::returnTimes($attendance, $timezone),
+        ]);
+    }
+
     public function signIn(Request $request)
 {
-    
+
     $validated = $request->validate([
         'child_id' => 'required|exists:children,id',
         'attendance_date' => [

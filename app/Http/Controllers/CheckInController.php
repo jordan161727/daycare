@@ -121,6 +121,7 @@ class CheckInController extends Controller
                 $days->last()->toDateString(),
             ])
             ->whereIn('child_id', $children->pluck('id'))
+            ->with('returns')
             ->get()
             ->groupBy([
                 fn (Attendance $row) => $row->child_id,
@@ -131,6 +132,24 @@ class CheckInController extends Controller
 
         $rows = $children->map(function (Child $child) use ($records, $days, $timezone) {
             $byDay = [];
+            // The same days, a session at a time: what the dialog edits. A
+            // School Age child's morning and afternoon are two rows on the
+            // register, and the door clocks each of them in and out.
+            $bySession = [];
+
+            // The sheet's own clock: "7:42a", "5:25p". Short enough for a
+            // column a month wide, and unambiguous, which twenty-four hour
+            // was but nobody at a door reads.
+            $slot = fn (Attendance $row) => [
+                'id' => $row->id,
+                'session' => $row->session ?? 'FULL',
+                'in' => Child::timeShort($row->signed_in_at?->timezone($timezone)),
+                'in_code' => $row->health_in_code,
+                'in_note' => $row->health_in_note,
+                'out' => Child::timeShort($row->signed_out_at?->timezone($timezone)),
+                'out_code' => $row->health_out_code,
+                'out_note' => $row->health_out_note,
+            ];
 
             foreach ($days as $day) {
                 $iso = $day->toDateString();
@@ -140,24 +159,37 @@ class CheckInController extends Controller
                     continue;
                 }
 
+                foreach ($onDay->sortBy('signed_in_at') as $row) {
+                    $bySession[$iso][$row->session ?? 'FULL'] = $slot($row);
+                }
+
                 // First in and last out: one pair of lines per day, as on the
                 // paper sheet, even where a room books a morning and an
-                // afternoon separately.
+                // afternoon separately. No "out" at all while any session is
+                // still open: a child clocked out of the morning and into the
+                // afternoon is on the premises, and the roster says so.
                 $first = $onDay->sortBy('signed_in_at')->first();
-                $last = $onDay->filter(fn (Attendance $row) => $row->signed_out_at !== null)
-                    ->sortBy('signed_out_at')->last();
+                $open = $onDay->contains(fn (Attendance $row) => $row->signed_out_at === null);
+                $last = $open ? null : $onDay->sortBy('signed_out_at')->last();
 
                 $byDay[$iso] = [
                     'id' => $first->id,
-                    // The sheet's own clock: "7:42a", "5:25p". Short enough for
-                    // a column a month wide, and unambiguous, which twenty-four
-                    // hour was but nobody at a door reads.
                     'in' => Child::timeShort($first->signed_in_at?->timezone($timezone)),
                     'in_code' => $first->health_in_code,
                     'in_note' => $first->health_in_note,
                     'out' => Child::timeShort($last?->signed_out_at?->timezone($timezone)),
                     'out_code' => $last?->health_out_code,
                     'out_note' => $last?->health_out_note,
+                    // The trips out and back already on the day, in order:
+                    // [[left, back], ...]. First in, last out, and these between.
+                    'trips' => $onDay->flatMap(fn (Attendance $row) => $row->returns)
+                        ->sortBy('returned_at')
+                        ->map(fn ($trip) => [
+                            Child::timeShort($trip->left_at->timezone($timezone)),
+                            Child::timeShort($trip->returned_at->timezone($timezone)),
+                        ])
+                        ->values()
+                        ->all(),
                 ];
             }
 
@@ -180,10 +212,12 @@ class CheckInController extends Controller
                 'animal' => ClassroomAssignment::animal($child->classroom),
                 'hours' => $child->scheduleLabel(),
                 // A School Age child books a morning and an afternoon. The grid
-                // has one pair of lines, so a check-in from here books the
-                // child's first session and the rest is done on the register.
+                // has one pair of lines and books the child's first session;
+                // the dialog offers every session, each clocked on its own.
                 'session' => $child->sessions()[0] ?? 'FULL',
+                'sessions' => $child->sessions() ?: ['FULL'],
                 'byDay' => $byDay,
+                'bySession' => $bySession,
                 // For the roster cards: the name the way a card says it, and
                 // the child's own avatar — their photograph, or the drawn face
                 // the rest of the app gives them — rendered once here so the

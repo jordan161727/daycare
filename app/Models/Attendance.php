@@ -46,6 +46,15 @@ class Attendance extends Model
         return $this->hasMany(HealthAudit::class)->latest('id');
     }
 
+    /**
+     * The times the child left and came back within this session, oldest
+     * first. The row itself holds the first arrival and the latest departure.
+     */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(AttendanceReturn::class)->orderBy('returned_at');
+    }
+
     /** The code on one end of the day, named by direction. */
     public function healthCode(string $direction): ?int
     {

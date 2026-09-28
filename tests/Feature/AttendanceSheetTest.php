@@ -56,6 +56,123 @@ class AttendanceSheetTest extends TestCase
             ->assertSee("sortedBy('name')", false);
     }
 
+    /*
+     * Attendance mode or avatar mode. The sheet, or the same children as a
+     * card each for today — a second rendering of one set of rows on this
+     * page, switched from the ⋯ menu and remembered for the viewer.
+     */
+    public function test_the_register_switches_between_attendance_and_avatar_mode(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        // Opens as the sheet; the ⋯ menu offers both, ticking the one in use.
+        $this->assertStringContainsString("mode: 'sheet',", $html);
+        // The two options by their keys, not their words: what they are called
+        // is the centre's to change (and has been changed more than once),
+        // while what they switch is not.
+        $this->assertMatchesRegularExpression("/x-for=\"option in \[\['sheet', '[^']+'\], \['avatar', '[^']+'\]\]\"/", $html);
+        $this->assertStringContainsString('@click="setMode(option[0]); menu = false"', $html);
+
+        // The sheet's two layouts step aside for the cards.
+        $this->assertStringContainsString('<template x-if="mode === \'avatar\'">', $html);
+        $this->assertStringContainsString('<template x-if="! isPhone && mode === \'sheet\'">', $html);
+        $this->assertStringContainsString('<template x-if="isPhone && mode === \'sheet\'">', $html);
+    }
+
+    public function test_a_card_is_the_childs_today_cell(): void
+    {
+        /*
+         * The point of drawing the cards here rather than linking elsewhere:
+         * a tap on a card is the very same tapCell() the today column runs,
+         * so signing in Live and correcting in Edit work identically, and
+         * the card's face is the child's own avatar.
+         */
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        // Live, a tap steps the child through the day — in, then out, a
+        // session at a time; in Edit it is the today cell's own cycle.
+        $this->assertStringContainsString('@click="editing ? tapCell(child.id, today, sessionsOf(child)[0]) : tapCard(child)"', $html);
+        $this->assertStringContainsString('x-html="child.avatar"', $html);
+
+        // The next step is worked out a session at a time, so School Age's
+        // morning and afternoon are two ins and two outs, each its own row.
+        $this->assertStringContainsString("if (! this.isPresent(child.id, this.today, session)) return {session, action: 'in'};", $html);
+        $this->assertStringContainsString("if (! this.isOut(child.id, this.today, session)) return {session, action: 'out'};", $html);
+
+        // And a clock-out is the register's own retime, given the hour of now.
+        $this->assertStringContainsString("child_id: childId, attendance_date: date, session, signed_out_time: at,", $html);
+        $this->assertStringContainsString("out: {", $html);
+
+        // A day with every session out is not the end of the card: a child
+        // collected early can come back, and the tap brings them back on the
+        // last session — a return, never a second arrival.
+        $this->assertStringContainsString("return {session: sessions[sessions.length - 1], action: 'back'};", $html);
+        $this->assertStringContainsString("if (step.action === 'back') return this.clockBack(child.id, this.today, step.session);", $html);
+        $this->assertStringContainsString(route('attendance.signin.return'), $html);
+        $this->assertStringContainsString("'Tap: clock in again'", $html);
+        $this->assertStringNotContainsString('Done for today', $html);
+        $this->assertStringContainsString('returns: {', $html);
+
+        // One empty-search line for every layout, under them — the cards
+        // carried a second and a search that matched nothing said so twice.
+        $this->assertSame(1, substr_count($html, 'No children match this search.'));
+    }
+
+    public function test_the_mode_is_remembered_for_the_viewer_and_never_trusted_to_be_there(): void
+    {
+        // A per-viewer convenience in browser storage, which can be missing or
+        // refuse in a private window or on a kiosk — so every touch is guarded
+        // and the sheet is the answer when it is.
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString("try { localStorage.setItem('attendance.mode', this.mode); } catch", $html);
+        $this->assertStringContainsString("if (localStorage.getItem('attendance.mode') === 'avatar') this.mode = 'avatar';", $html);
+    }
+
+    public function test_a_search_can_be_cleared_in_one_press(): void
+    {
+        // The way out of a search, beside the box, only while there is
+        // something to clear; it hands focus back so the next name can be typed.
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('x-show="search" x-cloak @click="search = \'\'; $refs.sheetSearch.focus()"', $html);
+        $this->assertStringContainsString('aria-label="Clear search">×</button>', $html);
+        $this->assertStringContainsString('x-ref="sheetSearch"', $html);
+
+        // A bare ×, no disc behind it; and Escape clears the box as well.
+        $this->assertStringNotContainsString('rounded-full text-slate-400 transition hover:bg-slate-100', $html);
+        $this->assertStringContainsString('x-ref="sheetSearch" x-model="search" @keydown.escape="search = \'\'"', $html);
+    }
+
+    public function test_teacher_attendance_offers_the_months_export(): void
+    {
+        /*
+         * The cards are the door's reading of the room; the month workbook —
+         * the paper sheet, a sheet a room — is what the door hands to the
+         * office. So Teacher attendance carries the export, for the month the
+         * week on screen falls in, beside Print.
+         */
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => '2026-07-15']))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('x-show="mode === \'avatar\'" x-cloak', $html);
+        // Blade escapes the & between the two query parameters, so the
+        // address is asserted the way the page prints it.
+        $this->assertStringContainsString('href="'.e(route('attendance.month-sheet.export', ['month' => 7, 'year' => 2026])).'"', $html);
+        $this->assertStringContainsString('title="July 2026 as the paper sheet', $html);
+        $this->assertStringContainsString('>Export</a>', $html);
+    }
+
     public function test_the_sheet_opens_in_lan_order(): void
     {
         // The same order as the roll, because it is the same children read
@@ -174,12 +291,17 @@ class AttendanceSheetTest extends TestCase
         // class, both were built on every load — the whole roll five days wide,
         // twice — and the page sat empty while Alpine worked through the one
         // nobody would see. Each is gated on the breakpoint instead.
-        $this->assertStringContainsString('x-if="! isPhone"', $html);
-        $this->assertStringContainsString('x-if="isPhone"', $html);
+        // And, since avatar mode arrived, on the mode as well: the cards are a
+        // third layout, and the two sheet layouts are built only when they
+        // are the one being read.
+        $this->assertStringContainsString('x-if="! isPhone && mode === \'sheet\'"', $html);
+        $this->assertStringContainsString('x-if="isPhone && mode === \'sheet\'"', $html);
         $this->assertStringNotContainsString('hidden overflow-x-auto md:block', $html);
 
-        // Both sign-in layouts loop the same children and can both sort.
-        $this->assertSame(2, substr_count($html, 'child in filteredChildren"'));
+        // All three layouts — the desktop sheet, the phone list and the avatar
+        // cards — loop the same filtered children, so the room chips and the
+        // search box narrow every one of them alike.
+        $this->assertSame(3, substr_count($html, 'child in filteredChildren"'));
         // The desktop grid has a sortable heading per column and the phone
         // list one button that turns whichever column is in use around.
         $this->assertSame(1, substr_count($html, "toggleSort('lan')"));

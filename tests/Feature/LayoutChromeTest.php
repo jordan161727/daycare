@@ -64,13 +64,14 @@ class LayoutChromeTest extends TestCase
      * requests that really are waiting. Restore the count assertions with the
      * link.
      */
-    public function test_the_directors_leave_queue_is_live_and_my_leave_is_parked(): void
+    public function test_the_leave_links_are_live_for_the_roles_they_belong_to(): void
     {
         /*
-         * The sidebar as the centre set it on 2026-09-29: the director's
-         * queue is back, with the count of requests waiting on it; a
-         * teacher's own "My Leave" is still parked. So the count assertions
-         * come back with the link, as the note above always said they would.
+         * The sidebar as the centre set it on 2026-09-29, with every parked
+         * link switched back on: the director's queue, with the count of
+         * requests waiting on it, and everybody's own "My Leave" — the
+         * director included, who has leave too and simply cannot sign off
+         * their own. A teacher sees their own leave and not the queue.
          */
         $admin = User::factory()->create(['role' => 'admin']);
         $teacher = User::factory()->create(['role' => 'teacher']);
@@ -86,16 +87,16 @@ class LayoutChromeTest extends TestCase
             ]);
         }
 
-        // The director: the queue, and the two waiting on it.
+        // The director: the queue, the two waiting on it, and their own leave.
         $this->actingAs($admin)->get(route('dashboard'))->assertOk()
             ->assertSee('Leave Requests')
             ->assertSee('rounded-full bg-amber-500', escape: false)
-            ->assertDontSee('My Leave');
+            ->assertSee('My Leave');
 
-        // A teacher: neither link, and no badge that is not theirs to see.
+        // A teacher: their own leave, but not the queue nor its badge.
         $this->actingAs($teacher)->get(route('dashboard'))->assertOk()
+            ->assertSee('My Leave')
             ->assertDontSee('Leave Requests')
-            ->assertDontSee('My Leave')
             ->assertDontSee('rounded-full bg-amber-500', escape: false);
     }
 

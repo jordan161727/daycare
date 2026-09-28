@@ -466,6 +466,9 @@ Route::middleware('role:admin,teacher')->group(function () {
     // Moving the hour on an arrival. Same door as removing one: it rewrites
     // a figure the centre bills from, and the same people may do it.
     Route::post('/attendance/sign-in/retime', [AttendanceController::class, 'retime'])->name('attendance.signin.retime');
+    // A child clocked out who came back: the departure it closes goes on a
+    // return, and the row is open again. Same door: it moves a billed hour.
+    Route::post('/attendance/sign-in/return', [AttendanceController::class, 'returnIn'])->name('attendance.signin.return');
 
     // Building a week is a decision, so it has its own door. Merely viewing one
     // never creates it.
