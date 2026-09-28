@@ -289,13 +289,17 @@ class StaffWeekGridTest extends TestCase
             $html,
         );
 
-        // A day that went fine stays a dot and nothing more.
+        // A day that went fine leads through as well, to be looked at rather
+        // than put right — the edit panel opens on any dot, and a green one
+        // opens it read-only in spirit: nothing needs changing, but the day is
+        // there to review. What it says on the way in is the difference.
         $this->punch($staff, '2026-09-22 08:00', TimePunch::IN);
         $this->punch($staff, '2026-09-22 16:00', TimePunch::OUT);
 
         $html = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
 
-        $this->assertStringNotContainsString(
+        $this->assertStringContainsString('to review', $html);
+        $this->assertStringContainsString(
             route('timesheets.fix', ['user' => $staff->id, 'date' => '2026-09-22']),
             $html,
         );

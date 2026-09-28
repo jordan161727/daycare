@@ -37,6 +37,38 @@ class TimePunch extends Model
     /** A supervisor put it right afterwards, and said why. */
     public const SOURCE_SUPERVISOR = 'supervisor';
 
+    /**
+     * Why a supervisor changed a day.
+     *
+     * A fixed list, because "forgot" typed forty different ways is a column
+     * nobody can report on, and the point of asking is to be able to say at
+     * the end of the month how many corrections were the kiosk's fault.
+     * "Other" is there because the list will never be complete, and it is the
+     * one that has to carry a note — see reasonText().
+     */
+    public const REASONS = [
+        'forgot' => 'Forgot to punch',
+        'wrong_time' => 'Punched wrong time',
+        'device' => 'Kiosk / device issue',
+        'schedule' => 'Schedule change',
+        'other' => 'Other',
+    ];
+
+    /**
+     * The reason as it is written on the punch.
+     *
+     * The record keeps one free-text column, and it was free text before the
+     * list existed; a code alone in it would be unreadable next to the
+     * sentences already there. So the label goes in, with the note after a
+     * colon where one was given.
+     */
+    public static function reasonText(string $code, ?string $note): string
+    {
+        $label = self::REASONS[$code] ?? $code;
+
+        return filled($note) ? $label.': '.trim($note) : $label;
+    }
+
     protected $fillable = [
         'user_id', 'work_date', 'punched_at', 'type',
         'source', 'reason', 'recorded_by', 'ip_address', 'corrects_id',

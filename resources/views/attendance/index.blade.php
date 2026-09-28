@@ -429,8 +429,16 @@
                                  numbers that never moved. --}}
                             <span x-show="room !== ''" x-cloak class="font-semibold text-slate-700 dark:text-slate-200" x-text="room"></span>
                             <span><b class="font-bold text-slate-900 dark:text-white" x-text="enrolledCount"></b> enrolled</span>
+                            {{-- Who the day was planned for, then who has come, then
+                                 the gap between the two. "Expected" wears the sky of
+                                 the dashed box because it is the same fact: a tick
+                                 for this day. "Still to come" is the one number a
+                                 room acts on at nine, so it is amber and sits beside
+                                 the arrivals it is waiting on. --}}
+                            <span title="Ticked for this day — any session — in the room being looked at"><b class="font-bold text-sky-600 dark:text-sky-400" x-text="expectedCount"></b> expected</span>
                             <span><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount"></b> in</span>
-                            <span><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount"></b> not in</span>
+                            <span title="Expected and not yet signed in"><b class="font-bold text-amber-600 dark:text-amber-400" x-text="awaitedCount"></b> still to come</span>
+                            <span title="On the roll and not signed in, whether or not they were expected"><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount"></b> not in</span>
                         </p>
                     </div>
                 </div>
@@ -1213,6 +1221,34 @@ function attendanceApp() { return {
         return this.scopeChildren.filter(child => this.hasAnyAttendanceForDate(child.id, this.countDate)).length;
     },
     get absentCount() { return this.enrolledCount - this.presentCount; },
+
+    /*
+     * Who the day was planned for.
+     *
+     * Asked for from the floor: "I want to count who is expected to come."
+     * "Not in" was already there and answers a different question — it is
+     * everyone on the roll who has not arrived, including the children who
+     * were never coming today. A room at nine o'clock wants the other number:
+     * how many of the ones we booked are still to walk in.
+     *
+     * Counted off the same ticks the boxes are painted from, and off the same
+     * attendance "in" is counted from, so the sentence above the sheet can
+     * never disagree with the sheet. A tap that books a day moves "expected"
+     * by moving the tick; a sign-in moves "still to come" by moving the sheet.
+     * A closed day has every tick off, so it counts nobody expected — which
+     * is true.
+     */
+    isExpectedOn(childId, date) {
+        return Object.values(this.schedule?.[childId]?.[date] ?? {}).some(ticked => ticked === true);
+    },
+    get expectedCount() {
+        return this.scopeChildren.filter(child => this.isExpectedOn(child.id, this.countDate)).length;
+    },
+    get awaitedCount() {
+        return this.scopeChildren.filter(child =>
+            this.isExpectedOn(child.id, this.countDate) && ! this.hasAnyAttendanceForDate(child.id, this.countDate)
+        ).length;
+    },
 
     /* ---- setting the schedule is a whole-centre job: every child, every room,
             whatever the sign-in view happens to be filtered to ---- */

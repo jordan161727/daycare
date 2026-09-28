@@ -243,21 +243,27 @@ class ChildPhotoTest extends TestCase
      * Every LAN is tried, so this holds for the whole cycle of the styles
      * rather than for the one number the first child happened to get.
      */
+    /*
+     * The stand-in is one of twelve illustrated portraits on a sprite — six
+     * that read as girls, six as boys — and data-child-avatar carries which.
+     * The rule is the one the drawn face had: the group comes from the
+     * record's gender column, never from the name.
+     */
     public function test_a_girl_is_drawn_a_girls_face(): void
     {
-        $this->assertDrawnFrom('Girl', ['bunches', 'topknot', 'long', 'curls']);
+        $this->assertDrawnFrom('Girl', ['1', '3', '4', '6', '9', '11']);
     }
 
     public function test_a_boy_is_drawn_a_boys_face(): void
     {
-        $this->assertDrawnFrom('Boy', ['bowl', 'sweep', 'crop', 'hat']);
+        $this->assertDrawnFrom('Boy', ['0', '2', '5', '7', '8', '10']);
     }
 
-    public function test_a_child_whose_record_does_not_say_is_drawn_neutrally(): void
+    public function test_a_child_whose_record_does_not_say_is_drawn_from_all_twelve(): void
     {
-        // Not a guess from the name — the record does not say, so the face does
-        // not either.
-        $this->assertDrawnFrom(null, ['bowl', 'curls', 'hat', 'sweep']);
+        // Not a guess from the name — the record does not say, so the face
+        // is drawn from the whole set rather than from either half of it.
+        $this->assertDrawnFrom(null, array_map('strval', range(0, 11)));
     }
 
     public function test_the_form_records_which_it_is(): void

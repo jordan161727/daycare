@@ -33,6 +33,17 @@ class StaffTimesheetController extends Controller
 
     public const MISSING_OUT = 'missing_out';
 
+    /**
+     * Somebody corrected this day and it now adds up.
+     *
+     * Drawn as a hollow ring rather than a green dot, because a day that was
+     * put right by hand is a different kind of fact from one the clock got
+     * right on its own, and the person reconciling the month is the one who
+     * needs to tell them apart. A corrected day that is still late or still
+     * open keeps its red or amber: the ring says "fine now", and it is not.
+     */
+    public const EDITED = 'edited';
+
     public function __construct(private TimeClock $clock) {}
 
     /**
@@ -45,6 +56,26 @@ class StaffTimesheetController extends Controller
      * meant.
      */
     public const MAX_DAYS = 31;
+
+    /**
+     * The grid, with one person's day already open in the edit panel.
+     *
+     * Where a report row leads. The week around the day is the range shown,
+     * so the cell being edited is on screen with its neighbours, and the panel
+     * opens from ?open= on arrival — see timesheetGrid().init().
+     */
+    public function openDay(User $user, string $date)
+    {
+        validator(['date' => $date], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+        $day = Carbon::parse($date);
+
+        return redirect()->route('staff.timesheets', [
+            'from' => $day->copy()->startOfWeek()->toDateString(),
+            'to' => $day->copy()->endOfWeek()->toDateString(),
+            'open' => $user->id.'|'.$date,
+        ]);
+    }
 
     public function index(Request $request)
     {
@@ -179,14 +210,7 @@ class StaffTimesheetController extends Controller
 
             $worked += $day['worked'];
 
-            $days[$iso] = [
-                'in' => $this->clockTime($day['first_in']),
-                'out' => $this->clockTime($day['last_out']),
-                'status' => $this->statusOf($person, $iso, $day),
-                // Nothing at all, which is not the same as a day that went
-                // wrong: a day off has no dot and no dash to read.
-                'empty' => $day['first_in'] === null && $day['last_out'] === null,
-            ];
+            $days[$iso] = $this->cell($person, $iso, $day);
         }
 
         return [
@@ -200,6 +224,51 @@ class StaffTimesheetController extends Controller
             'hours' => round($worked / 60, 1),
             'days' => $days,
         ];
+    }
+
+    /**
+     * One day of one person's row, as the grid draws it.
+     *
+     * Public because the edit panel's save hands it back: the grid updates
+     * the cell it opened from without reloading, and it has to be painted
+     * by the same code that painted it in the first place or the two will
+     * disagree the moment a rule changes.
+     */
+    public function cell(User $person, string $date, ?array $day = null): array
+    {
+        $day ??= $this->clock->day($person->id, $date);
+        $status = $this->statusOf($person, $date, $day);
+
+        return [
+            'in' => $this->clockTime($day['first_in']),
+            'out' => $this->clockTime($day['last_out']),
+            'status' => $status,
+            // The words for it, decided once here. The grid's dots and the
+            // panel's repaint both read this, so neither carries its own copy
+            // of what a colour means.
+            'label' => match ($status) {
+                self::LATE => 'Late',
+                self::MISSING_OUT => 'Missing time out',
+                self::EDITED => 'Edited',
+                self::ON_TIME => 'On time',
+                default => null,
+            },
+            // Nothing at all, which is not the same as a day that went
+            // wrong: a day off has no dot and no dash to read.
+            'empty' => $day['first_in'] === null && $day['last_out'] === null,
+        ];
+    }
+
+    /** Hours worked across a run of days, for the total at the head of a row. */
+    public function hoursBetween(User $person, string $from, string $to): float
+    {
+        $worked = 0;
+
+        foreach (\Illuminate\Support\Carbon::parse($from)->daysUntil($to) as $date) {
+            $worked += $this->clock->day($person->id, $date->toDateString())['worked'];
+        }
+
+        return round($worked / 60, 1);
     }
 
     /**
@@ -241,6 +310,12 @@ class StaffTimesheetController extends Controller
 
         if ($due !== null && $day['first_in'] > (int) $due) {
             return self::LATE;
+        }
+
+        // Fine now — but was it fine on its own? walk() hands back the live
+        // punches, and any one of them a supervisor wrote is the answer.
+        if ($day['punches']->contains(fn ($punch) => $punch->isCorrection())) {
+            return self::EDITED;
         }
 
         return self::ON_TIME;

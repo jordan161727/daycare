@@ -220,56 +220,29 @@ class StaffReportCatalogueTest extends TestCase
         $this->assertStringContainsString('longer than '.StaffReportController::MAX_DAYS.' days', $html);
     }
 
-    public function test_the_department_summary_totals_by_department_not_by_job(): void
+    public function test_departments_are_not_part_of_the_reports(): void
     {
-        // The grouping the role report could not give: a kitchen holds several
-        // jobs, and a cook and a dishwasher are one department and two roles.
-        $kitchen = Department::create(['name' => 'Kitchen']);
-
-        $this->rachel->update(['department_id' => $kitchen->id, 'job_role' => 'Cook']);
-
-        $dishwasher = $this->staff('Devon Brooks');
-        $dishwasher->update(['department_id' => $kitchen->id, 'job_role' => 'Assistant']);
-
-        $html = $this->report('department-summary', ['start' => '2026-09-21', 'end' => '2026-09-25']);
-
-        $this->assertStringContainsString('Kitchen', $html);
-        // The administrator is in no department, and is named as such rather
-        // than dropped off a report that is supposed to cover everybody.
-        $this->assertStringContainsString('Unassigned', $html);
-        $this->assertStringContainsString('Showing 2 rows', $html);
-    }
-
-    public function test_the_department_filter_narrows_every_report(): void
-    {
+        /*
+         * They were, for a while: two report types and a filter. The centre
+         * runs rooms and jobs, not departments, and asked for them to go. The
+         * roster reports cut by role and nothing else, and a department that
+         * still exists in the database changes no report.
+         */
         $kitchen = Department::create(['name' => 'Kitchen']);
         $this->rachel->update(['department_id' => $kitchen->id]);
 
+        $html = $this->report('employee-list');
+
+        $this->assertStringNotContainsString('name="department"', $html);
+        $this->assertStringNotContainsString('Department', $this->body($html));
+        $this->assertStringNotContainsString('department-summary', $html);
+        $this->assertStringNotContainsString('department-members', $html);
+
+        // And a filter somebody still has bookmarked narrows nothing.
         $body = $this->body($this->report('employee-list', ['department' => (string) $kitchen->id]));
 
         $this->assertStringContainsString('Rachel Kim', $body);
-        $this->assertStringNotContainsString('Administrator', $body);
-    }
-
-    public function test_unassigned_is_a_choice_on_the_department_filter(): void
-    {
-        // The question somebody asks the week after setting departments up.
-        $kitchen = Department::create(['name' => 'Kitchen']);
-        $this->rachel->update(['department_id' => $kitchen->id]);
-
-        $body = $this->body($this->report('employee-list', ['department' => 'none']));
-
         $this->assertStringContainsString('Administrator', $body);
-        $this->assertStringNotContainsString('Rachel Kim', $body);
-    }
-
-    public function test_the_department_filter_is_hidden_until_a_department_exists(): void
-    {
-        $this->assertStringNotContainsString('name="department"', $this->report('employee-list'));
-
-        Department::create(['name' => 'Kitchen']);
-
-        $this->assertStringContainsString('name="department"', $this->report('employee-list'));
     }
 
     /** The page, for one report and whatever filters it takes. */

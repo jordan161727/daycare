@@ -226,6 +226,22 @@ Route::get('/timesheets/{period}/export', [TimesheetController::class, 'export']
 Route::get('/timesheets/fix/{user}/{date}', [TimePunchController::class, 'find'])
     ->name('timesheets.fix')->whereNumber('user');
 
+// The edit panel on the week grid: the day as data, and one save for every
+// change made in it. The same primitives as the day screen — a void and a
+// replacement, each stamped with who and why — applied together under one
+// reason, and refused whole if the day they would produce does not add up.
+Route::get('/timesheets/panel/{user}/{date}', [TimePunchController::class, 'panel'])
+    ->name('timesheets.panel')->whereNumber('user')->where('date', '\d{4}-\d{2}-\d{2}');
+Route::post('/timesheets/panel/{user}/{date}', [TimePunchController::class, 'savePanel'])
+    ->name('timesheets.panel.save')->whereNumber('user')->where('date', '\d{4}-\d{2}-\d{2}');
+
+// One address that lands on the grid with a person's day already open in the
+// edit panel — what a report row, or anything else that names a day, links
+// to. The grid reads ?open= on arrival. Distinct from timesheets.fix, which
+// stays the no-script way in.
+Route::get('/timesheets/open/{user}/{date}', [StaffTimesheetController::class, 'openDay'])
+    ->name('timesheets.open')->whereNumber('user')->where('date', '\d{4}-\d{2}-\d{2}');
+
 Route::get('/timesheets/{period}/staff/{user}/day/{date}', [TimePunchController::class, 'show'])->name('timesheets.day')->where('date', '\d{4}-\d{2}-\d{2}');
 Route::post('/timesheets/{period}/staff/{user}/day/{date}', [TimePunchController::class, 'store'])->name('timesheets.day.punch')->where('date', '\d{4}-\d{2}-\d{2}');
 Route::post('/timesheets/{period}/staff/{user}/punches/{punch}', [TimePunchController::class, 'amend'])->name('timesheets.punch.amend');

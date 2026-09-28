@@ -162,6 +162,16 @@ class CheckInController extends Controller
                 // child's first session and the rest is done on the register.
                 'session' => $child->sessions()[0] ?? 'FULL',
                 'byDay' => $byDay,
+                // For the roster cards: the name the way a card says it, and
+                // the child's own avatar — their photograph, or the drawn face
+                // the rest of the app gives them — rendered once here so the
+                // cards are markup the browser only has to place.
+                'first_name' => $child->first_name,
+                'display' => trim($child->first_name.' '.$child->last_name),
+                'avatar' => preg_replace('/>\s+</', '><', trim(view('components.child-avatar', [
+                    'child' => $child,
+                    'size' => 'h-24 w-24',
+                ])->render())),
             ];
         });
 
@@ -201,6 +211,10 @@ class CheckInController extends Controller
             // way in — this only decides whether the switch is offered.
             'canAmend' => $user->isAdmin(),
             'span' => $span,
+            // The roster is what the screen opens on: one card a child, today
+            // only, worked from a door. The four-line sheet is a tab away for
+            // the glance sideways — did she come yesterday, is he in tomorrow.
+            'view' => $request->input('view') === 'sheet' ? 'sheet' : 'today',
         ]);
     }
     /**

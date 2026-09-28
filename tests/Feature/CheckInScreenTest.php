@@ -159,6 +159,62 @@ class CheckInScreenTest extends TestCase
         $this->assertNull($attendance->fresh()->signed_out_at);
     }
 
+    public function test_the_screen_opens_on_a_roster_of_cards(): void
+    {
+        /*
+         * A card a child, worked from a door: their face, their room, whether
+         * they are here. Room pills with who is in over who is enrolled, and
+         * the day's totals beside. The four-line sheet is still here, a tab
+         * away, drawn from the same rows — so nothing the sheet knows is lost
+         * and nothing the roster shows can disagree with it.
+         */
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        // Opens on today, as the roster. The sheet is still rendered and still
+        // reachable by address, but there is no tab to it on the face of the
+        // screen — the centre asked for today and nothing else here.
+        $this->assertStringContainsString("view: 'today'", $html);
+        $this->assertStringNotContainsString('role="tab"', $html);
+        $this->assertStringContainsString("x-show=\"view === 'sheet'\"", $html);
+
+        // The cards carry the child's own avatar and a First Last name. The
+        // rows reach the page through @js, which writes every quote as
+        // ", so that is the shape the key and its value arrive in.
+        // The loop variable is `card`, deliberately: the dialog is opened by
+        // writing the component's `child`, and a loop variable of the same
+        // name would take the write instead. That was a real bug.
+        $this->assertStringContainsString('x-for="card in cards"', $html);
+        $this->assertStringContainsString('x-html="card.avatar"', $html);
+        $this->assertStringNotContainsString('x-for="child in', $html);
+
+        // Built from chr(92) rather than written as an escape: the escape
+        // sequence itself has a habit of being unescaped by editors, and then
+        // the assertion is looking for quotes that never appear in a page.
+        $q = chr(92).'u0022';
+
+        $this->assertStringContainsString($q.'display'.$q.':'.$q.'Maeve Adkins'.$q, $html);
+        $this->assertStringContainsString($q.'avatar'.$q.':'.$q, $html);
+
+        // The pills and the panel count off the rows, not a running total.
+        $this->assertStringContainsString("tally('').in + '/' + tally('').total", $html);
+        $this->assertStringContainsString('Today at a glance', $html);
+        $this->assertStringContainsString('Across all classrooms', $html);
+
+        // And the dialog drives the same two endpoints the sheet does.
+        $this->assertStringContainsString("leaving ? '/check-in/' + day.id + '/out' : '/check-in'", $html);
+        $this->assertStringContainsString('Defaults to 0 · Normal', $html);
+    }
+
+    public function test_the_sheet_is_still_a_tab_away(): void
+    {
+        $html = $this->actingAs($this->admin)
+            ->get(route('check-in.index', ['view' => 'sheet']))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString("view: 'sheet'", $html);
+    }
+
     public function test_the_screen_is_a_grid_of_four_lines_a_child(): void
     {
         // In, the check taken then, out, the check taken then — the same

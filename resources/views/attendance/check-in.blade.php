@@ -17,7 +17,10 @@
 --}}
 @php($cell = 'border border-slate-200 dark:border-white/10')
 
-<div x-data="checkInGrid()">
+{{-- One click handler on the root for the sheet's four hundred cells, the way
+     the register does it, rather than a listener attached in init() — see
+     onRootClick(). --}}
+<div x-data="checkInGrid()" @click="onRootClick($event)">
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 class="text-xl font-bold tracking-tight">Check in</h1>
@@ -25,18 +28,11 @@
             {{ \Illuminate\Support\Carbon::parse($today)->format('l, M j') }}
         </span>
 
-        {{-- How much of the record to draw. A link apiece rather than a
-             filter, so the choice is in the address and a bookmark to the
-             week stays the week. --}}
-        <div class="flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
-            @foreach([\App\Http\Controllers\CheckInController::WEEK => 'This week', \App\Http\Controllers\CheckInController::MONTH => 'This month'] as $value => $label)
-                @if($span === $value)
-                    <span class="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 shadow-sm dark:bg-night-700 dark:text-night-950" aria-current="page">{{ $label }}</span>
-                @else
-                    <a href="{{ route('check-in.index', ['span' => $value]) }}" class="rounded-md px-2.5 py-1 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100">{{ $label }}</a>
-                @endif
-            @endforeach
-        </div>
+        {{-- No Week/Month tabs here, at the centre's request: this screen is
+             today's roster and nothing else on the face of it. The four-line
+             sheet is still rendered below and still opens by address
+             (?view=sheet, with ?span=week|month) — the register and the
+             month sheet are where the week and the month are read. --}}
 
         <div class="relative ml-auto">
             <span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm" aria-hidden="true">🔍</span>
@@ -78,6 +74,10 @@
         </ul>
     </div>
 
+    {{-- The sheet: four lines a child, a column a day. The other tab. It is
+         rendered whatever the tab, because the tests and the exports read it
+         and because switching to it should not cost a request. --}}
+    <div x-show="view === 'sheet'" x-cloak>
     <div class="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" @click="room = ''"
                 :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'"
@@ -181,6 +181,172 @@
             Earlier days are read-only here &mdash; a director can correct them, or they can be put right on the <a href="{{ route('attendance.index') }}" class="underline underline-offset-2">attendance register</a>.
         @endif
     </p>
+    </div>
+
+    {{-- ============================================================
+         The roster: today, one card a child.
+
+         What the screen opens on. A row of room pills with who is in over
+         who is enrolled, a card a child with their face, their room and
+         whether they are here, and a panel beside it with the day's totals.
+         Press a card and a small dialog takes the health code and clocks
+         the child in or out — the same two endpoints the sheet uses, so a
+         card and a cell can never disagree about a child.
+
+         Drawn from the same rows as the sheet, and every count on it is
+         worked out from those rows rather than carried as a running total,
+         so it cannot drift from the cards under it.
+         ============================================================ --}}
+    <div x-show="view === 'today'" class="mt-4">
+        {{-- Room pills: who is in, over who is enrolled. --}}
+        <div class="flex flex-wrap gap-2" role="group" aria-label="Filter children by room">
+            <button type="button" @click="room = ''" :aria-pressed="room === '' ? 'true' : 'false'"
+                    :class="room === '' ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-900 dark:text-slate-300 dark:hover:bg-white/10'"
+                    class="rounded-full px-3.5 py-1.5 text-sm font-semibold transition">
+                All <span class="ml-1.5 opacity-70 tabular-nums" x-text="tally('').in + '/' + tally('').total"></span>
+            </button>
+            <template x-for="chip in rooms" :key="chip.room">
+                <button type="button" @click="room = chip.room" :aria-pressed="room === chip.room ? 'true' : 'false'"
+                        :class="room === chip.room ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-900 dark:text-slate-300 dark:hover:bg-white/10'"
+                        class="rounded-full px-3.5 py-1.5 text-sm font-semibold transition">
+                    <span x-text="chip.animal" aria-hidden="true"></span>
+                    <span class="ml-1" x-text="chip.room"></span>
+                    <span class="ml-1.5 opacity-70 tabular-nums" x-text="tally(chip.room).in + '/' + tally(chip.room).total"></span>
+                </button>
+            </template>
+        </div>
+
+        <div class="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+            {{-- The cards. --}}
+            <section class="glass-card rounded-2xl">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 px-5 py-4 dark:border-white/10">
+                    <h2 class="text-base font-bold">
+                        <span x-text="room === '' ? 'All children' : room"></span>
+                        <span class="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400" x-text="cards.length + ' children'"></span>
+                    </h2>
+                    <p class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span> On premises</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-slate-400" aria-hidden="true"></span> Currently out</span>
+                    </p>
+                </div>
+
+                {{-- Five across only on a genuinely wide screen: this theme has
+                     no 2xl breakpoint, and `desktop` is its word for one. --}}
+                <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 xl:grid-cols-4 desktop:grid-cols-5">
+                    {{-- `card`, not `child`. The dialog below is opened by writing
+                         the component's `child`, and Alpine writes to the nearest
+                         scope that owns the name — so a loop variable also called
+                         `child` would swallow the assignment, and the dialog would
+                         never open. It did exactly that once. --}}
+                    <template x-for="card in cards" :key="card.id">
+                        <button type="button" @click="openChild(card.id)"
+                                class="group rounded-2xl border border-transparent px-2 py-4 text-center transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50/40 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
+                                :aria-label="card.display + ', ' + card.room + ', ' + (isIn(card) ? 'on premises' : 'currently out') + '. Open attendance.'">
+                            <span class="relative mx-auto block h-24 w-24">
+                                {{-- The child's own face, ringed green when they are here. --}}
+                                <span class="block h-24 w-24 overflow-hidden rounded-full ring-4 ring-white dark:ring-night-900"
+                                      :class="isIn(card) ? 'outline outline-[3px] outline-emerald-500' : 'outline outline-2 outline-slate-200 dark:outline-white/10'"
+                                      x-html="card.avatar"></span>
+                                <span x-show="isIn(card)" x-cloak class="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border-[3px] border-white bg-emerald-500 text-xs font-bold text-white dark:border-night-900" aria-hidden="true">✓</span>
+                            </span>
+                            <span class="mt-3 block truncate text-[0.9333rem] font-semibold" x-text="card.display"></span>
+                            <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" x-text="card.room"></span>
+                            <span class="mt-2 block text-xs" :class="isIn(card) ? 'font-semibold text-emerald-700 dark:text-emerald-300' : (isOut(card) ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500')" x-text="stateOf(card)"></span>
+                        </button>
+                    </template>
+                    <p x-show="cards.length === 0" x-cloak class="col-span-full py-12 text-center text-sm text-slate-500 dark:text-slate-400">No children match.</p>
+                </div>
+
+                <p class="border-t border-slate-200/70 px-5 py-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">Select a child to record a health code and clock them in or out.</p>
+            </section>
+
+            {{-- The day, at a glance. --}}
+            <aside class="glass-card rounded-2xl p-5 lg:sticky lg:top-4" aria-label="Today at a glance">
+                <p class="text-[0.6667rem] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Live overview</p>
+                <h2 class="mt-1 text-lg font-bold" x-text="room === '' ? 'Today at a glance' : room + ' today'"></h2>
+
+                <dl class="mt-4 grid grid-cols-2 gap-2.5">
+                    <div class="rounded-xl bg-emerald-50 px-3 py-3.5 dark:bg-emerald-500/10">
+                        <dd class="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300" x-text="tally(room).in"></dd>
+                        <dt class="mt-0.5 text-xs text-emerald-800/80 dark:text-emerald-200/80">Currently in</dt>
+                    </div>
+                    <div class="rounded-xl bg-slate-100 px-3 py-3.5 dark:bg-white/5">
+                        <dd class="text-3xl font-bold tabular-nums" x-text="tally(room).total - tally(room).in"></dd>
+                        <dt class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Currently out</dt>
+                    </div>
+                </dl>
+
+                <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10" aria-hidden="true">
+                    <div class="h-full rounded-full bg-emerald-500 transition-all" :style="'width:' + (tally(room).total ? tally(room).in / tally(room).total * 100 : 0) + '%'"></div>
+                </div>
+                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"><span x-text="tally(room).in"></span> of <span x-text="tally(room).total"></span> children on premises</p>
+
+                <div class="mt-5 border-t border-slate-200/70 pt-4 dark:border-white/10">
+                    <h3 class="text-sm font-bold">Across all classrooms</h3>
+                    <ul class="mt-2 space-y-2.5">
+                        <template x-for="chip in rooms" :key="'sum-' + chip.room">
+                            <li class="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
+                                <span><span x-text="chip.animal" aria-hidden="true"></span> <span class="ml-1" x-text="chip.room"></span></span>
+                                <span class="tabular-nums"><b class="text-slate-900 dark:text-white" x-text="tally(chip.room).in"></b> <span class="text-xs text-slate-400" x-text="'/ ' + tally(chip.room).total + ' in'"></span></span>
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    {{-- The card's dialog: the health code, and the clock. --}}
+    <template x-if="child">
+        <div class="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" :aria-labelledby="'child-name-' + child.id" @keydown.escape.window="closeChild()">
+            <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" @click="closeChild()" aria-hidden="true"></div>
+
+            <div class="glass-card relative w-full max-w-sm rounded-3xl p-6 text-center">
+                <button type="button" @click="closeChild()" class="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20" aria-label="Close">×</button>
+
+                <span class="mx-auto block h-28 w-28 overflow-hidden rounded-full outline outline-[3px]" :class="isIn(child) ? 'outline-emerald-500' : 'outline-slate-200 dark:outline-white/10'" x-html="child.avatar.replace('h-24 w-24', 'h-28 w-28')"></span>
+                <h2 class="mt-4 text-2xl font-bold" :id="'child-name-' + child.id" x-text="child.display"></h2>
+                <p class="mt-0.5 text-sm text-slate-500 dark:text-slate-400" x-text="child.room + ' · ' + child.lan"></p>
+                <span class="mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold"
+                      :class="isIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
+                      x-text="isIn(child) ? '✓ On premises · in at ' + today_of(child).in : (isOut(child) ? '○ Left at ' + today_of(child).out : '○ Currently out')"></span>
+
+                <template x-if="! isOut(child)">
+                    <form class="mt-5 text-left" @submit.prevent="clockChild()">
+                        <label for="ci-code" class="block text-sm font-semibold">Health code</label>
+                        <select id="ci-code" x-model.number="code" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-night-800">
+                            <template x-for="entry in codes" :key="entry.code">
+                                <option :value="entry.code" x-text="entry.code + ' · ' + entry.label"></option>
+                            </template>
+                        </select>
+
+                        <div x-show="needsNote(code)" x-cloak class="mt-3">
+                            <label for="ci-note" class="block text-sm font-semibold">Note</label>
+                            <textarea id="ci-note" x-model="note" rows="2" maxlength="120" placeholder="What was seen — required for “Other”"
+                                      class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-night-800"></textarea>
+                        </div>
+
+                        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Defaults to 0 · Normal. Choose another code when something was seen.</p>
+
+                        <p x-show="error" x-cloak class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300" x-text="error"></p>
+
+                        <button type="submit" :disabled="saving"
+                                :class="isIn(child) ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
+                                class="mt-4 w-full rounded-xl py-3 text-sm font-bold text-white transition disabled:opacity-50"
+                                x-text="saving ? 'Saving…' : (isIn(child) ? 'Clock out' : 'Clock in')"></button>
+                    </form>
+                </template>
+
+                <template x-if="isOut(child)">
+                    <p class="mt-5 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-500 dark:bg-white/5 dark:text-slate-400">
+                        Checked in at <b x-text="today_of(child).in"></b> and out at <b x-text="today_of(child).out"></b>. The codes can be corrected on the sheet.
+                    </p>
+                </template>
+            </div>
+        </div>
+    </template>
+
+    <p x-show="toast" x-cloak class="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl dark:bg-white dark:text-slate-900" role="status" aria-live="polite" x-text="toast"></p>
 
     {{-- The picker. One on the page, moved to whichever cell was pressed. --}}
     <template x-if="picker">
@@ -241,6 +407,119 @@ function checkInGrid() { return {
     note: '',
     error: '',
     saving: false,
+
+    /* ---- the roster: today, one card a child ----
+
+       Worked from the same rows as the sheet. Every count here is derived
+       from those rows on each read rather than carried as a running total,
+       so a card and the number above it can never disagree. */
+    view: @js($view),
+    child: null,      // the card open in the dialog, if any
+    code: 0,
+    toast: '',
+    toastTimer: null,
+
+    /** The rooms, in order, with their animal — from the rows themselves. */
+    get rooms() {
+        const seen = {};
+        Object.values(this.rows).forEach(row => { seen[row.room] = row.animal; });
+        return Object.keys(seen).sort().map(room => ({room, animal: seen[room] || ''}));
+    },
+
+    /** The cards on screen: the room chosen, and the search box. */
+    get cards() {
+        const term = this.search.trim().toLowerCase();
+        return Object.values(this.rows)
+            .filter(row => this.room === '' || row.room === this.room)
+            .filter(row => term === '' || (row.display + ' ' + row.lan).toLowerCase().includes(term))
+            .sort((a, b) => a.display.localeCompare(b.display));
+    },
+
+    today_of(row) { return row.byDay?.[this.today] ?? null; },
+    isIn(row) { const day = this.today_of(row); return !! (day && day.in && ! day.out); },
+    isOut(row) { const day = this.today_of(row); return !! (day && day.out); },
+    stateOf(row) {
+        if (this.isIn(row)) return 'In · ' + this.today_of(row).in;
+        if (this.isOut(row)) return 'Out · ' + this.today_of(row).out;
+        return 'Currently out';
+    },
+
+    /** In over enrolled, for one room or ('') the whole roll. */
+    tally(room) {
+        const rows = Object.values(this.rows).filter(row => room === '' || row.room === room);
+        return {total: rows.length, in: rows.filter(row => this.isIn(row)).length};
+    },
+
+    openChild(id) {
+        this.child = this.rows[id] ?? null;
+        this.code = 0;
+        this.note = '';
+        this.error = '';
+    },
+
+    closeChild() {
+        this.child = null;
+        this.note = '';
+        this.error = '';
+    },
+
+    /**
+     * Clock the open child in or out, with the code chosen.
+     *
+     * The same two endpoints the sheet presses — an arrival books the child's
+     * first session and takes the arrival check; a departure stamps now and
+     * takes the leaving check — so a card and a cell can never disagree.
+     */
+    async clockChild() {
+        if (! this.child || this.saving) return;
+
+        const code = Number(this.code);
+
+        if (this.needsNote(code) && ! this.note.trim()) {
+            this.error = 'That code needs a short note saying what was seen.';
+
+            return;
+        }
+
+        const row = this.child;
+        const day = this.today_of(row);
+        const leaving = this.isIn(row);
+
+        this.saving = true;
+        this.error = '';
+
+        try {
+            const response = await window.postJson(
+                leaving ? '/check-in/' + day.id + '/out' : '/check-in',
+                leaving
+                    ? { health_code: code, health_note: this.note.trim() || null }
+                    : { child_id: row.id, session: row.session, health_code: code, health_note: this.note.trim() || null },
+            );
+            const data = await response.json().catch(() => ({}));
+
+            if (! response.ok) {
+                this.error = Object.values(data.errors ?? {}).flat()[0] || data.message || 'That could not be saved.';
+
+                return;
+            }
+
+            this.rows[row.id].byDay[this.today] = {
+                id: data.attendance_id,
+                in: data.in_at, in_code: data.health_in, in_note: data.health_in_note,
+                out: data.out_at, out_code: data.health_out, out_note: data.health_out_note,
+            };
+            this.rows = { ...this.rows };
+
+            this.closeChild();
+            this.toast = row.display + (leaving ? ' clocked out at ' + data.out_at : ' clocked in at ' + data.in_at);
+            clearTimeout(this.toastTimer);
+            this.toastTimer = setTimeout(() => { this.toast = ''; }, 4500);
+        } catch {
+            this.error = 'That could not be saved. Check the connection and try again.';
+        } finally {
+            this.saving = false;
+        }
+    },
 
     /** Whether one child's four-line block is on screen. */
     shows(room, haystack) {
@@ -354,17 +633,21 @@ function checkInGrid() { return {
         return '<button type="button" class="att-mark att-mark-todo" data-act="check-out" data-child="' + childId + '" data-date="' + date + '" aria-label="Check out">out</button>';
     },
 
-    /** Every press in today's column, caught once on the page. */
-    init() {
-        this.$el.addEventListener('click', event => {
-            const button = event.target.closest('[data-act]');
+    /**
+     * Every press in the sheet's today column, caught once on the root.
+     *
+     * Bound as @click on the root element rather than attached in init(): it
+     * is the same delegation the register uses, and it needs no magic
+     * property to find the element it is on.
+     */
+    onRootClick(event) {
+        const button = event.target.closest('[data-act]');
 
-            if (! button) return;
+        if (! button) return;
 
-            event.stopPropagation();
+        event.stopPropagation();
 
-            this.ask(Number(button.dataset.child), button.dataset.date, button.dataset.act, button);
-        });
+        this.ask(Number(button.dataset.child), button.dataset.date, button.dataset.act, button);
     },
 
     ask(childId, date, act, anchor) {

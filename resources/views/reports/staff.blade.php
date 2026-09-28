@@ -19,7 +19,6 @@
         'start' => $start?->toDateString(),
         'end' => $period === 'range' ? $end?->toDateString() : null,
         'role' => $role,
-        'department' => $department,
         'pay' => $showPay ? 1 : null,
     ]);
     $align = ['left' => 'text-left', 'center' => 'text-center', 'right' => 'text-right'];
@@ -60,24 +59,6 @@
                         @endforeach
                     </select>
                 </div>
-
-                @if($departments->isNotEmpty())
-                    {{-- Only where departments have been set up. An empty
-                         dropdown is a question with no answer, and a centre
-                         that does not run departments should never see it. --}}
-                    <div>
-                        <label for="department" class="block text-xs font-semibold text-slate-600 dark:text-slate-300">Select Department</label>
-                        <select id="department" name="department" class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-night-800">
-                            <option value="">All departments</option>
-                            @foreach($departments as $option)
-                                <option value="{{ $option->id }}" @selected($department === (string) $option->id)>{{ $option->name }}</option>
-                            @endforeach
-                            {{-- The question somebody asks the week after
-                                 setting departments up. --}}
-                            <option value="none" @selected($department === 'none')>Unassigned</option>
-                        </select>
-                    </div>
-                @endif
 
                 @if($period !== 'none')
                     <div>
@@ -175,9 +156,17 @@
                                          straight, and an empty field is not a
                                          gap somebody should have to squint at. --}}
                                     @php($muted = $value === null || $value === '' || $value === '00:00' || $value === '—')
-                                    <td class="px-3 py-2 tabular-nums {{ $align[$column['align']] }} {{ $muted ? 'text-slate-300 dark:text-slate-600' : '' }} {{ $index === 0 ? 'text-slate-500 dark:text-slate-400' : '' }}">
-                                        {{ $value === null || $value === '' ? '—' : $value }}
-                                    </td>
+                                    @if($column['link'] ?? false)
+                                        {{-- A way through, not a value: the day this row is
+                                             about, opened in the edit panel on the grid. --}}
+                                        <td class="px-3 py-2 {{ $align[$column['align']] }}">
+                                            <a href="{{ $value }}" class="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-0.5 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 dark:border-white/10 dark:text-indigo-300 dark:hover:bg-indigo-500/10">Open day <span aria-hidden="true">→</span></a>
+                                        </td>
+                                    @else
+                                        <td class="px-3 py-2 tabular-nums {{ $align[$column['align']] }} {{ $muted ? 'text-slate-300 dark:text-slate-600' : '' }} {{ $index === 0 ? 'text-slate-500 dark:text-slate-400' : '' }}">
+                                            {{ $value === null || $value === '' ? '—' : $value }}
+                                        </td>
+                                    @endif
                                 @endforeach
                             </tr>
                         @endforeach

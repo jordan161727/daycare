@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Exports\StaffReportExport;
-use App\Models\Department;
 use App\Models\TimePunch;
 use App\Models\User;
 use App\Services\TimeClock;
@@ -56,12 +55,10 @@ class StaffReportController extends Controller
         'date-wise-summary' => ['label' => 'Employee Date Wise Summary', 'period' => 'range', 'pay' => false],
         'weekday-summary' => ['label' => 'Employee Weekday Summary', 'period' => 'range', 'pay' => false],
         'role-summary' => ['label' => 'Role Summary', 'period' => 'range', 'pay' => true],
-        'department-summary' => ['label' => 'Department Summary', 'period' => 'range', 'pay' => true],
 
         'employee-list' => ['label' => 'Employee List', 'period' => 'none', 'pay' => true],
         'employee-details' => ['label' => 'Employee Details', 'period' => 'none', 'pay' => true],
         'role-members' => ['label' => 'Role Members', 'period' => 'none', 'pay' => false],
-        'department-members' => ['label' => 'Department Member', 'period' => 'none', 'pay' => false],
 
         'employee-activity' => ['label' => 'Employee Activity', 'period' => 'range', 'pay' => false],
         'manual-adjustments' => ['label' => 'Manual Time Adjustments', 'period' => 'range', 'pay' => false],
@@ -95,10 +92,6 @@ class StaffReportController extends Controller
             'end' => $filters['end'],
             'role' => $filters['role'],
             'roles' => User::jobRolesAmong($this->staff()),
-            'department' => $filters['department'],
-            // Only offered where departments have been set up: an empty
-            // dropdown is a question with no answer.
-            'departments' => Department::orderBy('name')->get(),
             'showPay' => $filters['pay'],
             'truncated' => $filters['truncated'],
             'columns' => $table['columns'],
@@ -126,8 +119,14 @@ class StaffReportController extends Controller
 
         $name = $filters['report'].'-'.$label.'.'.($request->input('format') === 'csv' ? 'csv' : 'xlsx');
 
+        // Link columns are for the screen. The file carries the report, not
+        // the addresses of the pages that edit it.
+        $keep = array_keys(array_filter($table['columns'], fn (array $column) => ! $column['link']));
+        $columns = array_values(array_intersect_key($table['columns'], array_flip($keep)));
+        $rows = $table['rows']->map(fn (array $row) => array_values(array_intersect_key(array_values($row), array_flip($keep))));
+
         return Excel::download(
-            new StaffReportExport($table['columns'], $table['rows'], $meta['label'], $label),
+            new StaffReportExport($columns, $rows, $meta['label'], $label),
             $name,
         );
     }
@@ -162,8 +161,7 @@ class StaffReportController extends Controller
             return [
                 'report' => $report, 'start' => null, 'end' => null, 'dates' => collect(),
                 'role' => trim((string) $request->input('role')),
-                'department' => trim((string) $request->input('department')),
-                'pay' => $pay, 'truncated' => false,
+                    'pay' => $pay, 'truncated' => false,
             ];
         }
 
@@ -204,7 +202,6 @@ class StaffReportController extends Controller
             'end' => $end,
             'dates' => $dates,
             'role' => trim((string) $request->input('role')),
-            'department' => trim((string) $request->input('department')),
             'pay' => $pay,
             'truncated' => $truncated,
         ];
@@ -217,7 +214,7 @@ class StaffReportController extends Controller
      */
     private function build(array $filters): array
     {
-        $staff = $this->rostered($filters['role'], $filters['department']);
+        $staff = $this->rostered($filters['role']);
 
         return match ($filters['report']) {
             'attendance-counter' => $this->attendanceCounter($staff, $filters),
@@ -229,11 +226,9 @@ class StaffReportController extends Controller
             'date-wise-summary' => $this->dateWiseSummary($staff, $filters),
             'weekday-summary' => $this->weekdaySummary($staff, $filters),
             'role-summary' => $this->groupedSummary($staff, $filters, 'Role', fn (User $p) => $p->jobRole()),
-            'department-summary' => $this->groupedSummary($staff, $filters, 'Department', fn (User $p) => $p->department?->name ?? 'Unassigned'),
             'employee-list' => $this->employeeList($staff, $filters),
             'employee-details' => $this->employeeDetails($staff, $filters),
             'role-members' => $this->members($staff, 'Role', fn (User $p) => $p->jobRole()),
-            'department-members' => $this->members($staff, 'Department', fn (User $p) => $p->department?->name ?? 'Unassigned'),
             'employee-activity' => $this->employeeActivity($staff, $filters, onlyManual: false),
             'manual-adjustments' => $this->employeeActivity($staff, $filters, onlyManual: true),
         };
@@ -336,14 +331,13 @@ class StaffReportController extends Controller
                     $person->staffId(),
                     $person->name,
                     $person->jobRole(),
-                    $person->department?->name,
                 ]);
             }
         }
 
         return [
             'columns' => $this->columns([
-                ['Date'], ['Day'], ['ID'], ['Employee Name'], ['Role'], ['Department'],
+                ['Date'], ['Day'], ['ID'], ['Employee Name'], ['Role'],
             ]),
             'rows' => $rows,
         ];
@@ -535,11 +529,11 @@ class StaffReportController extends Controller
     /**
      * The period totalled by a grouping rather than by person.
      *
-     * One method for both the role and the department reports, because they
-     * differ only in the callback that says which bucket somebody is in. The
-     * two groupings are genuinely different — a Kitchen holds several jobs,
-     * and a cook and a dishwasher are one department and two roles — but the
-     * arithmetic underneath is identical.
+     * Only the role report uses it now — a department version sat beside it
+     * until the centre asked for departments to go — but it is kept as a
+     * heading and a callback rather than folded into the role report, because
+     * the arithmetic is the same whatever the bucket is and the next grouping
+     * somebody asks for (room, most likely) should cost a line, not a method.
      *
      * @param  callable(User): string  $groupBy
      */
@@ -604,7 +598,7 @@ class StaffReportController extends Controller
     private function employeeList(Collection $staff, array $filters): array
     {
         $columns = [
-            ['ID'], ['Employee Name'], ['Role'], ['Department'], ['Employment'], ['Title'],
+            ['ID'], ['Employee Name'], ['Role'], ['Employment'], ['Title'],
             ['Start date'], ['Email'], ['Phone'],
         ];
 
@@ -617,7 +611,6 @@ class StaffReportController extends Controller
                 $person->staffId(),
                 $person->name,
                 $person->jobRole(),
-                $person->department?->name,
                 $person->employment,
                 $person->title,
                 $person->start_date?->format('Y-m-d'),
@@ -639,7 +632,7 @@ class StaffReportController extends Controller
     private function employeeDetails(Collection $staff, array $filters): array
     {
         $columns = [
-            ['ID'], ['Employee Name'], ['Legal name'], ['Role'], ['Department'], ['Employment'], ['Title'],
+            ['ID'], ['Employee Name'], ['Legal name'], ['Role'], ['Employment'], ['Title'],
             ['Classroom'], ['Start date'], ['Date of birth'], ['Phone'],
             ['Emergency contact'], ['Emergency phone'], ['Transport'], ['Aspire ID'],
         ];
@@ -654,7 +647,6 @@ class StaffReportController extends Controller
                 $person->name,
                 $person->legal_name,
                 $person->jobRole(),
-                $person->department?->name,
                 $person->employment,
                 $person->title,
                 $person->classroom,
@@ -680,8 +672,8 @@ class StaffReportController extends Controller
     /**
      * Everybody listed under the bucket they are in.
      *
-     * Shared by the role and department versions for the same reason as
-     * groupedSummary above: one list, two ways of grouping it.
+     * Generic for the same reason as groupedSummary above: one list, and the
+     * grouping is a callback so the next one is cheap to add.
      *
      * @param  callable(User): string  $groupBy
      */
@@ -745,12 +737,17 @@ class StaffReportController extends Controller
             $punch->recorder?->name,
             $punch->reason,
             $punch->isVoided() ? 'Voided' : 'Counts',
+            // The way through. A row in this report is a day somebody has
+            // already had to put right once, and the next question is usually
+            // "and what else is wrong with it" — so it opens that day in the
+            // edit panel rather than ending here.
+            route('timesheets.open', ['user' => $punch->user_id, 'date' => $punch->work_date->toDateString()]),
         ]);
 
         return [
             'columns' => $this->columns([
                 ['Date'], ['Time', 'center'], ['ID'], ['Employee Name'], ['Punch'],
-                ['Source'], ['Recorded by'], ['Reason'], ['Status'],
+                ['Source'], ['Recorded by'], ['Reason'], ['Status'], ['Edit', 'center', 'link'],
             ]),
             'rows' => $rows,
         ];
@@ -780,13 +777,14 @@ class StaffReportController extends Controller
      * choice on it: "who is not in a department yet" is the question somebody
      * asks the week after setting departments up.
      */
-    private function rostered(string $role, string $department): Collection
+    private function rostered(string $role): Collection
     {
+        // Role is the one way the roster is cut. Departments were offered here
+        // for a while and taken out at the centre's request: it runs rooms and
+        // jobs, not departments, and a second filter nobody used was one more
+        // thing to explain.
         return $this->staff()
             ->when($role !== '', fn ($all) => $all->filter(fn (User $person) => $person->jobRole() === $role))
-            ->when($department === 'none', fn ($all) => $all->filter(fn (User $person) => $person->department_id === null))
-            ->when($department !== '' && $department !== 'none',
-                fn ($all) => $all->filter(fn (User $person) => (string) $person->department_id === $department))
             ->values();
     }
 
@@ -877,6 +875,10 @@ class StaffReportController extends Controller
         return array_map(fn (array $column) => [
             'label' => $column[0],
             'align' => $column[1] ?? 'left',
+            // A link column holds an address, drawn on screen as a way through
+            // and left out of the file — a URL in a spreadsheet cell is not a
+            // report of anything. See export().
+            'link' => ($column[2] ?? null) === 'link',
         ], $columns);
     }
 
