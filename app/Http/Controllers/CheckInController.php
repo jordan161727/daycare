@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Models\AttendanceReturn;
 use App\Models\Child;
 use App\Models\HealthAudit;
 use App\Services\ClassroomAssignment;
 use App\Services\HealthScreening;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -149,6 +151,11 @@ class CheckInController extends Controller
                 'out' => Child::timeShort($row->signed_out_at?->timezone($timezone)),
                 'out_code' => $row->health_out_code,
                 'out_note' => $row->health_out_note,
+                // Every time the child left and came back on this session,
+                // oldest first: [[left, back], ...]. With the row's own in
+                // and out these are the whole day's clock, and nothing a
+                // second arrival overwrote.
+                'trips' => self::trips($row, $timezone),
             ];
 
             foreach ($days as $day) {
@@ -182,14 +189,7 @@ class CheckInController extends Controller
                     'out_note' => $last?->health_out_note,
                     // The trips out and back already on the day, in order:
                     // [[left, back], ...]. First in, last out, and these between.
-                    'trips' => $onDay->flatMap(fn (Attendance $row) => $row->returns)
-                        ->sortBy('returned_at')
-                        ->map(fn ($trip) => [
-                            Child::timeShort($trip->left_at->timezone($timezone)),
-                            Child::timeShort($trip->returned_at->timezone($timezone)),
-                        ])
-                        ->values()
-                        ->all(),
+                    'trips' => $onDay->flatMap(fn (Attendance $row) => self::trips($row, $timezone))->values()->all(),
                 ];
             }
 
@@ -374,6 +374,79 @@ class CheckInController extends Controller
     }
 
     /**
+     * A child clocked out who has come back.
+     *
+     * The client's rule: every clock-in and clock-out of the day is kept.
+     * So the departure is not forgotten to let the child in again — it
+     * becomes the left-at of a return, now is its returned-at, and the row's
+     * own departure is cleared until the next clock-out sets it. The row
+     * still reads first in, last out; the returns hold everything between.
+     * Same record the register's own "back in" writes.
+     *
+     * A code is required, as on the first arrival: somebody is standing in
+     * front of the child again, and a child back from the dentist at one
+     * can be a different child from the one who arrived at eight.
+     */
+    public function back(Request $request, Attendance $attendance)
+    {
+        $data = $request->validate([
+            'health_code' => ['required', 'integer', 'between:0,255'],
+            'health_note' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $this->guard($request, $attendance);
+
+        abort_if(
+            $attendance->signed_out_at === null,
+            422,
+            $attendance->child->displayName().' has not been clocked out, so there is nothing to come back from.',
+        );
+
+        // Checked before anything is written, so a refused code does not
+        // leave a return behind it.
+        $this->screening->validate($data['health_code'], $data['health_note'] ?? null);
+
+        DB::transaction(function () use ($attendance, $request) {
+            $attendance->returns()->create([
+                'left_at' => $attendance->signed_out_at,
+                'returned_at' => now(),
+                'performed_by' => $request->user()?->id,
+            ]);
+
+            // The leaving check went with the departure it was taken at; a
+            // new one is taken at the next. The audit keeps the old one.
+            $attendance->forceFill([
+                'signed_out_at' => null,
+                'health_out_code' => null,
+                'health_out_note' => null,
+            ])->save();
+        });
+
+        $this->screening->record(
+            $attendance,
+            HealthAudit::IN,
+            $data['health_code'],
+            $data['health_note'] ?? null,
+            $request->user(),
+        );
+
+        return $this->row($attendance);
+    }
+
+    /** The row's trips out and back as the screen shows them: [[left, back], ...]. */
+    private static function trips(Attendance $attendance, string $timezone): array
+    {
+        return $attendance->returns
+            ->sortBy('returned_at')
+            ->map(fn (AttendanceReturn $trip) => [
+                Child::timeShort($trip->left_at->timezone($timezone)),
+                Child::timeShort($trip->returned_at->timezone($timezone)),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * Whose day this is, and whether it is today.
      *
      * Today only, on this screen. A check typed into a day already gone is one
@@ -397,7 +470,7 @@ class CheckInController extends Controller
     private function row(Attendance $attendance)
     {
         $timezone = config('app.timezone');
-        $attendance->refresh();
+        $attendance->refresh()->load('returns');
 
         return response()->json([
             'success' => true,
@@ -409,6 +482,7 @@ class CheckInController extends Controller
             'health_in_note' => $attendance->health_in_note,
             'health_out' => $attendance->health_out_code,
             'health_out_note' => $attendance->health_out_note,
+            'trips' => self::trips($attendance, $timezone),
         ]);
     }
 }

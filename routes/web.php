@@ -449,6 +449,10 @@ Route::post('/check-in/{attendance}/in', [CheckInController::class, 'in'])
     ->name('check-in.in')->whereNumber('attendance');
 Route::post('/check-in/{attendance}/out', [CheckInController::class, 'out'])
     ->name('check-in.out')->whereNumber('attendance');
+// Back in after a clock-out. The out it closes is kept as a return, so every
+// in and out of the day stays on the record.
+Route::post('/check-in/{attendance}/back', [CheckInController::class, 'back'])
+    ->name('check-in.back')->whereNumber('attendance');
 
 Route::get('/symptom-codes', [HealthController::class, 'codes'])->name('health.codes');
 Route::post('/attendance/{attendance}/health', [HealthController::class, 'update'])

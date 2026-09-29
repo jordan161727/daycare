@@ -379,15 +379,23 @@
                 {{-- A morning and an afternoon, where the room books them: each
                      is its own row on the register, clocked in and out on its
                      own. The dialog opens on the one that is still to do. --}}
+                {{-- A School Age child has an AM and a PM, and the dialog says
+                     so — "AM" and "PM", not "morning" and "afternoon". Each
+                     block lists whatever clock-ins and clock-outs it has, the
+                     client's words: nothing more when there is one pair, every
+                     pair when the child left and came back. The chosen block
+                     is outlined and takes the button; a block in progress is
+                     green; a finished one is quiet with a tick. --}}
                 <template x-if="sessionsOf(child).length > 1">
-                    <div class="mt-4 grid grid-cols-2 gap-2 text-left" aria-label="Session">
+                    <div class="mt-4 grid grid-cols-2 gap-2 text-left" aria-label="AM or PM">
                         <template x-for="s in sessionsOf(child)" :key="'session-' + s">
-                            {{-- One card a session: its name, where it stands,
-                                 and its hours. The chosen one is outlined; a
-                                 session in progress is green; a finished one
-                                 is quiet with a tick. --}}
+                            {{-- The other half of the day is switched off: from
+                                 noon only the PM clocks in and out, before it
+                                 only the AM. Its entries still read. --}}
                             <button type="button" data-session @click="pickSession(s)" :aria-pressed="session === s"
-                                    class="rounded-2xl border px-3 py-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                    :disabled="blockDisabled(child, s)"
+                                    :title="blockDisabled(child, s) ? (s === 'AM' ? 'The AM is closed after noon' : 'The PM opens at noon') : null"
+                                    class="rounded-2xl border px-3 py-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
                                     :class="session === s
                                         ? 'border-indigo-500 bg-indigo-50/70 shadow-sm dark:border-indigo-400 dark:bg-indigo-500/15'
                                         : 'border-slate-200 bg-white hover:border-slate-300 dark:border-white/10 dark:bg-night-800 dark:hover:border-white/20'">
@@ -401,21 +409,46 @@
                                               : (slotAt(child, s) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200')"
                                           x-text="slotAt(child, s)?.out ? '✓ Done' : (slotAt(child, s) ? '● In' : 'To do')"></span>
                                 </span>
-                                <span class="mt-1.5 block text-sm font-semibold tabular-nums"
-                                      :class="slotAt(child, s) ? '' : 'text-slate-400 dark:text-slate-500'"
-                                      x-text="slotAt(child, s) ? slotAt(child, s).in + ' – ' + (slotAt(child, s).out || '…') : '— : —'"></span>
-                                <span class="block text-[0.7333rem] text-slate-500 dark:text-slate-400"
-                                      x-text="slotAt(child, s)?.out ? 'In · Out' : (slotAt(child, s) ? 'On premises' : 'Not clocked in')"></span>
+                                {{-- The block's entries, in order: a numbered
+                                     line a pair, in → out and how long, and
+                                     the block's count and total under them. --}}
+                                <template x-if="slotAt(child, s)">
+                                    <span class="mt-2 block text-xs tabular-nums" data-session-entries>
+                                        <template x-for="(entry, i) in entriesOf(slotAt(child, s))" :key="'entry-' + s + '-' + i">
+                                            <span class="flex items-baseline gap-1.5 py-0.5">
+                                                <span class="w-3 shrink-0 text-[0.6667rem] text-slate-400 dark:text-slate-500" x-text="i + 1"></span>
+                                                <span class="flex-1 truncate"><b x-text="entry.in"></b> <span class="text-slate-400">→</span> <b x-text="entry.out || 'now'" :class="entry.out ? '' : 'text-emerald-700 dark:text-emerald-300'"></b></span>
+                                                <span class="shrink-0 text-[0.6667rem]" :class="entry.out ? 'text-slate-500 dark:text-slate-400' : 'font-semibold text-emerald-700 dark:text-emerald-300'" x-text="entry.out ? spanText(spanOf(entry)) : 'open'"></span>
+                                            </span>
+                                        </template>
+                                        <span class="mt-1 flex items-center justify-between border-t border-slate-200/70 pt-1 text-[0.6667rem] dark:border-white/10">
+                                            <span class="text-slate-500 dark:text-slate-400" x-text="entriesOf(slotAt(child, s)).length + ' check-in' + (entriesOf(slotAt(child, s)).length === 1 ? '' : 's')"></span>
+                                            <span class="font-semibold" x-text="spanText(slotTotal(slotAt(child, s)).closed) + (slotTotal(slotAt(child, s)).open ? ' + open' : '')"></span>
+                                        </span>
+                                    </span>
+                                </template>
+                                <template x-if="! slotAt(child, s)">
+                                    <span class="mt-1.5 block text-sm font-semibold tabular-nums text-slate-400 dark:text-slate-500">— : —</span>
+                                </template>
+                                <template x-if="! slotAt(child, s)">
+                                    <span class="block text-[0.7333rem] text-slate-500 dark:text-slate-400">Not clocked in</span>
+                                </template>
                             </button>
                         </template>
                     </div>
                 </template>
 
+                {{-- The day across both blocks: how many times, and how long so far. --}}
+                <template x-if="sessionsOf(child).length > 1 && dayEntries(child).length">
+                    <p class="mt-2 text-[0.7333rem] text-slate-500 dark:text-slate-400" data-day-summary
+                       x-text="'Today · ' + dayEntries(child).length + ' check-in' + (dayEntries(child).length === 1 ? '' : 's') + ' · ' + spanText(dayTotal(child)) + ' so far'"></p>
+                </template>
+
                 {{-- One session a day: the one line says it all. --}}
                 <template x-if="sessionsOf(child).length === 1">
                     <span class="mt-3 block"><span class="inline-block rounded-full px-3 py-1 text-xs font-semibold"
-                          :class="slotIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
-                          x-text="slotIn(child) ? '✓ On premises · in at ' + slotOf(child).in : (slotOut(child) ? '○ Left at ' + slotOf(child).out : '○ Currently out')"></span></span>
+                          :class="isIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
+                          x-text="isIn(child) ? '✓ On premises · in at ' + lastEntry(child)?.in : (isOut(child) ? '○ Left at ' + lastEntry(child)?.out : '○ Currently out')"></span></span>
                 </template>
 
                 {{-- Correcting the checks. A day already gone, or Edit on a
@@ -486,7 +519,31 @@
                     </form>
                 </template>
 
-                <template x-if="! correcting(child) && ! slotOut(child)">
+                {{-- Every clock-in and clock-out of the day, on the chosen
+                     session, in order. A child who left at eleven and came
+                     back at one has two entries, and both stay: the client's
+                     rule is that nothing on the day's clock is overwritten. --}}
+                <template x-if="! correcting(child) && sessionsOf(child).length === 1 && dayEntries(child).length">
+                    <div class="mt-5 rounded-xl bg-slate-50 px-3 py-2.5 text-left dark:bg-white/5" data-entries>
+                        <p class="text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400"
+                           x-text="'Today\'s entries · ' + dayEntries(child).length"></p>
+                        <ol class="mt-1.5 space-y-1 text-xs tabular-nums">
+                            <template x-for="(entry, i) in dayEntries(child)" :key="'entry-' + i">
+                                <li class="flex items-baseline gap-2">
+                                    <span class="w-3 shrink-0 text-slate-400 dark:text-slate-500" x-text="i + 1"></span>
+                                    <span class="flex-1">In <b x-text="entry.in"></b> <span class="text-slate-400">→</span> <span x-text="entry.out ? 'Out ' : ''"></span><b x-text="entry.out || 'now'" :class="entry.out ? '' : 'text-emerald-700 dark:text-emerald-300'"></b></span>
+                                    <span class="shrink-0 text-[0.6667rem]" :class="entry.out ? 'text-slate-500 dark:text-slate-400' : 'font-semibold text-emerald-700 dark:text-emerald-300'" x-text="entry.out ? spanText(spanOf(entry)) : 'open'"></span>
+                                </li>
+                            </template>
+                        </ol>
+                        <p class="mt-1.5 flex items-center justify-between border-t border-slate-200/70 pt-1.5 text-[0.6667rem] dark:border-white/10">
+                            <span class="text-slate-500 dark:text-slate-400">Total</span>
+                            <span class="font-semibold" x-text="spanText(dayTotal(child)) + (isIn(child) ? ' so far' : '')"></span>
+                        </p>
+                    </div>
+                </template>
+
+                <template x-if="! correcting(child)">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
                         <label for="ci-code" class="block text-sm font-semibold">Health code</label>
                         <select id="ci-code" x-model.number="code" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-night-800">
@@ -508,13 +565,13 @@
                         <button type="submit" :disabled="saving"
                                 :class="slotIn(child) ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
                                 class="mt-4 w-full rounded-xl py-3 text-sm font-bold text-white transition disabled:opacity-50"
-                                x-text="saving ? 'Saving…' : (slotIn(child) ? 'Clock out' : 'Clock in')"></button>
+                                x-text="saving ? 'Saving…' : (slotIn(child) ? 'Clock out' : (slotOut(child) ? 'Clock in again' : 'Clock in')) + (sessionsOf(child).length > 1 ? ' · ' + sessionName(session) : '')"></button>
                     </form>
                 </template>
 
                 <template x-if="! correcting(child) && slotOut(child)">
-                    <p class="mt-5 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-500 dark:bg-white/5 dark:text-slate-400">
-                        Checked in at <b x-text="slotOf(child).in"></b> and out at <b x-text="slotOf(child).out"></b>.
+                    <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                        Clocking in again keeps the <b x-text="slotOf(child).out"></b> clock-out on the record.
                         @if($canAmend) Switch <b>Edit mode</b> on to correct the checks. @endif
                     </p>
                 </template>
@@ -570,6 +627,9 @@ function checkInGrid() { return {
     rows: @js($rows->keyBy('id')),
     codes: @js($codes),
     today: @js($today),
+    // The centre's clock, not the device's: the noon rule and the open
+    // entries' "so far" read the same timezone the times on screen are in.
+    timezone: @js(config('app.timezone')),
     canAmend: @js($canAmend),
     // A day already gone is only ever here to be edited, so the switch
     // starts on for one. Today opens Live, at the door.
@@ -788,16 +848,174 @@ function checkInGrid() { return {
        time, on the one chosen at the top of it. Every other room books the
        whole day as one session, and the dialog is the same dialog. */
     sessionsOf(row) { return row?.sessions?.length ? row.sessions : ['FULL']; },
-    sessionName(s) { return {AM: 'Morning', PM: 'Afternoon'}[s] || 'Day'; },
+    // "AM" and "PM", not "morning" and "afternoon" — the client's words.
+    sessionName(s) { return {AM: 'AM', PM: 'PM'}[s] || 'Day'; },
     slotAt(row, s) { return row?.bySession?.[this.day]?.[s] ?? null; },
     slotOf(row) { return this.slotAt(row, this.session); },
     slotIn(row) { const slot = this.slotOf(row); return !! (slot && slot.in && ! slot.out); },
     slotOut(row) { const slot = this.slotOf(row); return !! (slot && slot.out); },
 
+    /**
+     * Every clock-in and clock-out on a slot, oldest first: [{in, out}, ...].
+     *
+     * The slot holds first in and last out; its trips hold each [left, back]
+     * between. Read together they are the whole day, and the last entry has
+     * no out while the child is still here.
+     */
+    entriesOf(slot) {
+        if (! slot || ! slot.in) return [];
+
+        const entries = [];
+        let arrived = slot.in;
+
+        for (const [left, back] of slot.trips ?? []) {
+            entries.push({ in: arrived, out: left });
+            arrived = back;
+        }
+
+        entries.push({ in: arrived, out: slot.out || null });
+
+        return entries;
+    },
+
+    /** The latest arrival on a slot or a day: the last return, else the first in. */
+    latestIn(slot) {
+        const trips = slot?.trips ?? [];
+
+        return trips.length ? trips[trips.length - 1][1] : slot?.in;
+    },
+
+    /**
+     * Every clock-in and clock-out on the child's day, in order.
+     *
+     * A School Age child has two rows on the register; the door does not say
+     * "morning" and "afternoon", it lists the entries. So the rows' entries
+     * are read one after the other, the way the day went.
+     */
+    dayEntries(row) {
+        return this.sessionsOf(row).flatMap(s => this.entriesOf(this.slotAt(row, s)));
+    },
+
+    lastEntry(row) {
+        const entries = this.dayEntries(row);
+
+        return entries.length ? entries[entries.length - 1] : null;
+    },
+
+    /* ---- how long: read off the screen's own clock ("7:02a") ----
+
+       The sheet's times are the only ones the page holds, and they are
+       enough: minutes since midnight either end, the difference between.
+       An open entry runs to now, on the device's clock, which at a door in
+       the building is the room's clock too. */
+    minutesOf(time) {
+        const m = /^(\d{1,2}):(\d{2})([ap])$/.exec(time || '');
+        if (! m) return null;
+        const hour = (Number(m[1]) % 12) + (m[3] === 'p' ? 12 : 0);
+
+        return hour * 60 + Number(m[2]);
+    },
+
+    /** Minutes an entry ran: to its out, or to now while it is open. */
+    spanOf(entry) {
+        const from = this.minutesOf(entry?.in);
+        if (from === null) return 0;
+        const to = entry?.out ? this.minutesOf(entry.out) : this.minutesNow();
+
+        return Math.max(0, (to ?? from) - from);
+    },
+
+    /** "2h 13m", "40m", "0m". */
+    spanText(minutes) {
+        const h = Math.floor(minutes / 60), m = minutes % 60;
+
+        return h ? h + 'h ' + m + 'm' : m + 'm';
+    },
+
+    /** A block's closed minutes, and whether an entry is still open. */
+    slotTotal(slot) {
+        const entries = this.entriesOf(slot);
+
+        return {
+            closed: entries.filter(e => e.out).reduce((sum, e) => sum + this.spanOf(e), 0),
+            open: entries.some(e => ! e.out),
+        };
+    },
+
+    /** The day's minutes across every block, open entries counted to now. */
+    dayTotal(row) {
+        return this.dayEntries(row).reduce((sum, e) => sum + this.spanOf(e), 0);
+    },
+
+    /**
+     * What the button does next, and on which block.
+     *
+     * Out of whichever block is open, whatever the time. Otherwise the
+     * block is the clock's: before noon the AM, from noon the PM — so a
+     * child brought back at ten goes into the AM again, as a second entry
+     * there, and one brought back at three into the PM. The block already
+     * having an entry makes the press a "back in", else a first "in". The
+     * cards above let somebody choose the other block when the clock is
+     * wrong about it.
+     */
+    nextStep(row) {
+        const sessions = this.sessionsOf(row);
+        const open = sessions.find(s => { const k = this.slotAt(row, s); return !! (k && k.in && ! k.out); });
+        if (open) return { session: open, action: 'out' };
+
+        const byClock = this.hourNow() < 12 ? 'AM' : 'PM';
+        const session = sessions.length > 1 && sessions.includes(byClock) ? byClock : sessions[sessions.length - 1];
+
+        return { session, action: this.slotAt(row, session) ? 'back' : 'in' };
+    },
+
+    /**
+     * Minutes since midnight now, on the centre's clock.
+     *
+     * Read in the app's timezone so a device set to another one — a
+     * director travelling, a developer abroad — still puts a noon press in
+     * the PM. A test pins it through window.__clockMinutes.
+     */
+    minutesNow() {
+        if (typeof window.__clockMinutes === 'number') return window.__clockMinutes;
+
+        try {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: this.timezone, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' })
+                .formatToParts(new Date());
+            const get = type => Number(parts.find(p => p.type === type)?.value);
+
+            return (get('hour') % 24) * 60 + get('minute');
+        } catch {
+            const now = new Date();
+
+            return now.getHours() * 60 + now.getMinutes();
+        }
+    },
+
+    hourNow() { return Math.floor(this.minutesNow() / 60); },
+
     /** Switch the dialog to a session; the form reopens on what it holds. */
     pickSession(s) {
+        if (this.blockDisabled(this.child, s)) return;
         this.session = s;
         this.loadForm();
+    },
+
+    /**
+     * Whether a block is switched off for now.
+     *
+     * The half of the day the clock is not in: from noon the AM, before it
+     * the PM. A block still open is never off — the child has to be clocked
+     * out of it whatever the hour — and Edit mode leaves both on, since a
+     * correction has to be able to land on either row.
+     */
+    blockDisabled(row, s) {
+        if (! row || this.sessionsOf(row).length === 1 || this.correcting(row)) return false;
+
+        const slot = this.slotAt(row, s);
+        if (slot && slot.in && ! slot.out) return false;
+
+        return s !== (this.hourNow() < 12 ? 'AM' : 'PM');
     },
 
     /** The form, opened on what the chosen session holds. */
@@ -839,7 +1057,10 @@ function checkInGrid() { return {
                 ...before,
                 id: first.id, in: first.in, in_code: first.in_code, in_note: first.in_note,
                 out: last?.out ?? null, out_code: last?.out_code ?? null, out_note: last?.out_note ?? null,
-                trips: before.trips ?? [],
+                // Every trip out and back across the sessions, as the server
+                // reads them: the card counts these when it says how many
+                // times the child has been clocked in today.
+                trips: slots.flatMap(k => k.trips ?? []),
             };
         }
 
@@ -854,8 +1075,14 @@ function checkInGrid() { return {
             if (! day) return 'No arrival';
             return 'In ' + day.in + (day.out ? ' · Out ' + day.out : '') + ' · code ' + (day.in_code ?? '—');
         }
-        if (this.isIn(row)) return 'In · ' + day.in;
-        if (this.isOut(row)) return 'Out · ' + day.out;
+        // The latest in or out, and how many times today when more than
+        // once: a child back from an appointment reads "In · 1:05p · 2nd
+        // time", not the morning's arrival as if nothing happened between.
+        const last = this.lastEntry(row);
+        const times = this.dayEntries(row).length;
+        const nth = times > 1 ? ' · ' + times + (times === 2 ? 'nd' : times === 3 ? 'rd' : 'th') + ' time' : '';
+        if (this.isIn(row)) return 'In · ' + last.in + nth;
+        if (this.isOut(row)) return 'Out · ' + last.out + nth;
         return 'Currently out';
     },
 
@@ -872,10 +1099,9 @@ function checkInGrid() { return {
         this.note = '';
         this.error = '';
 
-        // The session still to do: the first with no departure yet, or the
-        // last once every one is done. For a whole-day room, the day.
-        const sessions = this.sessionsOf(this.child);
-        this.session = sessions.find(s => ! this.slotAt(this.child, s)?.out) ?? sessions[sessions.length - 1];
+        // The register row the next press lands on. For a whole-day room,
+        // the day; in Edit mode the cards above can switch it.
+        this.session = this.nextStep(this.child).session;
 
         // What the checks are now, so the form opens on them and Save only
         // lights up when something is actually different.
@@ -908,16 +1134,20 @@ function checkInGrid() { return {
         }
 
         const row = this.child;
+        // On the chosen block — AM or PM, or the day — what it holds decides:
+        // out while it is open, back in once it is closed, else in.
         const day = this.slotOf(row);
         const leaving = this.slotIn(row);
+        // Clocked out already: back in, keeping the out on the record.
+        const returning = ! leaving && this.slotOut(row);
 
         this.saving = true;
         this.error = '';
 
         try {
             const response = await window.postJson(
-                leaving ? '/check-in/' + day.id + '/out' : '/check-in',
-                leaving
+                leaving ? '/check-in/' + day.id + '/out' : (returning ? '/check-in/' + day.id + '/back' : '/check-in'),
+                leaving || returning
                     ? { health_code: code, health_note: this.note.trim() || null }
                     : { child_id: row.id, session: this.session, health_code: code, health_note: this.note.trim() || null },
             );
@@ -933,11 +1163,13 @@ function checkInGrid() { return {
                 id: data.attendance_id, session: this.session,
                 in: data.in_at, in_code: data.health_in, in_note: data.health_in_note,
                 out: data.out_at, out_code: data.health_out, out_note: data.health_out_note,
+                trips: data.trips ?? [],
             });
 
             this.closeChild();
-            const which = this.sessionsOf(row).length > 1 ? ' (' + this.sessionName(this.session).toLowerCase() + ')' : '';
-            this.toast = row.display + (leaving ? ' clocked out at ' + data.out_at : ' clocked in at ' + data.in_at) + which;
+            const which = this.sessionsOf(row).length > 1 ? ' (' + this.sessionName(this.session) + ')' : '';
+            const at = returning ? this.latestIn({ in: data.in_at, trips: data.trips ?? [] }) : data.in_at;
+            this.toast = row.display + (leaving ? ' clocked out at ' + data.out_at : (returning ? ' clocked in again at ' + at : ' clocked in at ' + at)) + which;
             clearTimeout(this.toastTimer);
             this.toastTimer = setTimeout(() => { this.toast = ''; }, 4500);
         } catch {
@@ -1194,6 +1426,7 @@ function checkInGrid() { return {
                     out: data.out_at,
                     out_code: data.health_out,
                     out_note: data.health_out_note,
+                    trips: data.trips ?? [],
                 };
             }
 

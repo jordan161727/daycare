@@ -30,7 +30,13 @@ const alpine = fs.readFileSync(alpinePath, 'utf8');
 // the server would answer a clock-in, so the whole path from the button to
 // the card's new state runs without a server — and a broken handler throws
 // here instead of in a room at eight in the morning.
+// The clock is pinned, because the dialog reads it: before noon a School Age
+// clock-in goes into the AM block, from noon into the PM. CLOCK_HOUR names
+// the hour, eight in the morning unless the test says otherwise.
+const clockHour = Number(process.env.CLOCK_HOUR ?? 8);
+
 const stub = `
+window.__clockMinutes = ${clockHour * 60};
 window.__posted = [];
 window.postJson = async (url, body) => {
     window.__posted.push({ url, body });
@@ -82,8 +88,10 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 50));
             result.options = dialog.querySelectorAll('select#ci-code option').length;
             result.button = dialog.querySelector('button[type="submit"]')?.textContent.trim() ?? null;
             // The session tabs a School Age child gets, and which one opened.
-            result.tabs = [...dialog.querySelectorAll('[data-session]')].map(tab => ({ text: tab.textContent.trim().replace(/\s+/g, ' '), selected: tab.getAttribute('aria-pressed') === 'true' }));
+            result.tabs = [...dialog.querySelectorAll('[data-session]')].map(tab => ({ text: tab.textContent.trim().replace(/\s+/g, ' '), selected: tab.getAttribute('aria-pressed') === 'true', disabled: tab.disabled }));
             result.status = dialog.querySelector('span.mt-3 span, span.mt-3')?.textContent.trim() ?? null;
+            // Every clock-in and clock-out of the day, as the dialog lists them.
+            result.entries = [...dialog.querySelectorAll('[data-entries] li')].map(li => li.textContent.trim().replace(/\s+/g, ' '));
 
             const form = dialog.querySelector('form');
 

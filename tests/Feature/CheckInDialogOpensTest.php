@@ -71,7 +71,7 @@ class CheckInDialogOpensTest extends TestCase
         $this->assertTrue($result['dialog'], 'Pressing the card did not open its dialog.');
         $this->assertSame('Amelia Bennett', $result['heading']);
         $this->assertSame(12, $result['options'], 'Codes 0 to 11.');
-        $this->assertSame('Clock in', $result['button']);
+        $this->assertSame('Clock in · AM', $result['button']);
 
         /*
          * Then Clock in. The request the button makes is the whole point of
@@ -87,7 +87,7 @@ class CheckInDialogOpensTest extends TestCase
 
         // And the card follows the answer: dialog closed, a toast, the card in.
         $this->assertFalse($result['dialogAfter'], 'The dialog should close once the clock-in is saved.');
-        $this->assertSame('Amelia Bennett clocked in at 8:42a (morning)', $result['toast']);
+        $this->assertSame('Amelia Bennett clocked in at 8:42a (AM)', $result['toast']);
         $this->assertSame('In · 8:42a', $result['cardState']);
     }
 
@@ -169,13 +169,14 @@ class CheckInDialogOpensTest extends TestCase
         $this->assertStringContainsString('Out 4:30p', $result['cardState']);
     }
 
-    public function test_a_school_age_child_out_of_the_morning_opens_on_the_afternoon(): void
+    public function test_a_school_age_child_clocked_out_once_is_listed_and_clocked_in_again(): void
     {
         /*
-         * Two sessions, two clock-ins, two clock-outs. The morning is done —
-         * in at 8:05, out at 11:30 — so the dialog opens on the afternoon
-         * with Clock in, the morning's tab reading its two hours beside it,
-         * and the request it makes books the PM session.
+         * A School Age child has two rows on the register, but the door does
+         * not say "morning" and "afternoon" — the client's words: it lists
+         * the clock-ins and clock-outs there are. In at 8:05, out at 11:30,
+         * so the dialog lists that one entry, reads "Left at 11:30a", offers
+         * Clock in again, and the request it makes books the second row.
          */
         $node = $this->node();
 
@@ -205,7 +206,7 @@ class CheckInDialogOpensTest extends TestCase
         $process = new Process(
             [$node, base_path('tests/js/click-check-in.cjs'), $page, base_path('node_modules/alpinejs/dist/cdn.js')],
             base_path(),
-            ['NODE_PATH' => base_path('node_modules')],
+            ['NODE_PATH' => base_path('node_modules'), 'CLOCK_HOUR' => '12'],
         );
         $process->setTimeout(60)->run();
 
@@ -219,26 +220,92 @@ class CheckInDialogOpensTest extends TestCase
         $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
         $this->assertTrue($result['dialog']);
 
-        // Two session cards: the morning done with its hours, the afternoon
+        // Two blocks, AM and PM — not "morning" and "afternoon" — each
+        // listing its own entries. The AM is done with its one pair, the PM
         // still to do and chosen. The one status line is for one-session rooms.
         $this->assertSame(
             [
-                ['text' => 'Morning ✓ Done 8:05a – 11:30a In · Out', 'selected' => false],
-                ['text' => 'Afternoon To do — : — Not clocked in', 'selected' => true],
+                // From noon the AM is switched off: only the PM clocks in and out.
+                ['text' => 'AM ✓ Done 1 8:05a → 11:30a 3h 25m 1 check-in 3h 25m', 'selected' => false, 'disabled' => true],
+                ['text' => 'PM To do — : — Not clocked in', 'selected' => true, 'disabled' => false],
             ],
             $result['tabs']
         );
         $this->assertNull($result['status']);
-        $this->assertSame('Clock in', $result['button']);
+        $this->assertSame([], $result['entries']);
+        $this->assertSame('Clock in · PM', $result['button']);
 
-        // And the clock-in books the afternoon, not the morning again.
+        // And the clock-in books the PM row, not the AM again.
         $this->assertCount(1, $result['posted']);
         $this->assertSame('/check-in', $result['posted'][0]['url']);
         $this->assertSame('PM', $result['posted'][0]['body']['session']);
-        $this->assertSame('Amelia Bennett clocked in at 8:42a (afternoon)', $result['toast']);
+        $this->assertSame('Amelia Bennett clocked in at 8:42a (PM)', $result['toast']);
 
-        // The roster card reads the day as one: on the premises again.
-        $this->assertSame('In · 8:05a', $result['cardState']);
+        // The roster card reads the day as one: on the premises, second time.
+        $this->assertSame('In · 8:42a · 2nd time', $result['cardState']);
+    }
+
+    /**
+     * The same child, out of the AM at 11:30, but the clock says ten: the
+     * block is the clock's, so the press is a second entry in the AM — a
+     * "back in" on that row — and not a PM that has not started.
+     */
+    public function test_before_noon_a_second_clock_in_goes_into_the_am_block(): void
+    {
+        $node = $this->node();
+
+        if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {
+            $this->markTestSkipped('node and jsdom are needed to click the page.');
+        }
+
+        $this->travelTo(Carbon::parse('2026-09-23 10:00:00'));
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $child = Child::create([
+            'lan' => '3001', 'status' => 'Active', 'first_name' => 'Amelia', 'last_name' => 'Bennett',
+            'classroom' => 'School Age', 'birth_date' => '2018-03-04', 'schedule_days' => [1, 2, 3, 4, 5],
+        ]);
+
+        $attendance = \App\Models\Attendance::create([
+            'child_id' => $child->id, 'attendance_date' => '2026-09-23', 'session' => 'AM',
+            'signed_in_at' => Carbon::parse('2026-09-23 08:05'), 'signed_out_at' => Carbon::parse('2026-09-23 09:30'), 'health_in_code' => 0,
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $page = tempnam(sys_get_temp_dir(), 'checkin').'.html';
+        file_put_contents($page, $html);
+
+        $process = new Process(
+            [$node, base_path('tests/js/click-check-in.cjs'), $page, base_path('node_modules/alpinejs/dist/cdn.js')],
+            base_path(),
+            ['NODE_PATH' => base_path('node_modules'), 'CLOCK_HOUR' => '10'],
+        );
+        $process->setTimeout(60)->run();
+
+        @unlink($page);
+
+        $this->assertSame(0, $process->getExitCode(), "The click script failed:\n".$process->getErrorOutput());
+
+        $result = json_decode($process->getOutput(), true);
+
+        $this->assertIsArray($result, 'The click script returned no JSON: '.$process->getOutput());
+        $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
+        $this->assertTrue($result['dialog']);
+
+        // The AM is the chosen block, and the press is a "back in" on it.
+        $this->assertTrue($result['tabs'][0]['selected']);
+        $this->assertFalse($result['tabs'][1]['selected']);
+        // And before noon the PM is switched off.
+        $this->assertFalse($result['tabs'][0]['disabled']);
+        $this->assertTrue($result['tabs'][1]['disabled']);
+        $this->assertSame('Clock in again · AM', $result['button']);
+
+        $this->assertCount(1, $result['posted']);
+        $this->assertSame('/check-in/'.$attendance->id.'/back', $result['posted'][0]['url']);
+        $this->assertArrayNotHasKey('session', $result['posted'][0]['body']);
+        $this->assertSame('Amelia Bennett clocked in again at 8:42a (AM)', $result['toast']);
     }
 
     private function node(): ?string

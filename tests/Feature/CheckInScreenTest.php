@@ -144,6 +144,156 @@ class CheckInScreenTest extends TestCase
         $this->assertNull($attendance->fresh()->signed_out_at);
     }
 
+    /**
+     * The client's rule: every clock-in and clock-out of the day is kept.
+     * A child clocked out and back in again has both the morning's departure
+     * and the afternoon's arrival on the record, and the screen lists them.
+     */
+    public function test_a_child_clocked_out_can_be_clocked_in_again_and_every_entry_is_kept(): void
+    {
+        $attendance = Attendance::create([
+            'child_id' => $this->child->id,
+            'attendance_date' => '2026-09-23',
+            'session' => 'FULL',
+            'signed_in_at' => Carbon::parse('2026-09-23 08:12'),
+            'signed_out_at' => Carbon::parse('2026-09-23 11:02'),
+            'health_in_code' => 0,
+            'health_out_code' => 0,
+        ]);
+
+        $this->travelTo(Carbon::parse('2026-09-23 13:05:00'));
+
+        $this->actingAs($this->admin)
+            ->postJson(route('check-in.back', $attendance), ['health_code' => 0])
+            ->assertOk()
+            ->assertJsonPath('in_at', '8:12a')
+            ->assertJsonPath('out_at', null)
+            ->assertJsonPath('trips', [['11:02a', '1:05p']]);
+
+        $attendance->refresh();
+
+        // Back on premises, first arrival untouched, the departure kept as a trip.
+        $this->assertNull($attendance->signed_out_at);
+        $this->assertSame('08:12', $attendance->signed_in_at->format('H:i'));
+        $this->assertCount(1, $attendance->returns);
+        $this->assertSame('11:02', $attendance->returns[0]->left_at->format('H:i'));
+        $this->assertSame('13:05', $attendance->returns[0]->returned_at->format('H:i'));
+        $this->assertSame($this->admin->id, $attendance->returns[0]->performed_by);
+
+        // Out again at the end of the day, then back a third time: three entries.
+        $this->travelTo(Carbon::parse('2026-09-23 15:10:00'));
+        $this->actingAs($this->admin)
+            ->postJson(route('check-in.out', $attendance), ['health_code' => 0])
+            ->assertOk()
+            ->assertJsonPath('out_at', '3:10p')
+            ->assertJsonPath('trips', [['11:02a', '1:05p']]);
+
+        $this->travelTo(Carbon::parse('2026-09-23 16:00:00'));
+        $this->actingAs($this->admin)
+            ->postJson(route('check-in.back', $attendance), ['health_code' => 0])
+            ->assertOk()
+            ->assertJsonPath('trips', [['11:02a', '1:05p'], ['3:10p', '4:00p']]);
+
+        $this->assertCount(2, $attendance->fresh()->returns);
+
+        // The screen hands the roster every entry, per session and per day.
+        $this->actingAs($this->admin)
+            ->get(route('check-in.index'))
+            ->assertOk()
+            ->assertViewHas('rows', function ($rows) {
+                $row = $rows->firstWhere('id', $this->child->id);
+
+                return $row['bySession']['2026-09-23']['FULL']['trips'] === [['11:02a', '1:05p'], ['3:10p', '4:00p']]
+                    && $row['byDay']['2026-09-23']['trips'] === [['11:02a', '1:05p'], ['3:10p', '4:00p']]
+                    && $row['byDay']['2026-09-23']['out'] === null;
+            })
+            ->assertSee('Clock in again')
+            ->assertSee('entriesOf(', false);
+    }
+
+    /**
+     * The client's School Age day, in four presses: check in, check out when
+     * the school collects them, check in when the school brings them back,
+     * check out when they go home. Two entries on the screen, both kept —
+     * and a fifth press is a return on the second, not a loss of anything.
+     */
+    public function test_a_school_age_child_has_four_actions_a_day_and_the_screen_lists_them_all(): void
+    {
+        $this->child->update(['classroom' => 'School Age']);
+
+        $press = function (string $at, string $route, array $body, $attendance = null) {
+            $this->travelTo(Carbon::parse('2026-09-23 '.$at));
+
+            return $this->actingAs($this->admin)
+                ->postJson($attendance ? route($route, $attendance) : route($route), $body + ['health_code' => 0])
+                ->assertOk();
+        };
+
+        // 1. Check in (AM). The dialog books the first row for a fresh day.
+        $first = $press('07:30', 'check-in.store', ['child_id' => $this->child->id, 'session' => 'AM'])->json('attendance_id');
+        // 2. Check out (AM): the school picks them up.
+        $press('08:15', 'check-in.out', [], Attendance::find($first))->assertJsonPath('out_at', '8:15a');
+        // 3. Check in (PM): the school brings them back — the second row.
+        $second = $press('15:10', 'check-in.store', ['child_id' => $this->child->id, 'session' => 'PM'])->json('attendance_id');
+        $this->assertNotSame($first, $second);
+        // 4. Check out (PM): they go home.
+        $press('17:30', 'check-in.out', [], Attendance::find($second))->assertJsonPath('out_at', '5:30p');
+
+        $rows = Attendance::where('child_id', $this->child->id)->orderBy('signed_in_at')->get();
+        $this->assertSame(['AM', 'PM'], $rows->pluck('session')->all());
+        $this->assertSame(['07:30', '15:10'], $rows->map(fn ($row) => $row->signed_in_at->format('H:i'))->all());
+        $this->assertSame(['08:15', '17:30'], $rows->map(fn ($row) => $row->signed_out_at->format('H:i'))->all());
+
+        $this->actingAs($this->admin)
+            ->get(route('check-in.index'))
+            ->assertOk()
+            ->assertViewHas('rows', function ($rows) {
+                $day = $rows->firstWhere('id', $this->child->id);
+                $am = $day['bySession']['2026-09-23']['AM'];
+                $pm = $day['bySession']['2026-09-23']['PM'];
+
+                // Two entries, in order, and the day reads first in, last out.
+                return [$am['in'], $am['out'], $pm['in'], $pm['out']] === ['7:30a', '8:15a', '3:10p', '5:30p']
+                    && $day['byDay']['2026-09-23']['in'] === '7:30a'
+                    && $day['byDay']['2026-09-23']['out'] === '5:30p';
+            });
+
+        // 5. Back again after going home: a return on the second row.
+        $press('18:00', 'check-in.back', [], Attendance::find($second))
+            ->assertJsonPath('out_at', null)
+            ->assertJsonPath('trips', [['5:30p', '6:00p']]);
+
+        $this->assertCount(2, Attendance::where('child_id', $this->child->id)->get());
+        $this->assertCount(1, Attendance::find($second)->returns);
+    }
+
+    public function test_clocking_in_again_needs_a_check_and_a_prior_clock_out(): void
+    {
+        $attendance = Attendance::create([
+            'child_id' => $this->child->id,
+            'attendance_date' => '2026-09-23',
+            'session' => 'FULL',
+            'signed_in_at' => Carbon::parse('2026-09-23 08:12'),
+            'health_in_code' => 0,
+        ]);
+
+        // Still here: nothing to come back from.
+        $this->actingAs($this->admin)
+            ->postJson(route('check-in.back', $attendance), ['health_code' => 0])
+            ->assertStatus(422);
+
+        $attendance->forceFill(['signed_out_at' => Carbon::parse('2026-09-23 11:02')])->save();
+
+        // No code, no return — and the departure still stands.
+        $this->actingAs($this->admin)
+            ->postJson(route('check-in.back', $attendance), [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('health_code');
+
+        $this->assertNotNull($attendance->fresh()->signed_out_at);
+        $this->assertCount(0, $attendance->fresh()->returns);
+    }
+
     public function test_the_screen_refuses_a_day_already_gone(): void
     {
         // Corrections belong on the week sheet, where they are written to
@@ -204,7 +354,7 @@ class CheckInScreenTest extends TestCase
         $this->assertStringContainsString('Across all classrooms', $html);
 
         // And the dialog drives the same two endpoints the sheet does.
-        $this->assertStringContainsString("leaving ? '/check-in/' + day.id + '/out' : '/check-in'", $html);
+        $this->assertStringContainsString("leaving ? '/check-in/' + day.id + '/out' : (returning ? '/check-in/' + day.id + '/back' : '/check-in')", $html);
         $this->assertStringContainsString('Defaults to 0 · Normal', $html);
     }
 
