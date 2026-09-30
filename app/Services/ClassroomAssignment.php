@@ -81,6 +81,41 @@ class ClassroomAssignment
     }
 
     /**
+     * Any list of rooms, put in the order the centre says them: Infant,
+     * Transition, Toddler, PreK, UPK-4, School Age — youngest first, the way
+     * the bands run and the way the chips on the register read. A room this
+     * class does not know goes after them, alphabetically, rather than being
+     * dropped. Alphabetical order put PreK before Toddler and UPK-4 last,
+     * which is no order a teacher would recognise.
+     *
+     * @param  iterable<int, string|null>  $rooms
+     * @return \Illuminate\Support\Collection<int, string>
+     */
+    public static function inOrder(iterable $rooms): \Illuminate\Support\Collection
+    {
+        $rank = array_flip(self::rooms());
+
+        return collect($rooms)
+            ->filter(fn ($room) => filled($room))
+            ->unique()
+            ->sortBy(fn (string $room) => [$rank[$room] ?? count($rank), $room])
+            ->values();
+    }
+
+    /**
+     * The same order as a SQL expression, for sorting a query by room.
+     * A CASE rather than FIELD(), so it runs on SQLite as well as MySQL.
+     */
+    public static function orderSql(string $column = 'classroom'): string
+    {
+        $cases = collect(self::rooms())
+            ->map(fn (string $room, int $rank) => "WHEN '".str_replace("'", "''", $room)."' THEN {$rank}")
+            ->implode(' ');
+
+        return "CASE {$column} {$cases} ELSE ".count(self::rooms()).' END';
+    }
+
+    /**
      * The room a date of birth puts a child in on a given date, or null when no
      * band covers them — under 6 weeks, or aged out at 12.
      *

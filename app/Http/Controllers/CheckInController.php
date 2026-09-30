@@ -236,7 +236,13 @@ class CheckInController extends Controller
             'animal' => ClassroomAssignment::animal($room),
             'total' => $group->count(),
             'in' => $group->filter(fn (array $row) => ($row['byDay'][today()->toDateString()]['in'] ?? null) !== null)->count(),
-        ])->sortBy('room')->values();
+        ]);
+
+        // Youngest room first, the way the centre says them, with a child
+        // nobody has placed at the end — see ClassroomAssignment::inOrder.
+        $roomChips = ClassroomAssignment::inOrder($roomChips->keys())
+            ->map(fn (string $room) => $roomChips[$room])
+            ->values();
 
         $todayRows = $rows->map(fn (array $row) => $row['byDay'][$today] ?? null);
 

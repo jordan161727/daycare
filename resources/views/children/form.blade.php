@@ -48,7 +48,7 @@
 {{-- The two hand-written cards are listed too — not to draw them, but so the
      fill counter and the "which step holds the error" lookup below cover the
      whole form rather than the easy two thirds of it. --}}
-@php($identityFields = ['lan', 'dss_case_no', 'dss_cin', 'child_name', 'first_name', 'last_name', 'birth_date', 'gender'])
+@php($identityFields = ['lan', 'dss_case_no', 'dss_cin', 'child_name', 'first_name', 'last_name', 'birth_date', 'gender', 'description'])
 @php($enrollmentFields = ['classroom_override', 'classroom_override_from', 'status', 'enrolled_on', 'withdrawn_on', 'schedule_days', 'expected_hours_per_week', 'drop_off_time', 'pick_up_time'])
 @php($noteFields = ['other_notes', 'important_notes', 'alerts'])
 
@@ -269,6 +269,12 @@
                                 <select name="gender" class="cs-input"><option value="">Not recorded</option>@foreach(\App\Models\Child::GENDERS as $gender)<option value="{{ $gender }}" @selected(old('gender', $child?->gender) === $gender)>{{ $gender }}</option>@endforeach</select>
                                 <x-input-error :messages="$errors->get('gender')" />
                                 <span class="cs-help">Used for the drawn face shown until a photo is uploaded. Leave it blank and the face stays neutral.</span>
+                            </label>
+                            <label>
+                                <span class="cs-label">Description</span>
+                                <input type="text" name="description" value="{{ old('description', $child?->description) }}" class="cs-input" maxlength="255" placeholder="e.g. blonde long hair">
+                                <x-input-error :messages="$errors->get('description')" />
+                                <span class="cs-help">A few words on how the child looks, to tell one face from the next.</span>
                             </label>
                         </div>
                     </section>

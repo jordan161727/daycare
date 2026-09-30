@@ -119,7 +119,9 @@ class ChildController extends Controller
             ->when($sort === 'lan', fn ($query) => $query
                 ->orderByRaw('CAST(lan AS UNSIGNED) '.$direction)
                 ->orderBy('lan', $direction))
-            ->when(! in_array($sort, ['age', 'lan'], true), fn ($query) => $query->orderBy($sort, $direction))
+            // Rooms sort youngest first, the way the centre says them, not A to Z.
+            ->when($sort === 'classroom', fn ($query) => $query->orderByRoom($direction)->orderBy('last_name')->orderBy('first_name'))
+            ->when(! in_array($sort, ['age', 'lan', 'classroom'], true), fn ($query) => $query->orderBy($sort, $direction))
             ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
             // The whole roll on one page. It used to page at ten, which put a
             // sixty-child centre six clicks from the child they were looking
@@ -459,6 +461,8 @@ class ChildController extends Controller
             // this, and a record that does not say is drawn as one that does
             // not say rather than being guessed at from the name.
             'gender' => ['nullable', Rule::in(Child::GENDERS)],
+            // A few words on how the child looks, as the centre's sheet keeps it.
+            'description' => ['nullable', 'string', 'max:255'],
             'other_notes' => ['nullable', 'string'],
             'important_notes' => ['nullable', 'string'],
             // Validated here so a bad upload is reported with the rest of the

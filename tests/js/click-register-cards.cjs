@@ -100,12 +100,21 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 60));
     const card = () => doc.querySelector('template[x-if="mode === \'avatar\'"] ~ div button, [x-html="child.avatar"]')?.closest('button');
     const result = { alpine: !! window.Alpine, cardFound: !! card(), steps: [], errors };
 
+    // A tap opens the child's pop-up; its one button does the clocking. So
+    // each step is a tap, then the press — and a note of what the pop-up
+    // offered, which has no health code in it.
     for (let i = 0; i < 6 && card(); i++) {
         const before = card().getAttribute('title');
         const wasDisabled = card().disabled;
         card().click();
         await tick(); await tick();
-        result.steps.push({ tapped: before, wasDisabled, state: card().querySelector('span.mt-2')?.textContent.trim() ?? null });
+        const dialog = doc.querySelector('[data-card-dialog]');
+        const button = dialog?.querySelector('button.w-full') ?? null;
+        const offered = button?.textContent.trim() ?? null;
+        const hasSelect = !! dialog?.querySelector('select');
+        button?.click();
+        await tick(); await tick();
+        result.steps.push({ tapped: before, wasDisabled, offered, hasSelect, dialogClosed: ! doc.querySelector('[data-card-dialog]'), state: card().querySelector('span.mt-2')?.textContent.trim() ?? null });
     }
 
     result.posted = window.__posted;

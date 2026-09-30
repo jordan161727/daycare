@@ -66,6 +66,13 @@ class ChildrenImport implements ToCollection, WithHeadingRow
         // which is what every room assignment and age reads.
         'dob' => ['dob', 'date_of_birth', 'birthdate', 'birth_day', 'birth_date'],
         'gender' => ['gender', 'sex'],
+        'description' => ['description', 'appearance', 'looks'],
+        // The centre's sheet sometimes splits how the child looks across the
+        // columns after Gender. They are folded into the description — see
+        // normalise — so the portrait picker reads one line.
+        'skin' => ['skin', 'skin_color', 'skin_colour', 'skin_tone', 'complexion', 'race', 'ethnicity', 'color', 'colour'],
+        'hair_colour' => ['hair_color', 'hair_colour', 'hair'],
+        'hair_length' => ['hair_length', 'hair_style', 'hairstyle', 'length'],
         'classroom' => ['classroom', 'room', 'class'],
         'status' => ['status', 'enrolment_status', 'enrollment_status'],
         'enrolled_on' => ['enrolled_on', 'enrolment_date', 'enrollment_date', 'start_date', 'date_enrolled'],
@@ -131,7 +138,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
     {
         $headings = [
             // The child
-            'lan', 'first_name', 'last_name', 'nickname', 'dob', 'gender',
+            'lan', 'first_name', 'last_name', 'nickname', 'dob', 'gender', 'description',
             'classroom', 'status', 'enrolled_on', 'withdrawn_on',
             // Where they live
             'address', 'city', 'zip', 'telephone', 'email_address',
@@ -628,7 +635,66 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             $data['status'] = ucfirst(strtolower($data['status']));
         }
 
+        $data = $this->foldAppearance($data);
+
         return $data;
+    }
+
+    /**
+     * One description from however many columns the sheet spread it over.
+     *
+     * "blonde long girl | White | Blonde | Long" reads back as "blonde long
+     * girl, light skin", each extra column adding only what the description
+     * did not already say. A skin colour is written as skin so the picker
+     * does not take "brown" for the hair.
+     */
+    private function foldAppearance(array $data): array
+    {
+        $parts = array_filter([
+            trim((string) ($data['description'] ?? '')),
+            $this->skinWords($data['skin'] ?? null),
+            filled($data['hair_colour'] ?? null) ? strtolower(trim($data['hair_colour'])).' hair' : '',
+            filled($data['hair_length'] ?? null) ? strtolower(trim($data['hair_length'])).' hair' : '',
+        ]);
+
+        unset($data['skin'], $data['hair_colour'], $data['hair_length']);
+
+        if ($parts === []) {
+            return $data;
+        }
+
+        $said = strtolower($parts[0] ?? '');
+        $kept = [array_shift($parts)];
+
+        foreach ($parts as $part) {
+            $new = array_filter(
+                preg_split('/[^a-z]+/', strtolower($part), -1, PREG_SPLIT_NO_EMPTY),
+                fn (string $word) => $word !== 'hair' && $word !== 'skin' && ! str_contains($said, $word)
+            );
+
+            if ($new !== []) {
+                $kept[] = $part;
+                $said .= ' '.$part;
+            }
+        }
+
+        $data['description'] = implode(', ', array_filter($kept));
+
+        return $data;
+    }
+
+    /** "White", "Brown", "Black" in a skin column, said as skin. */
+    private function skinWords(mixed $value): string
+    {
+        $value = strtolower(trim((string) $value));
+
+        return match ($value) {
+            '' => '',
+            'white', 'light', 'pale', 'fair', 'caucasian' => 'light skin',
+            'brown', 'tan', 'olive', 'medium' => 'tan skin',
+            'black', 'dark' => 'dark skin',
+            default => $value,
+        };
     }
 
     private function asDate(mixed $value, string $field): ?string
@@ -726,6 +792,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             'lan' => ['nullable', 'string', 'max:255'],
             'first_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:255'],
             'status' => ['nullable', 'string', 'max:255'],
             'dob' => ['nullable', 'date'],
             'birth_date' => ['nullable', 'date'],

@@ -186,13 +186,10 @@ class TeacherController extends Controller
 
     private function classrooms()
     {
-        return Classroom::query()->pluck('name')
-            ->merge(Child::query()->whereNotNull('classroom')->where('classroom', '!=', '')
-                ->distinct()->pluck('classroom'))
-            ->filter()
-            ->unique()
-            ->sort()
-            ->values();
+        return ClassroomAssignment::inOrder(
+            Classroom::query()->pluck('name')
+                ->merge(Child::query()->whereNotNull('classroom')->where('classroom', '!=', '')->distinct()->pluck('classroom'))
+        );
     }
 
     private function validatedData(Request $request, ?User $teacher = null): array

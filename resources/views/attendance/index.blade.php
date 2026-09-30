@@ -811,6 +811,35 @@
         the "..." menu and the legend both had to be lifted out of.
     --}}
     <template x-teleport="body">
+        {{-- The card pop-up. A tap on a card in avatar mode opens this rather
+             than clocking on the spot: the child's face and name, where the
+             day stands, and one button that says what it will do. No health
+             code — the client asked for the clock alone here; the door
+             screen is where a code is taken. --}}
+        <template x-if="cardOpen && cardChild">
+            <div class="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" :aria-label="cardChild.name" data-card-dialog @keydown.escape.window="closeCard()">
+                <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" @click="closeCard()" aria-hidden="true"></div>
+
+                <div class="glass-card relative w-full max-w-sm rounded-3xl p-6 text-center">
+                    <button type="button" @click="closeCard()" class="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20" aria-label="Close">×</button>
+
+                    <span class="mx-auto block h-28 w-28 overflow-hidden rounded-full outline outline-[3px]" :class="isHere(cardChild) ? 'outline-emerald-500' : 'outline-slate-200 dark:outline-white/10'" x-html="cardChild.avatar.replace('h-24 w-24', 'h-28 w-28')"></span>
+
+                    <h2 class="mt-4 text-2xl font-bold" x-text="cardChild.name"></h2>
+                    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" x-text="roomLabel(cardChild) + (cardChild.lan ? ' · ' + cardChild.lan : '')"></p>
+
+                    <span class="mt-3 block"><span class="inline-block rounded-full px-3 py-1 text-xs font-semibold"
+                          :class="isHere(cardChild) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
+                          x-text="isHere(cardChild) ? '✓ On premises · ' + cardState(cardChild) : (isDone(cardChild) ? '○ Left · ' + cardState(cardChild) : '○ Currently out')"></span></span>
+
+                    <button type="button" @click="pressCard()" :disabled="cardSaving"
+                            :class="cardStep(cardChild).action === 'out' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
+                            class="mt-6 w-full rounded-xl py-3 text-sm font-bold text-white transition disabled:opacity-50"
+                            x-text="cardSaving ? 'Saving…' : cardButton(cardChild)"></button>
+                </div>
+            </div>
+        </template>
+
         <div x-show="recentOpen" x-cloak class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Recent sign-ins">
             {{-- The sheet stays readable underneath: this is something you glance
                  at, not something you fill in, so it does not black out the page. --}}
@@ -999,6 +1028,12 @@ function attendanceApp() { return {
     sortDirection: 'asc',
     view: 'signin',
     recentOpen: false,
+    // The card pop-up: the child it is about, whether it is up, and whether
+    // its button is mid-press. The child stays set on close — see the
+    // check-in screen for why Alpine wants a flag rather than a null.
+    cardChild: null,
+    cardOpen: false,
+    cardSaving: false,
     /*
      * Live or Edit is read from the address, not remembered in the page.
      *
@@ -1072,13 +1107,47 @@ function attendanceApp() { return {
         return this.sessionsOf(child).every(s => this.isPresent(child.id, this.today, s) && this.isOut(child.id, this.today, s));
     },
 
+    /**
+     * A tap opens the child's pop-up rather than clocking on the spot: the
+     * face, the name, where the day stands, and one button that says what
+     * it will do. No health code here — the client's ask — that is the
+     * door screen's job; this is the director pressing a clock.
+     */
     tapCard(child) {
         if (! this.canTap(this.today)) return;
 
+        this.cardChild = child;
+        this.cardOpen = true;
+    },
+
+    closeCard() {
+        this.cardOpen = false;
+    },
+
+    /** The pop-up's button, pressed: the step the card would have taken. */
+    async pressCard() {
+        const child = this.cardChild;
+        if (! child || this.cardSaving || ! this.canTap(this.today)) return;
+
         const step = this.cardStep(child);
-        if (step.action === 'in') return this.signIn(child.id, this.today, step.session);
-        if (step.action === 'out') return this.clockOut(child.id, this.today, step.session);
-        if (step.action === 'back') return this.clockBack(child.id, this.today, step.session);
+        this.cardSaving = true;
+
+        try {
+            if (step.action === 'in') await this.signIn(child.id, this.today, step.session);
+            if (step.action === 'out') await this.clockOut(child.id, this.today, step.session);
+            if (step.action === 'back') await this.clockBack(child.id, this.today, step.session);
+        } finally {
+            this.cardSaving = false;
+            this.closeCard();
+        }
+    },
+
+    /** What the pop-up's button says: Clock in, Clock out, Clock in again — and AM/PM for School Age. */
+    cardButton(child) {
+        const step = this.cardStep(child);
+        const label = {in: 'Clock in', out: 'Clock out', back: 'Clock in again'}[step.action];
+
+        return label + (step.session === 'FULL' ? '' : ' · ' + step.session);
     },
 
     /**

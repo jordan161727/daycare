@@ -88,6 +88,15 @@ class RegisterCardsClickTest extends TestCase
 
         // What the card said it would do at each tap, and what it read after.
         // Named the way the register names a session: morning, afternoon.
+        // Each tap opened the pop-up, which offered the clock alone — no
+        // health code — and closed once its button was pressed.
+        $this->assertSame(
+            ['Clock in · AM', 'Clock out · AM', 'Clock in · PM', 'Clock out · PM', 'Clock in again · PM', 'Clock out · PM'],
+            array_column($result['steps'], 'offered')
+        );
+        $this->assertSame([false, false, false, false, false, false], array_column($result['steps'], 'hasSelect'));
+        $this->assertSame([true, true, true, true, true, true], array_column($result['steps'], 'dialogClosed'));
+
         $this->assertSame('Tap: clock in (morning)', $result['steps'][0]['tapped']);
         $this->assertSame('Tap: clock out (morning)', $result['steps'][1]['tapped']);
         $this->assertSame('Tap: clock in (afternoon)', $result['steps'][2]['tapped']);

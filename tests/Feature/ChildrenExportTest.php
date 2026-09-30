@@ -84,7 +84,7 @@ class ChildrenExportTest extends TestCase
         $sheet = new ChildrenSheet(collect([$child->load('personLinks.person')]));
 
         $this->assertSame([
-            'LAN', 'Student', 'First name', 'Last name', 'Nickname', 'Gender',
+            'LAN', 'Student', 'First name', 'Last name', 'Nickname', 'Gender', 'Description',
             'Classroom', 'Room set by hand', 'Date of birth', 'Age', 'Status',
             'Enrolled on', 'Withdrawn on', 'Hours', 'Days', 'Expected hours/week',
             'Address', 'Household phone', 'Email', 'DSS case no', 'DSS CIN',
@@ -103,11 +103,11 @@ class ChildrenExportTest extends TestCase
         $this->assertCount(count($sheet->headings()), $row, 'a value for every heading');
         $this->assertSame($child->lan, $row[0]);
         $this->assertSame('Adkins', $row[3]);
-        $this->assertSame('PreK', $row[6]);
+        $this->assertSame('PreK', $row[7]);
         // The date itself, not the label, so Excel sorts it as a date.
-        $this->assertSame('2022-12-15', $row[8]);
-        $this->assertSame('Active', $row[10]);
-        $this->assertSame('Allergy: Banana', $row[32]);
+        $this->assertSame('2022-12-15', $row[9]);
+        $this->assertSame('Active', $row[11]);
+        $this->assertSame('Allergy: Banana', $row[33]);
     }
 
     public function test_every_field_on_the_child_is_exported(): void
@@ -181,15 +181,15 @@ class ChildrenExportTest extends TestCase
 
         $row = (new ChildrenSheet(collect([$child->load('personLinks.person')])))->map($child);
 
-        $this->assertSame('Kaylynn Adkins', $row[23]);
-        $this->assertSame('585-820-5029', $row[24]);
-        $this->assertSame('Brad Adkins', $row[25]);
-        $this->assertSame('716-510-5162', $row[26]);
-        $this->assertSame("kaylynn@example.com\nbrad@example.com", $row[27]);
+        $this->assertSame('Kaylynn Adkins', $row[24]);
+        $this->assertSame('585-820-5029', $row[25]);
+        $this->assertSame('Brad Adkins', $row[26]);
+        $this->assertSame('716-510-5162', $row[27]);
+        $this->assertSame("kaylynn@example.com\nbrad@example.com", $row[28]);
 
-        $this->assertSame("Kaylynn Adkins\nBrad Adkins", $row[28], 'guardians');
-        $this->assertSame("Kaylynn Adkins\nBrad Adkins", $row[29], 'can pick up');
-        $this->assertSame('1. Kaylynn Adkins', $row[30], 'emergency, in call order');
+        $this->assertSame("Kaylynn Adkins\nBrad Adkins", $row[29], 'guardians');
+        $this->assertSame("Kaylynn Adkins\nBrad Adkins", $row[30], 'can pick up');
+        $this->assertSame('1. Kaylynn Adkins', $row[31], 'emergency, in call order');
     }
 
     public function test_a_court_order_keeps_somebody_off_the_pick_up_column(): void
@@ -205,8 +205,8 @@ class ChildrenExportTest extends TestCase
 
         $row = (new ChildrenSheet(collect([$child->load('personLinks.person')])))->map($child);
 
-        $this->assertSame('', $row[29], 'the tick is on, but a court order beats it');
-        $this->assertSame('Jordan Adkins: Court order — must not collect', $row[31]);
+        $this->assertSame('', $row[30], 'the tick is on, but a court order beats it');
+        $this->assertSame('Jordan Adkins: Court order — must not collect', $row[32]);
     }
 
     public function test_the_people_sheet_holds_every_adult_and_loses_nothing(): void

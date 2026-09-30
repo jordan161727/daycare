@@ -229,6 +229,7 @@ class ChildPhotoTest extends TestCase
                 'lan' => (string) (2000 + $index),
                 'first_name' => $name,
                 'last_name' => 'Example',
+                'gender' => 'Girl',
             ]));
 
         $html = $this->actingAs($this->admin())->get(route('children.index'))->assertOk()->getContent();
@@ -259,11 +260,86 @@ class ChildPhotoTest extends TestCase
         $this->assertDrawnFrom('Boy', ['0', '2', '5', '7', '8', '10']);
     }
 
-    public function test_a_child_whose_record_does_not_say_is_drawn_from_all_twelve(): void
+    public function test_a_child_whose_record_does_not_say_is_drawn_the_grey_silhouette(): void
     {
-        // Not a guess from the name — the record does not say, so the face
-        // is drawn from the whole set rather than from either half of it.
-        $this->assertDrawnFrom(null, array_map('strval', range(0, 11)));
+        // Not a guess from the name — the record does not say, so no face is
+        // picked at all: the plain grey head-and-shoulders, every time.
+        $this->assertDrawnFrom(null, ['none'], atLeastTwo: false);
+
+        $html = $this->render($this->child());
+
+        $this->assertStringContainsString('data-child-avatar="none"', $html);
+        $this->assertStringContainsString('<svg', $html);
+        $this->assertStringNotContainsString('portraits.webp', $html);
+    }
+
+    /*
+     * The description the centre's sheet keeps beside the gender — "blonde
+     * long girl", "brunet short hair boy" — picks the portrait that reads
+     * closest to it, and says girl or boy where the column is blank.
+     */
+    public function test_the_description_picks_the_portrait_that_reads_like_it(): void
+    {
+        $cases = [
+            ['Boy', 'short hair brown', ['0']],
+            ['Girl', 'blonde long girl', ['3']],
+            ['Boy', 'brunet short hair boy', ['0']],
+            ['Girl', 'brown girl', ['9']],
+            ['Boy', 'black boy', ['2', '10']],
+            ['Girl', 'black girl', ['4']],
+            ['Girl', 'red hair', ['6']],
+            ['Girl', 'braids', ['4', '11']],
+            ['Girl', 'pigtails', ['1']],
+            ['Girl', 'hispanic short hair', ['11']],
+            // The registration sheet's own shape: labelled fields, where
+            // "Brown" under skin tone is the skin and never the hair.
+            ['Boy', 'Race / Skin Tone: Brown; Hair Length: Short', ['7']],
+            ['Girl', 'Race / Skin Tone: White; Hair Color: Blonde; Hair Length: Long', ['3']],
+            ['Girl', 'Race / Skin Tone: White; Hair Color: Blonde; Hair Length: Very Short', ['3']],
+            ['Boy', 'Race / Skin Tone: White; Hair Color: Brunette; Hair Length: Short', ['0']],
+            ['Girl', 'Race / Skin Tone: White; Hair Color: Brunette', ['9']],
+            ['Girl', 'Race / Skin Tone: Black; Other Features: Braids', ['4']],
+            ['Boy', 'Race / Skin Tone: Black; Hair Length: Bald', ['2', '10']],
+            ['Girl', 'Race / Skin Tone: Hispanic', ['11']],
+            ['Boy', 'Race / Skin Tone: Hispanic', ['7']],
+            ['Girl', 'Race / Skin Tone: Chinese', ['1']],
+            ['Girl', 'Race / Skin Tone: Brown', ['11']],
+        ];
+
+        foreach ($cases as $number => [$gender, $description, $expected]) {
+            $child = $this->child(['lan' => (string) (4000 + $number), 'gender' => $gender, 'description' => $description]);
+
+            preg_match('/data-child-avatar="(\w+)"/', $this->render($child), $matches);
+
+            $this->assertContains($matches[1] ?? null, $expected, "'$description' was drawn portrait ".($matches[1] ?? 'none'));
+        }
+    }
+
+    public function test_the_description_says_girl_or_boy_when_the_column_is_blank(): void
+    {
+        $girl = $this->child(['lan' => '4101', 'description' => 'blonde long girl']);
+        $boy = $this->child(['lan' => '4102', 'description' => 'black boy']);
+        $both = $this->child(['lan' => '4103', 'description' => 'boy or girl, nobody said']);
+        $neither = $this->child(['lan' => '4104', 'description' => 'blonde long hair']);
+
+        preg_match('/data-child-avatar="(\w+)"/', $this->render($girl), $m);
+        $this->assertSame('3', $m[1]);
+        preg_match('/data-child-avatar="(\w+)"/', $this->render($boy), $m);
+        $this->assertContains($m[1], ['2', '10']);
+        // A description that says both, or neither, is a record that does not say.
+        $this->assertStringContainsString('data-child-avatar="none"', $this->render($both));
+        $this->assertStringContainsString('data-child-avatar="none"', $this->render($neither));
+    }
+
+    public function test_the_column_wins_over_the_description(): void
+    {
+        // The form is the record; the sheet's note is a hint. A girl whose
+        // description says "boy" by mistake is still drawn a girl's face.
+        $child = $this->child(['gender' => 'Girl', 'description' => 'brown short hair boy']);
+
+        preg_match('/data-child-avatar="(\w+)"/', $this->render($child), $m);
+
+        $this->assertSame('9', $m[1]);
     }
 
     public function test_the_form_records_which_it_is(): void
@@ -287,19 +363,12 @@ class ChildPhotoTest extends TestCase
     }
 
     /** Renders a run of children of one gender and checks every face drawn. */
-    private function assertDrawnFrom(?string $gender, array $expected): void
+    private function assertDrawnFrom(?string $gender, array $expected, bool $atLeastTwo = true): void
     {
         $seen = collect(range(1, 24))->map(function (int $number) use ($gender) {
             $child = $this->child(['lan' => (string) (3000 + $number), 'first_name' => 'Child'.$number, 'gender' => $gender]);
 
-            $html = view('components.child-avatar', [
-                'child' => $child,
-                'size' => 'h-9 w-9',
-                'shape' => 'rounded-full',
-                'attributes' => new \Illuminate\View\ComponentAttributeBag,
-            ])->render();
-
-            preg_match('/data-child-avatar="(\w+)"/', $html, $matches);
+            preg_match('/data-child-avatar="(\w+)"/', $this->render($child), $matches);
 
             return $matches[1] ?? null;
         })->unique()->values();
@@ -308,7 +377,20 @@ class ChildPhotoTest extends TestCase
             $seen->diff($expected)->all(),
             'Drawn a face from outside the set: '.$seen->diff($expected)->join(', ')
         );
-        $this->assertGreaterThan(1, $seen->count(), 'Only one face was ever drawn.');
+        if ($atLeastTwo) {
+            $this->assertGreaterThan(1, $seen->count(), 'Only one face was ever drawn.');
+        }
+    }
+
+    /** The component alone, as the roster and the sheet both render it. */
+    private function render(Child $child): string
+    {
+        return view('components.child-avatar', [
+            'child' => $child,
+            'size' => 'h-9 w-9',
+            'shape' => 'rounded-full',
+            'attributes' => new \Illuminate\View\ComponentAttributeBag,
+        ])->render();
     }
 
     private function childWithPhoto(): Child

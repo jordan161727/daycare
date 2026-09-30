@@ -60,4 +60,33 @@ class ChildrenImportTest extends TestCase
         $this->assertSame(1, $import->updated);
         $this->assertSame(0, $import->skipped);
     }
+
+    public function test_how_the_child_looks_is_read_from_the_columns_after_gender(): void
+    {
+        /*
+         * The centre's sheet writes it two ways at once: a Description column
+         * ("blonde long girl") and then, in the columns after Gender, the skin,
+         * the hair colour and the hair length. All of it lands in the one
+         * description the portrait picker reads — without saying anything
+         * twice, and with a skin colour said as skin so "Brown" there is not
+         * taken for the hair.
+         */
+        $import = new ChildrenImport;
+        $import->collection(collect([
+            ['lan' => '10001', 'first_name' => 'Amaan', 'last_name' => 'Alam', 'gender' => 'Boy', 'description' => 'short hair brown', 'skin' => 'Brown', 'hair_color' => null, 'hair_length' => 'Short'],
+            ['lan' => '10002', 'first_name' => 'Maeve', 'last_name' => 'Adkins', 'gender' => 'Girl', 'description' => 'blonde long girl', 'skin' => 'White', 'hair_color' => 'Blonde', 'hair_length' => 'Long'],
+            ['lan' => '10003', 'first_name' => 'Naomi', 'last_name' => 'Ayala', 'gender' => 'Girl', 'description' => null, 'skin' => 'Hispanic', 'hair_color' => 'Black', 'hair_length' => 'Long'],
+        ]));
+
+        $this->assertSame([], $import->errors);
+        $this->assertSame('short hair brown, tan skin', Child::where('lan', '10001')->value('description'));
+        $this->assertSame('blonde long girl, light skin', Child::where('lan', '10002')->value('description'));
+        $this->assertSame('hispanic, black hair, long hair', Child::where('lan', '10003')->value('description'));
+
+        // And the faces those pick: the brown-haired boy, the blonde girl,
+        // the girl with the long black braids.
+        $this->assertSame(0, \App\Services\Portrait::pick(Child::where('lan', '10001')->first()));
+        $this->assertSame(3, \App\Services\Portrait::pick(Child::where('lan', '10002')->first()));
+        $this->assertSame(11, \App\Services\Portrait::pick(Child::where('lan', '10003')->first()));
+    }
 }

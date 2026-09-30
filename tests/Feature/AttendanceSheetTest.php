@@ -81,6 +81,36 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('<template x-if="isPhone && mode === \'sheet\'">', $html);
     }
 
+    /**
+     * A tap on a card opens a pop-up, and the pop-up is the clock alone.
+     *
+     * The client's ask for the director's cards: confirm before clocking,
+     * but no health code here. The face, the name, where the day stands,
+     * and one button saying Clock in, Clock out or Clock in again.
+     */
+    public function test_a_card_opens_a_pop_up_with_the_clock_and_no_health_code(): void
+    {
+        $this->makeChild('Lovelace', 'Ada', 'Toddler');
+
+        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        // The tap opens the pop-up rather than clocking on the spot.
+        $this->assertStringContainsString('this.cardChild = child;', $html);
+        $this->assertStringContainsString('this.cardOpen = true;', $html);
+        $this->assertStringContainsString('data-card-dialog', $html);
+
+        // Its one button runs the step the card would have taken.
+        $this->assertStringContainsString('@click="pressCard()"', $html);
+        $this->assertStringContainsString("{in: 'Clock in', out: 'Clock out', back: 'Clock in again'}[step.action]", $html);
+
+        // And nothing about symptoms inside it.
+        $dialog = substr($html, strpos($html, 'data-card-dialog'));
+        $dialog = substr($dialog, 0, strpos($dialog, '</template>'));
+        $this->assertStringNotContainsString('Health code', $dialog);
+        $this->assertStringNotContainsString('health_code', $dialog);
+        $this->assertStringNotContainsString('<select', $dialog);
+    }
+
     public function test_a_card_is_the_childs_today_cell(): void
     {
         /*
@@ -111,7 +141,7 @@ class AttendanceSheetTest extends TestCase
         // collected early can come back, and the tap brings them back on the
         // last session — a return, never a second arrival.
         $this->assertStringContainsString("return {session: sessions[sessions.length - 1], action: 'back'};", $html);
-        $this->assertStringContainsString("if (step.action === 'back') return this.clockBack(child.id, this.today, step.session);", $html);
+        $this->assertStringContainsString("if (step.action === 'back') await this.clockBack(child.id, this.today, step.session);", $html);
         $this->assertStringContainsString(route('attendance.signin.return'), $html);
         $this->assertStringContainsString("'Tap: clock in again'", $html);
         $this->assertStringNotContainsString('Done for today', $html);

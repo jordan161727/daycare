@@ -92,51 +92,9 @@
             </div>
         @endif
 
-        {{-- The ⋯ menu, the same one the register carries, holding the view
-             switch: this screen is Card mode; Attendance mode is the week
-             sheet on the register, and the day being looked at goes along.
-             Fixed, measured off the button and teleported to the body, for
-             the reason the register gives — a glass card clips what hangs
-             out of it. --}}
-        <div
-            x-data="{
-                menu: false,
-                x: 0,
-                y: 0,
-                place() {
-                    const box = this.$refs.trigger.getBoundingClientRect();
-                    this.x = Math.max(12, Math.min(box.right - 224, window.innerWidth - 236));
-                    this.y = box.bottom + 6;
-                },
-                toggle() {
-                    if (this.menu) { this.menu = false; return; }
-                    this.place();
-                    this.menu = true;
-                },
-            }"
-            @keydown.escape.window="menu = false"
-            @scroll.window="menu && place()"
-            @resize.window="menu && place()"
-            class="relative shrink-0"
-        >
-            <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="menu" aria-haspopup="true" class="grid h-[1.7333rem] w-7 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/10" aria-label="More">…</button>
-            <template x-teleport="body">
-            <div x-show="menu" x-cloak x-transition @click.outside="menu = false" :style="`top: ${y}px; left: ${x}px`" class="fixed z-50 w-56 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl dark:border-white/10 dark:bg-slate-900">
-                <div class="space-y-1.5">
-                    <span class="block text-[0.7333rem] font-semibold text-slate-500 dark:text-slate-400">View</span>
-                    <span class="flex w-full items-center gap-2 rounded-lg border border-indigo-500 bg-indigo-50 px-2 py-1 text-left text-xs font-semibold text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-100" aria-current="true">
-                        <span class="w-3 shrink-0 text-center">✓</span>
-                        <span>Card mode</span>
-                    </span>
-                    <a href="{{ route('attendance.index', ['date' => $date]) }}" class="flex w-full items-center gap-2 rounded-lg border border-slate-200 px-2 py-1 text-left text-xs text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10">
-                        <span class="w-3 shrink-0 text-center"></span>
-                        <span>Attendance mode</span>
-                    </a>
-                </div>
-            </div>
-            </template>
-        </div>
-
+        {{-- No ⋯ view menu here, at the client's ask. This screen is the
+             cards and nothing else; the week sheet is the register's, under
+             Director Attendance. --}}
     </div>
 
     {{-- The sheet: four lines a child, a column a day. The other tab. It is
@@ -625,6 +583,9 @@
 <script>
 function checkInGrid() { return {
     rows: @js($rows->keyBy('id')),
+    // The rooms in the order the centre says them, youngest first, so the
+    // chips drawn here read the same as the ones drawn by the server.
+    roomOrder: @js(\App\Services\ClassroomAssignment::rooms()),
     codes: @js($codes),
     today: @js($today),
     // The centre's clock, not the device's: the noon rule and the open
@@ -825,7 +786,10 @@ function checkInGrid() { return {
     get rooms() {
         const seen = {};
         Object.values(this.rows).forEach(row => { seen[row.room] = row.animal; });
-        return Object.keys(seen).sort().map(room => ({room, animal: seen[room] || ''}));
+        const rank = room => { const i = this.roomOrder.indexOf(room); return i === -1 ? this.roomOrder.length : i; };
+        return Object.keys(seen)
+            .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+            .map(room => ({room, animal: seen[room] || ''}));
     },
 
     /** The cards on screen: the room chosen, and the search box. */

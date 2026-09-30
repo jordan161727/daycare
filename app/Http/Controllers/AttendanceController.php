@@ -45,7 +45,7 @@ class AttendanceController extends Controller
 
             // The room chips are drawn from the same set, so a room that this
             // week holds only a leaver still has one to filter by.
-            $classrooms = $children->pluck('classroom')->filter()->unique()->values();
+            $classrooms = ClassroomAssignment::inOrder($children->pluck('classroom'));
 
             $attendanceRecords = Attendance::with(['child', 'returns'])
                 // Date strings, not Carbon instances. attendance_date is a DATE

@@ -40,9 +40,9 @@ class ReportController extends Controller
         $startOfWeek = Carbon::parse($selectedDate)->startOfWeek(Carbon::MONDAY);
         $dates = collect(range(0, 4))->map(fn ($offset) => $startOfWeek->copy()->addDays($offset));
 
-        $classrooms = $user->isAdmin()
-            ? Child::visibleTo($user)->where('status', 'Active')->distinct()->orderBy('classroom')->pluck('classroom')
-            : collect($user->assignedClassrooms());
+        $classrooms = ClassroomAssignment::inOrder($user->isAdmin()
+            ? Child::visibleTo($user)->where('status', 'Active')->distinct()->pluck('classroom')
+            : $user->assignedClassrooms());
 
         $selectedClassroom = trim((string) $request->input('classroom'));
 
@@ -53,7 +53,7 @@ class ReportController extends Controller
         $children = Child::visibleTo($user)
             ->where('status', 'Active')
             ->when($selectedClassroom !== '', fn ($query) => $query->where('classroom', $selectedClassroom))
-            ->orderBy('classroom')
+            ->orderByRoom()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();

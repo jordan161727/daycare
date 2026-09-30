@@ -72,6 +72,7 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
             'Last name',
             'Nickname',
             'Gender',
+            'Description',
             'Classroom',
             // Blank unless a director departed from the age rule. Worth a
             // column of its own: without it, a child in a room their date of
@@ -143,6 +144,7 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
             $child->last_name,
             $child->nickname,
             $child->gender,
+            $child->description,
             $child->classroom,
             $child->classroom_override,
             // The date itself rather than the formatted label, so Excel sorts

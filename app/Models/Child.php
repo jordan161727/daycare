@@ -59,6 +59,7 @@ class Child extends Model
         'last_name',
         'photo_path',
         'gender',
+        'description',
         'dob',
         'age',
         'classroom',
@@ -646,6 +647,18 @@ class Child extends Model
      * business. This decides whose row is on the page; that decides which days
      * in the row are theirs.
      */
+    /**
+     * Rooms in the order the centre says them, youngest first, then by the
+     * room's name for any room the bands do not know. See
+     * ClassroomAssignment::inOrder for why alphabetical is the wrong order.
+     */
+    public function scopeOrderByRoom($query, string $direction = 'asc')
+    {
+        return $query
+            ->orderByRaw(\App\Services\ClassroomAssignment::orderSql('classroom').' '.($direction === 'desc' ? 'desc' : 'asc'))
+            ->orderBy('classroom', $direction);
+    }
+
     public function scopeOnRollDuring($query, string $weekStart, string $weekEnd)
     {
         return $query->where(function ($outer) use ($weekStart, $weekEnd) {

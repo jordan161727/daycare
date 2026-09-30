@@ -434,20 +434,18 @@ class CheckInScreenTest extends TestCase
         $this->assertStringNotContainsString('type="date"', $html);
     }
 
-    public function test_check_in_marks_itself_the_cards_and_links_to_the_sheet(): void
+    public function test_check_in_has_no_view_menu(): void
     {
-        // The other half of the register's switch: Cards here, Sheet there,
-        // the day carried across.
+        // The client's ask: this screen is the cards and nothing else. The
+        // ⋯ menu with Card mode and Attendance mode is the register's own.
         $html = $this->actingAs($this->admin)
             ->get(route('check-in.index', ['date' => '2026-09-21']))
             ->assertOk()
             ->getContent();
 
-        // In this screen's ⋯ menu: Card mode is ticked, Attendance mode is
-        // the link back to the register, with the day carried across.
-        $this->assertStringContainsString('<span>Card mode</span>', $html);
-        $this->assertStringContainsString('href="'.route('attendance.index', ['date' => '2026-09-21']).'"', $html);
-        $this->assertStringContainsString('<span>Attendance mode</span>', $html);
+        $this->assertStringNotContainsString('aria-label="More"', $html);
+        $this->assertStringNotContainsString('<span>Card mode</span>', $html);
+        $this->assertStringNotContainsString('<span>Attendance mode</span>', $html);
     }
 
     public function test_a_search_can_be_cleared_in_one_press(): void

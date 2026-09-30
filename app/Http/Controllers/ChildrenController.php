@@ -31,6 +31,7 @@ class ChildrenController extends Controller
             'last_name' => 'Adkins',
             'dob' => '2022-04-18',
             'gender' => 'F',
+            'description' => 'blonde long hair',
             'classroom' => 'PreK',
             'status' => 'Active',
             'enrolled_on' => '2026-01-06',

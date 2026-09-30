@@ -437,6 +437,12 @@
                         <dd class="font-semibold">{{ $child->gender }}</dd>
                     </div>
                 @endif
+                @if(filled($child->description))
+                    <div class="flex justify-between gap-4">
+                        <dt class="text-slate-500 dark:text-slate-400">Description</dt>
+                        <dd class="text-right font-semibold">{{ $child->description }}</dd>
+                    </div>
+                @endif
                 <div class="flex justify-between gap-4">
                     <dt class="text-slate-500 dark:text-slate-400">Room</dt>
                     <dd class="text-right font-semibold">
