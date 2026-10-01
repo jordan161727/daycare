@@ -35,7 +35,7 @@ if (! window.matchMedia) {
 if (! window.requestIdleCallback) {
     window.requestIdleCallback = fn => setTimeout(() => fn({ didTimeout: false, timeRemaining: () => 50 }), 0);
 }
-try { localStorage.setItem('attendance.mode', '${scenario === 'sheet' ? 'sheet' : 'avatar'}'); } catch {}
+try { localStorage.setItem('attendance.view', '${scenario === 'sheet' ? 'sheet' : 'avatar'}'); } catch {}
 window.__posted = [];
 // The afternoon is clocked out twice — once before the trip out, once after
 // — so its departures come off a list.

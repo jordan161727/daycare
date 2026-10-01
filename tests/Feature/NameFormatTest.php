@@ -65,8 +65,8 @@ class NameFormatTest extends TestCase
             ->assertOk()
             ->assertSee('Show names as')
             // The choice is shown as the thing it does, not as a label to decode.
-            ->assertSee('Ada Lovelace')
-            ->assertSee('Lovelace, Ada')
+            ->assertSee('John Smith')
+            ->assertSee('Smith, John')
             ->assertSee(route('profile.name-format'), false)
             // Teleported out of the toolbar. The card carries a backdrop-blur
             // and clips what hangs out of it, which sliced the panel off just

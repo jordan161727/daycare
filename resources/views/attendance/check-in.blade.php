@@ -264,15 +264,20 @@
                     <template x-for="card in cards" :key="card.id">
                         <button type="button" @click="openChild(card.id)"
                                 class="group rounded-2xl border border-transparent px-2 py-4 text-center transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50/40 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
+                                :data-presence="isIn(card) ? 'in' : (isOut(card) ? 'out' : 'absent')"
                                 :aria-label="card.display + ', ' + card.room + ', ' + (isIn(card) ? 'on premises' : 'currently out') + '. Open attendance.'">
-                            <span class="relative mx-auto block h-24 w-24">
-                                {{-- The child's own face, ringed green when they are here. --}}
+                            {{-- Faded until the child is here, so the faces in colour
+                                 are the ones in the building; a pill says so under
+                                 the face, and a grey one once they have gone. --}}
+                            <span class="relative mx-auto block h-24 w-24 transition"
+                                  :class="isIn(card) ? '' : 'opacity-40 grayscale group-hover:opacity-70 group-hover:grayscale-0'">
                                 <span class="block h-24 w-24 overflow-hidden rounded-full ring-4 ring-white dark:ring-night-900"
                                       :class="isIn(card) ? 'outline outline-[3px] outline-emerald-500' : 'outline outline-2 outline-slate-200 dark:outline-white/10'"
                                       x-html="card.avatar"></span>
-                                <span x-show="isIn(card)" x-cloak class="absolute -bottom-0.5 -right-0.5 grid h-7 w-7 place-items-center rounded-full border-[3px] border-white bg-emerald-500 text-xs font-bold text-white dark:border-night-900" aria-hidden="true">✓</span>
+                                <span x-show="isIn(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-500 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked in</span>
+                                <span x-show="isOut(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-400 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked out</span>
                             </span>
-                            <span class="mt-3 block truncate text-[0.9333rem] font-semibold" x-text="card.display"></span>
+                            <span class="mt-3 block truncate text-[0.9333rem] font-semibold transition" :class="isIn(card) ? '' : 'text-slate-400 dark:text-slate-500'" x-text="card.display"></span>
                             <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" x-text="card.room"></span>
                             <span class="mt-2 block text-xs" :class="isIn(card) ? 'font-semibold text-emerald-700 dark:text-emerald-300' : (isOut(card) ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500')" x-text="stateOf(card)"></span>
                         </button>

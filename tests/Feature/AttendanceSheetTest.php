@@ -67,8 +67,8 @@ class AttendanceSheetTest extends TestCase
 
         $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
 
-        // Opens as the sheet; the ⋯ menu offers both, ticking the one in use.
-        $this->assertStringContainsString("mode: 'sheet',", $html);
+        // Opens on the cards; the ⋯ menu offers both, ticking the one in use.
+        $this->assertStringContainsString("mode: 'avatar',", $html);
         // The two options by their keys, not their words: what they are called
         // is the centre's to change (and has been changed more than once),
         // while what they switch is not.
@@ -156,11 +156,11 @@ class AttendanceSheetTest extends TestCase
     {
         // A per-viewer convenience in browser storage, which can be missing or
         // refuse in a private window or on a kiosk — so every touch is guarded
-        // and the sheet is the answer when it is.
+        // and the cards are the answer when it is.
         $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString("try { localStorage.setItem('attendance.mode', this.mode); } catch", $html);
-        $this->assertStringContainsString("if (localStorage.getItem('attendance.mode') === 'avatar') this.mode = 'avatar';", $html);
+        $this->assertStringContainsString("try { localStorage.setItem('attendance.view', this.mode); } catch", $html);
+        $this->assertStringContainsString("if (localStorage.getItem('attendance.view') === 'sheet') this.mode = 'sheet';", $html);
     }
 
     public function test_a_search_can_be_cleared_in_one_press(): void

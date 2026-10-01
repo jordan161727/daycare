@@ -205,8 +205,8 @@ class User extends Authenticatable
      * printing a name in a shape nothing here defines.
      */
     public const NAME_FORMATS = [
-        'first_last' => 'Ada Lovelace',
-        'last_first' => 'Lovelace, Ada',
+        'first_last' => 'John Smith',
+        'last_first' => 'Smith, John',
     ];
 
     public const NAME_FORMAT_DEFAULT = 'first_last';
