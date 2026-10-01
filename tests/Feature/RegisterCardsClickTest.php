@@ -68,31 +68,32 @@ class RegisterCardsClickTest extends TestCase
         $this->assertTrue($result['cardFound'], 'No card was drawn in Card view.');
         $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
 
-        // The six requests, in the day's order: AM in, AM out, PM in, PM out —
-        // then, collected early and brought back, PM back in and out again.
+        // Four requests, in the day's order: AM in, AM out, PM in, PM out —
+        // and then nothing, because the director's register is one arrival
+        // and one departure a session. The fifth and sixth taps open the
+        // pop-up, which says the day is done and offers nothing to press.
         $urls = array_map(fn ($p) => preg_replace('~^https?://[^/]+~', '', $p['url']), $result['posted']);
         $this->assertSame([
             '/attendance/sign-in', '/attendance/sign-in/retime',
             '/attendance/sign-in', '/attendance/sign-in/retime',
-            '/attendance/sign-in/return', '/attendance/sign-in/retime',
         ], $urls);
 
         $this->assertSame('AM', $result['posted'][0]['body']['session']);
         $this->assertSame('AM', $result['posted'][1]['body']['session']);
-        $this->assertArrayHasKey('signed_out_time', $result['posted'][1]['body']);
+        // The leaving time is the centre's clock — nine, as the script pinned
+        // it — never the device's, which may be half a world away.
+        $this->assertSame('09:00', $result['posted'][1]['body']['signed_out_time']);
+        $this->assertSame('13:00', $result['posted'][3]['body']['signed_out_time']);
         $this->assertSame('PM', $result['posted'][2]['body']['session']);
         $this->assertSame('PM', $result['posted'][3]['body']['session']);
         $this->assertArrayHasKey('signed_out_time', $result['posted'][3]['body']);
-        $this->assertSame('PM', $result['posted'][4]['body']['session']);
-        $this->assertSame('PM', $result['posted'][5]['body']['session']);
-        $this->assertArrayHasKey('signed_out_time', $result['posted'][5]['body']);
 
         // What the card said it would do at each tap, and what it read after.
         // Named the way the register names a session: morning, afternoon.
         // Each tap opened the pop-up, which offered the clock alone — no
         // health code — and closed once its button was pressed.
         $this->assertSame(
-            ['Clock in · AM', 'Clock out · AM', 'Clock in · PM', 'Clock out · PM', 'Clock in again · PM', 'Clock out · PM'],
+            ['Clock in · AM', 'Clock out · AM', 'Clock in · PM', 'Clock out · PM', 'Clocked out · PM', 'Clocked out · PM'],
             array_column($result['steps'], 'offered')
         );
         $this->assertSame([false, false, false, false, false, false], array_column($result['steps'], 'hasSelect'));
@@ -103,7 +104,9 @@ class RegisterCardsClickTest extends TestCase
         // Before noon the PM is switched off, from noon the AM — except a
         // block still open, which has to be clocked out whatever the hour.
         $this->assertSame([['PM'], ['PM'], ['AM'], ['AM'], ['AM'], ['AM']], array_column($result['steps'], 'off'));
-        $this->assertSame([true, true, true, true, true, true], array_column($result['steps'], 'dialogClosed'));
+        // The first four presses close the pop-up; the last two taps find a
+        // day already done, with nothing to press, so it stays open to read.
+        $this->assertSame([true, true, true, true, false, false], array_column($result['steps'], 'dialogClosed'));
 
         $this->assertSame('Tap: clock in (morning)', $result['steps'][0]['tapped']);
         $this->assertSame('Tap: clock out (morning)', $result['steps'][1]['tapped']);
@@ -111,18 +114,14 @@ class RegisterCardsClickTest extends TestCase
         $this->assertSame('Tap: clock out (afternoon)', $result['steps'][3]['tapped']);
         $this->assertSame('AM 8:05a–11:30a · PM 12:30p–3:00p', $result['steps'][3]['state']);
 
-        // A day with every session out is not a card that stops: a child
-        // who left can come back, and the tap says so.
-        $this->assertSame('Tap: clock in again (afternoon)', $result['steps'][4]['tapped']);
+        // A day with every session out is done. The card still opens — the
+        // director can read the day — but says so, and the day does not move.
+        $this->assertSame('Clocked out for the day (afternoon)', $result['steps'][4]['tapped']);
         $this->assertFalse($result['steps'][4]['wasDisabled']);
-        // Back in the room: the afternoon reads open again — no departure on
-        // the end of it, the way a first arrival reads — with the trip out on it.
-        $this->assertSame('AM 8:05a–11:30a · PM 12:30p–3:00p, 3:20p', $result['steps'][4]['state']);
-
-        // And out once more, with the last departure on the end of the day.
-        $this->assertSame('Tap: clock out (afternoon)', $result['steps'][5]['tapped']);
-        $this->assertSame('AM 8:05a–11:30a · PM 12:30p–3:00p, 3:20p–4:15p', $result['steps'][5]['state']);
-        $this->assertSame('Tap: clock in again (afternoon)', $result['finalTitle']);
+        $this->assertSame('AM 8:05a–11:30a · PM 12:30p–3:00p', $result['steps'][4]['state']);
+        $this->assertSame('Clocked out for the day (afternoon)', $result['steps'][5]['tapped']);
+        $this->assertSame('AM 8:05a–11:30a · PM 12:30p–3:00p', $result['steps'][5]['state']);
+        $this->assertSame('Clocked out for the day (afternoon)', $result['finalTitle']);
         $this->assertFalse($result['finalDisabled']);
 
         // The Recent panel is drawn, opens from its button, and lists the
@@ -202,7 +201,7 @@ class RegisterCardsClickTest extends TestCase
         $this->assertSame('PM', $result['posted'][1]['body']['session']);
     }
 
-    public function test_in_table_view_the_am_and_pm_boxes_are_two_ins_and_two_outs(): void
+    public function test_in_table_view_a_box_is_one_in_and_one_out(): void
     {
         /*
          * The director's view, the same day. The AM box is tapped three
@@ -251,20 +250,23 @@ class RegisterCardsClickTest extends TestCase
         $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
 
         $urls = array_map(fn ($p) => preg_replace('~^https?://[^/]+~', '', $p['url']), $result['posted']);
+        // On the table a tap is in, then out, then nothing: the AM's third
+        // tap finds a session already done. One arrival and one departure.
         $this->assertSame([
-            '/attendance/sign-in', '/attendance/sign-in/retime', '/attendance/sign-in/return',
+            '/attendance/sign-in', '/attendance/sign-in/retime',
             '/attendance/sign-in', '/attendance/sign-in/retime',
         ], $urls, json_encode($result["steps"]));
-        $this->assertSame(['AM', 'AM', 'AM', 'PM', 'PM'], array_column(array_column($result['posted'], 'body'), 'session'));
+        $this->assertSame(['AM', 'AM', 'PM', 'PM'], array_column(array_column($result['posted'], 'body'), 'session'));
 
-        // Each box says what its next tap does, and shows the day as it goes.
+        // Each box shows its arrival alone — the departure is in the hover —
+        // and the hover says what the next tap does.
         $this->assertSame('AM8:05a', $result['steps'][0]['text']);
         $this->assertStringContainsString('tap: clock out', $result['steps'][1]['tapped']);
-        $this->assertSame('AM8:05a–11:30a', $result['steps'][1]['text']);
-        $this->assertStringContainsString('tap: clock in again', $result['steps'][2]['tapped']);
-        $this->assertSame('AM8:05a–3:00p, 3:20p', $result['steps'][2]['text']);
+        $this->assertSame('AM8:05a', $result['steps'][1]['text']);
+        $this->assertStringContainsString('clocked out 11:30a', $result['steps'][2]['tapped']);
+        $this->assertSame('AM8:05a', $result['steps'][2]['text']);
         $this->assertSame('PM12:30p', $result['steps'][3]['text']);
-        $this->assertSame('PM12:30p–3:00p', $result['steps'][4]['text']);
+        $this->assertSame('PM12:30p', $result['steps'][4]['text']);
     }
 
     private function node(): ?string

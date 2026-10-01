@@ -86,7 +86,7 @@ class AttendanceSheetTest extends TestCase
      *
      * The client's ask for the director's cards: confirm before clocking,
      * but no health code here. The face, the name, where the day stands,
-     * and one button saying Clock in, Clock out or Clock in again.
+     * and one button saying Clock in or Clock out — quiet once both are done.
      */
     public function test_a_card_opens_a_pop_up_with_the_clock_and_no_health_code(): void
     {
@@ -101,7 +101,7 @@ class AttendanceSheetTest extends TestCase
 
         // Its one button runs the step the card would have taken.
         $this->assertStringContainsString('@click="pressCard()"', $html);
-        $this->assertStringContainsString("{in: 'Clock in', out: 'Clock out', back: 'Clock in again'}[step.action]", $html);
+        $this->assertStringContainsString("{in: 'Clock in', out: 'Clock out', done: 'Clocked out'}[step.action]", $html);
 
         // And nothing about symptoms inside it.
         $dialog = substr($html, strpos($html, 'data-card-dialog'));
@@ -140,11 +140,12 @@ class AttendanceSheetTest extends TestCase
         // A day with every session out is not the end of the card: a child
         // collected early can come back, and the tap brings them back on the
         // last session — a return, never a second arrival.
-        $this->assertStringContainsString("return {session: sessions[sessions.length - 1], action: 'back'};", $html);
-        $this->assertStringContainsString("if (step.action === 'back') await this.clockBack(child.id, this.today, step.session);", $html);
-        $this->assertStringContainsString(route('attendance.signin.return'), $html);
-        $this->assertStringContainsString("'Tap: clock in again'", $html);
-        $this->assertStringNotContainsString('Done for today', $html);
+        // One arrival and one departure a session: once every session is
+        // out the card is done, and a tap does nothing but say so.
+        $this->assertStringContainsString("return {session: sessions[sessions.length - 1], action: 'done'};", $html);
+        $this->assertStringContainsString("if (step.action === 'done') return;", $html);
+        $this->assertStringContainsString("'Clocked out for the day'", $html);
+        $this->assertStringNotContainsString("'Tap: clock in again'", $html);
         $this->assertStringContainsString('returns: {', $html);
 
         // One empty-search line for every layout, under them — the cards

@@ -878,8 +878,11 @@
                         </div>
                     </template>
 
-                    <button type="button" @click="pressCard()" :disabled="cardSaving"
-                            :class="cardStepFor(cardChild, cardSession).action === 'out' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
+                    {{-- Once a session has its in and its out the button goes quiet:
+                         one arrival and one departure a session, and nothing more
+                         to press. --}}
+                    <button type="button" @click="pressCard()" :disabled="cardSaving || cardStepFor(cardChild, cardSession).action === 'done'"
+                            :class="{out: 'bg-rose-600 hover:bg-rose-700', done: 'bg-slate-400 dark:bg-slate-600', in: 'bg-emerald-600 hover:bg-emerald-700'}[cardStepFor(cardChild, cardSession).action]"
                             class="mt-6 w-full rounded-xl py-3 text-sm font-bold text-white transition disabled:opacity-50"
                             x-text="cardSaving ? 'Saving…' : cardButton(cardChild)"></button>
                 </div>
@@ -1146,11 +1149,13 @@ function attendanceApp() { return {
     returnsOf(childId, date, session) { return this.returns?.[childId]?.[date]?.[session] ?? []; },
 
     /**
-     * The next thing a tap does: {session, action: 'in' | 'out' | 'back'}.
+     * The next thing a tap does: {session, action: 'in' | 'out' | 'done'}.
      *
-     * In, then out, a session at a time; and once every session is out, a
-     * tap brings the child back on the last one — collected for the dentist
-     * at eleven and here again at one is still today.
+     * In, then out, a session at a time — once each. The director's
+     * register is one arrival and one departure a session; a child collected
+     * early and brought back is the door screen's business, which keeps
+     * every entry. Once every session is out, the card is done for the day
+     * and a tap does nothing but say so.
      */
     cardStep(child) {
         const sessions = this.sessionsOf(child);
@@ -1158,20 +1163,20 @@ function attendanceApp() { return {
             if (! this.isPresent(child.id, this.today, session)) return {session, action: 'in'};
             if (! this.isOut(child.id, this.today, session)) return {session, action: 'out'};
         }
-        return {session: sessions[sessions.length - 1], action: 'back'};
+        return {session: sessions[sessions.length - 1], action: 'done'};
     },
 
     /**
      * The same, for one block the director has pressed in the pop-up: in if
-     * it has no arrival, out if it is open, back in once it is done. Falls
-     * to the card's own next step when no block is chosen or the child has
+     * it has no arrival, out if it is open, done once it has both. Falls to
+     * the card's own next step when no block is chosen or the child has
      * only the one.
      */
     cardStepFor(child, session) {
         if (! session || ! this.sessionsOf(child).includes(session)) return this.cardStep(child);
         if (! this.isPresent(child.id, this.today, session)) return {session, action: 'in'};
         if (! this.isOut(child.id, this.today, session)) return {session, action: 'out'};
-        return {session, action: 'back'};
+        return {session, action: 'done'};
     },
 
     /** The block the pop-up is on: AM or PM for a School Age child, else null. */
@@ -1269,12 +1274,13 @@ function attendanceApp() { return {
         if (this.cardSession && this.cardBlockDisabled(child, this.cardSession)) return;
 
         const step = this.cardStepFor(child, this.cardSession);
+        if (step.action === 'done') return;
+
         this.cardSaving = true;
 
         try {
             if (step.action === 'in') await this.signIn(child.id, this.today, step.session);
             if (step.action === 'out') await this.clockOut(child.id, this.today, step.session);
-            if (step.action === 'back') await this.clockBack(child.id, this.today, step.session);
             // Remembered, so the table opens on this child — see setMode().
             this.lastTouched = child.id;
         } finally {
@@ -1317,10 +1323,10 @@ function attendanceApp() { return {
         look();
     },
 
-    /** What the pop-up's button says: Clock in, Clock out, Clock in again — and AM/PM for School Age. */
+    /** What the pop-up's button says: Clock in, Clock out, or Clocked out once both are done — and AM/PM for School Age. */
     cardButton(child) {
         const step = this.cardStepFor(child, this.cardSession);
-        const label = {in: 'Clock in', out: 'Clock out', back: 'Clock in again'}[step.action];
+        const label = {in: 'Clock in', out: 'Clock out', done: 'Clocked out'}[step.action];
 
         return label + (step.session === 'FULL' ? '' : ' · ' + step.session);
     },
@@ -1358,10 +1364,16 @@ function attendanceApp() { return {
      * Clock out: the register's retime, given the hour of now as the leaving
      * time. Today's writes go through it without an amendment entry — it is
      * the door recording a departure, not a correction of one.
+     *
+     * The hour is the centre's, not the device's — see minutesNow(). The
+     * arrival is stamped by the server in the centre's timezone, and this
+     * once read the device's clock: a director twelve hours away clocked a
+     * child in at 3:59p and could not clock them out at 4:38p, because the
+     * device said 4:38 in the morning and that is before the arrival.
      */
     async clockOut(childId, date, session) {
-        const now = new Date();
-        const at = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        const minutes = this.minutesNow();
+        const at = String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
 
         try {
             const response = await this.post("{{ route('attendance.signin.retime') }}", {
@@ -1413,7 +1425,7 @@ function attendanceApp() { return {
 
         if (step.action === 'in') return 'Tap: clock in' + name(step.session);
         if (step.action === 'out') return 'Tap: clock out' + name(step.session);
-        return 'Tap: clock in again' + name(step.session);
+        return 'Clocked out for the day' + name(step.session);
     },
     canAmend: @js($canAmendAttendance),
 
@@ -2413,9 +2425,12 @@ function attendanceApp() { return {
      * format that fits the tightest cell fits every other.
      */
     displayTime(childId, date, session) {
-        // With the departure on the end once there is one — "7:46a–11:30a" —
-        // and any trip out and back between: the session as it went.
-        return this.sessionSpan(childId, date, session);
+        // The table reads arrivals: "7:46a", the hour the child came in, and
+        // nothing after it. The departure is the cards' to make and to show.
+        // In Edit mode the whole session is written — "7:46a–11:30a", with
+        // any trip out and back between — because that is where a wrong
+        // departure is put right, and it cannot be corrected unseen.
+        return this.editing ? this.sessionSpan(childId, date, session) : this.sessionTime(childId, date, session);
     },
 
     /* ---- the box, in two bindings ----
@@ -2701,13 +2716,16 @@ function attendanceApp() { return {
     },
     boxTitle(childId, date, session) {
         if (this.isPresent(childId, date, session)) {
+            // The hover tells the whole session — "Signed in 8:05a–11:30a" —
+            // where the box itself shows the arrival alone; the departure is
+            // read here without leaving the table.
             let note = this.isScheduled(childId, date, session)
-                ? 'Signed in ' + this.displayTime(childId, date, session)
-                : 'Signed in ' + this.displayTime(childId, date, session) + ' — not scheduled, still billable';
+                ? 'Signed in ' + this.sessionSpan(childId, date, session)
+                : 'Signed in ' + this.sessionSpan(childId, date, session) + ' — not scheduled, still billable';
 
-            // Live today, the box is a clock: say what the next tap does.
+            // Live today, the box is a clock: say where the day stands.
             if (! this.editing && date === this.today) {
-                note += this.isOut(childId, date, session) ? ' — tap: clock in again' : ' — tap: clock out';
+                note += this.isOut(childId, date, session) ? ' — clocked out ' + this.outTime(childId, date, session) : ' — tap: clock out';
             }
 
             // Who put it right, and when. The register can be corrected now, so
@@ -2970,17 +2988,18 @@ function attendanceApp() { return {
     tapCell(childId, date, session) {
         if (! this.canTap(date)) return;
 
-        // Live: today, at the door. A tap steps the one session along — in,
-        // then out, then back in again — the way a card does, so a School
-        // Age child's morning and afternoon are two ins and two outs. Nothing
-        // is ever taken off the sheet here: a passing elbow can clock a
-        // child out, and the next tap puts them back with the trip recorded.
+        // Live: today, on the table. A tap steps the one session along — in,
+        // then out — the way a card does, so a School Age child's morning
+        // and afternoon boxes are two ins and two outs. Once a session has
+        // both, a tap does nothing: the director's register is one arrival
+        // and one departure a session, and Edit mode is where a wrong hour
+        // is put right. The box shows the arrival; the hover tells the rest.
         if (! this.editing) {
             if (date !== this.today) return;
             if (! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);
             if (! this.isOut(childId, date, session)) return this.clockOut(childId, date, session);
 
-            return this.clockBack(childId, date, session);
+            return;
         }
 
         return this.cycle(childId, date, session);

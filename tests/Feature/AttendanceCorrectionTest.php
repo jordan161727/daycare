@@ -629,13 +629,12 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertStringNotContainsString('askBeforeTapping', $html);
     }
     /**
-     * At the door a tap is a child standing in front of you: today, and the
-     * one session's next step — in, then out, then back in. A School Age
-     * child's morning and afternoon boxes are two ins and two outs. Nothing
-     * on the live sheet is ever taken off it: the worst a passing elbow can
-     * do is clock a child out, and the next tap puts them back.
+     * On the live table a tap is in, then out, then nothing: today, the one
+     * session, one arrival and one departure. A School Age child's morning
+     * and afternoon boxes are two ins and two outs. The box shows the
+     * arrival; the hover carries the departure and says what the next tap does.
      */
-    public function test_the_live_sheet_steps_todays_box_in_out_and_back(): void
+    public function test_the_live_sheet_steps_todays_box_in_then_out_and_stops(): void
     {
         $this->makeChild();
         app(WeekSchedule::class)->open('2026-09-14');
@@ -649,12 +648,17 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertStringContainsString('if (date !== this.today) return;', $html);
         $this->assertStringContainsString('if (! this.isPresent(childId, date, session)) return this.signIn(childId, date, session);', $html);
         $this->assertStringContainsString('if (! this.isOut(childId, date, session)) return this.clockOut(childId, date, session);', $html);
-        $this->assertStringContainsString('return this.clockBack(childId, date, session);', $html);
+        $this->assertStringNotContainsString('return this.clockBack(childId, date, session);', $html);
 
-        // And the box says which, and shows both hours once it has them.
+        // And the box says where the departure is made. Live, it shows the
+        // arrival alone; in Edit mode the whole session, so a wrong departure
+        // can be seen to be put right.
         $this->assertStringContainsString("' — tap: clock out'", $html);
-        $this->assertStringContainsString("' — tap: clock in again'", $html);
-        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $html);
+        // The hover carries the departure the box leaves out.
+        $this->assertStringContainsString("'Signed in ' + this.sessionSpan(childId, date, session)", $html);
+        $this->assertStringContainsString("' — clocked out ' + this.outTime(childId, date, session)", $html);
+        $this->assertStringNotContainsString("' — tap: clock in again'", $html);
+        $this->assertStringContainsString('return this.editing ? this.sessionSpan(childId, date, session) : this.sessionTime(childId, date, session);', $html);
     }
     /**
      * A time in Edit carries a pencil; press it, or E, and the hour is typed.
