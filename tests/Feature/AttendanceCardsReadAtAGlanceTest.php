@@ -40,6 +40,30 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
         $this->assertStringContainsString('>Checked out</span>', $html);
     }
 
+    public function test_the_edit_switch_belongs_to_the_table_and_the_cards_leave_edit_mode(): void
+    {
+        $html = $this->page('attendance.index');
+
+        // The Live/Edit switch is drawn for Table view only.
+        $this->assertStringContainsString("<div x-show=\"view === 'signin' && mode === 'sheet'\" class=\"att-mode\"", $html);
+        // And choosing Card view while in Edit mode drops back to Live.
+        $this->assertStringContainsString("if (this.mode === 'avatar' && this.editing) this.switchMode();", $html);
+    }
+
+    public function test_switching_to_the_table_shows_the_child_last_clocked_from_a_card(): void
+    {
+        $html = $this->page('attendance.index');
+
+        // Each table row is findable by its child.
+        $this->assertStringContainsString('<tr :data-child-row="child.id"', $html);
+        // The card remembers who was clocked; the switch to the table scrolls
+        // to that row and lights it for a moment.
+        $this->assertStringContainsString('this.lastTouched = child.id;', $html);
+        $this->assertStringContainsString("if (this.mode === 'sheet') this.revealLastTouched();", $html);
+        $this->assertStringContainsString("row.scrollIntoView?.({ block: 'center', behavior: 'smooth' });", $html);
+        $this->assertStringContainsString(":class=\"revealed === child.id ? 'att-row-revealed' : ''\"", $html);
+    }
+
     public function test_the_teachers_cards_read_the_same_way(): void
     {
         $html = $this->page('check-in.index');

@@ -148,6 +148,46 @@ class AttendanceCorrectionTest extends TestCase
         $this->assertNull(Attendance::sole()->signed_out_at);
     }
 
+    public function test_a_clock_out_in_the_same_minute_as_the_arrival_is_accepted(): void
+    {
+        /*
+         * The arrival is stamped to the second and a clock-out arrives as
+         * hours and minutes, so in at 4:13:27 and out at 4:13 read as leaving
+         * before arriving and were refused — a director who pressed in by
+         * mistake was stuck with an open row until the clock ticked over.
+         * The same minute is a stay of no minutes, and it is allowed.
+         */
+        $child = $this->makeChild();
+
+        Attendance::create([
+            'child_id' => $child->id,
+            'attendance_date' => '2026-09-14',
+            'session' => 'AM',
+            'signed_in_at' => Carbon::parse('2026-09-14 16:13:27'),
+        ]);
+
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-14',
+                'session' => 'AM',
+                'signed_out_time' => '16:13',
+            ])
+            ->assertOk();
+
+        $this->assertSame('16:13', Attendance::sole()->signed_out_at->format('H:i'));
+
+        // The minute before is still a departure before the arrival.
+        $this->actingAs($this->admin)
+            ->postJson(route('attendance.signin.retime'), [
+                'child_id' => $child->id,
+                'attendance_date' => '2026-09-14',
+                'session' => 'AM',
+                'signed_out_time' => '16:12',
+            ])
+            ->assertStatus(422);
+    }
+
     public function test_a_retime_with_neither_time_is_refused(): void
     {
         $child = $this->makeChild();

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\User;
 use App\Services\WeekSchedule;
@@ -95,6 +96,13 @@ class RegisterCardsClickTest extends TestCase
             array_column($result['steps'], 'offered')
         );
         $this->assertSame([false, false, false, false, false, false], array_column($result['steps'], 'hasSelect'));
+        // A School Age child's pop-up offers the AM and the PM, as the door
+        // screen does, opened on whichever is still to do.
+        $this->assertSame(array_fill(0, 6, ['AM', 'PM']), array_column($result['steps'], 'sessions'));
+        $this->assertSame(['AM', 'AM', 'PM', 'PM', 'PM', 'PM'], array_column($result['steps'], 'chosen'));
+        // Before noon the PM is switched off, from noon the AM — except a
+        // block still open, which has to be clocked out whatever the hour.
+        $this->assertSame([['PM'], ['PM'], ['AM'], ['AM'], ['AM'], ['AM']], array_column($result['steps'], 'off'));
         $this->assertSame([true, true, true, true, true, true], array_column($result['steps'], 'dialogClosed'));
 
         $this->assertSame('Tap: clock in (morning)', $result['steps'][0]['tapped']);
@@ -116,6 +124,82 @@ class RegisterCardsClickTest extends TestCase
         $this->assertSame('AM 8:05a–11:30a · PM 12:30p–3:00p, 3:20p–4:15p', $result['steps'][5]['state']);
         $this->assertSame('Tap: clock in again (afternoon)', $result['finalTitle']);
         $this->assertFalse($result['finalDisabled']);
+
+        // The Recent panel is drawn, opens from its button, and lists the
+        // sign-ins the cards just made. It once shared a teleport with the
+        // card pop-up, and Alpine carries only a template's first element —
+        // so the panel was never on the page and the button opened nothing.
+        $this->assertTrue($result['recentPanelDrawn'], 'The Recent panel is not on the page.');
+        $this->assertTrue($result['recentOpened'], 'The Recent button did not open the panel.');
+        $this->assertGreaterThan(0, $result['recentCount'], 'The sign-ins just made are not in Recent.');
+    }
+
+    public function test_an_am_never_clocked_out_is_closed_first_then_the_pm_opens(): void
+    {
+        /*
+         * The morning's arrival was never clocked out, and it is ten past
+         * four. The pop-up must open on the AM — the open block, whatever the
+         * clock says — and offer the clock-out; and once that is done, the
+         * next tap must open on the PM with the AM switched off, so the
+         * afternoon does not land in the morning's row.
+         */
+        $node = $this->node();
+
+        if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {
+            $this->markTestSkipped('node and jsdom are needed to click the page.');
+        }
+
+        $this->travelTo(Carbon::parse('2026-09-23 16:13:00'));
+
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $child = Child::create([
+            'lan' => '3001', 'status' => 'Active', 'first_name' => 'Julian', 'last_name' => 'Floreno',
+            'classroom' => 'School Age', 'birth_date' => '2018-03-04', 'schedule_days' => [1, 2, 3, 4, 5],
+        ]);
+
+        app(WeekSchedule::class)->open('2026-09-21');
+
+        Attendance::create([
+            'child_id' => $child->id, 'attendance_date' => '2026-09-23', 'session' => 'AM',
+            'signed_in_at' => Carbon::parse('2026-09-23 08:05:00'),
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+
+        $page = tempnam(sys_get_temp_dir(), 'register').'.html';
+        file_put_contents($page, $html);
+
+        $process = new Process(
+            [$node, base_path('tests/js/click-register-cards.cjs'), $page, base_path('node_modules/alpinejs/dist/cdn.js'), 'forgot'],
+            base_path(),
+            ['NODE_PATH' => base_path('node_modules')],
+        );
+        $process->setTimeout(90)->run();
+
+        @unlink($page);
+
+        $this->assertSame(0, $process->getExitCode(), "The click script failed:\n".$process->getErrorOutput());
+
+        $result = json_decode($process->getOutput(), true);
+
+        $this->assertIsArray($result, 'The click script returned no JSON: '.$process->getOutput());
+        $this->assertSame([], $result['errors'], 'The component logged errors: '.implode('; ', $result['errors']));
+
+        // First tap: the open AM, offered for clocking out, nothing switched off.
+        $this->assertSame('Clock out · AM', $result['steps'][0]['offered']);
+        $this->assertSame('AM', $result['steps'][0]['chosen']);
+        $this->assertSame([], $result['steps'][0]['off']);
+
+        // Second tap: the PM, with the AM now closed for the afternoon.
+        $this->assertSame('Clock in · PM', $result['steps'][1]['offered']);
+        $this->assertSame('PM', $result['steps'][1]['chosen']);
+        $this->assertSame(['AM'], $result['steps'][1]['off']);
+
+        $urls = array_map(fn ($p) => preg_replace('~^https?://[^/]+~', '', $p['url']), $result['posted']);
+        $this->assertSame(['/attendance/sign-in/retime', '/attendance/sign-in'], $urls);
+        $this->assertSame('AM', $result['posted'][0]['body']['session']);
+        $this->assertSame('PM', $result['posted'][1]['body']['session']);
     }
 
     public function test_in_table_view_the_am_and_pm_boxes_are_two_ins_and_two_outs(): void

@@ -255,7 +255,7 @@
 
                 {{-- Five across only on a genuinely wide screen: this theme has
                      no 2xl breakpoint, and `desktop` is its word for one. --}}
-                <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 xl:grid-cols-4 desktop:grid-cols-5">
+                <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
                     {{-- `card`, not `child`. The dialog below is opened by writing
                          the component's `child`, and Alpine writes to the nearest
                          scope that owns the name — so a loop variable also called

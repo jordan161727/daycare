@@ -1312,3 +1312,14 @@
        the thing that cannot be seen. */
     .cs-day input:focus-visible + span { outline: 2px solid var(--cs-primary); outline-offset: 2px; }
 }
+
+/* The row the table has just scrolled to, lit for a moment: the child last
+   clocked from a card, found again among sixty rows. */
+.att-row-revealed {
+    animation: att-row-reveal 2.5s ease-out;
+}
+
+@keyframes att-row-reveal {
+    0%, 60% { background-color: rgb(254 243 199); box-shadow: inset 3px 0 0 rgb(245 158 11); }
+    100% { background-color: transparent; box-shadow: none; }
+}

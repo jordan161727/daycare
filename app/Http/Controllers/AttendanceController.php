@@ -360,8 +360,18 @@ class AttendanceController extends Controller
             $attendance->signed_out_at = Carbon::parse($validated['attendance_date'].' '.$validated['signed_out_time'], $timezone);
         }
 
-        // A departure before the arrival is not a correction of anything.
-        if ($attendance->signed_out_at !== null && $attendance->signed_out_at->lte($attendance->signed_in_at)) {
+        /*
+         * A departure before the arrival is not a correction of anything.
+         *
+         * Compared by the minute, and the same minute is allowed. The arrival
+         * is stamped to the second; a clock-out arrives as hours and minutes,
+         * so a child clocked in at 4:13:27 and out at 4:13 read as leaving
+         * before arriving and the clock-out was refused — a director who
+         * pressed in by mistake, or was trying the register, was then stuck
+         * with an open row until the clock ticked over. A stay of no minutes
+         * is an odd row, but it is the row that was asked for.
+         */
+        if ($attendance->signed_out_at !== null && $attendance->signed_out_at->lt($attendance->signed_in_at->copy()->startOfMinute())) {
             return response()->json([
                 'message' => 'The leaving time has to be after the arrival — '
                     .Child::timeShort($attendance->signed_in_at->timezone($timezone)).'.',

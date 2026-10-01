@@ -103,7 +103,14 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 60));
     // A tap opens the child's pop-up; its one button does the clocking. So
     // each step is a tap, then the press — and a note of what the pop-up
     // offered, which has no health code in it.
-    for (let i = 0; i < 6 && card(); i++) {
+    // "forgot": the AM was never clocked out and it is ten past four. Two
+    // taps: out of the AM, then into the PM.
+    const taps = scenario === 'forgot' ? 2 : 6;
+
+    for (let i = 0; i < taps && card(); i++) {
+        // The morning's two taps at nine, the afternoon's four at one: the
+        // pop-up only offers the half of the day the clock is in.
+        window.__clockMinutes = scenario === 'forgot' ? 16 * 60 + 13 : (i < 2 ? 9 * 60 : 13 * 60);
         const before = card().getAttribute('title');
         const wasDisabled = card().disabled;
         card().click();
@@ -112,10 +119,22 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 60));
         const button = dialog?.querySelector('button.w-full') ?? null;
         const offered = button?.textContent.trim() ?? null;
         const hasSelect = !! dialog?.querySelector('select');
+        const sessions = [...(dialog?.querySelectorAll('[data-session]') ?? [])].map(b => b.textContent.trim().split(/\s+/)[0]);
+        const chosen = dialog?.querySelector('[data-session][aria-pressed="true"]')?.textContent.trim().split(/\s+/)[0] ?? null;
+        const off = [...(dialog?.querySelectorAll('[data-session]:disabled') ?? [])].map(b => b.textContent.trim().split(/\s+/)[0]);
         button?.click();
         await tick(); await tick();
-        result.steps.push({ tapped: before, wasDisabled, offered, hasSelect, dialogClosed: ! doc.querySelector('[data-card-dialog]'), state: card().querySelector('span.mt-2')?.textContent.trim() ?? null });
+        result.steps.push({ tapped: before, wasDisabled, offered, hasSelect, sessions, chosen, off, dialogClosed: ! doc.querySelector('[data-card-dialog]'), state: card().querySelector('span.mt-2')?.textContent.trim() ?? null });
     }
+
+    // The Recent panel: there at all, and opened by its button. It once
+    // shared a teleport with the card pop-up and was never drawn.
+    const recentPanel = () => doc.querySelector('[role="dialog"][aria-label="Recent sign-ins"]');
+    result.recentPanelDrawn = !! recentPanel();
+    [...doc.querySelectorAll('button')].find(b => /Recent/.test(b.textContent))?.click();
+    await tick(); await tick();
+    result.recentOpened = !! recentPanel() && recentPanel().style.display !== 'none';
+    result.recentCount = recentPanel()?.querySelectorAll('.truncate.font-semibold').length ?? 0;
 
     result.posted = window.__posted;
     result.finalTitle = card()?.getAttribute('title') ?? null;

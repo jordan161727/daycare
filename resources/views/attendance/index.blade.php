@@ -316,7 +316,10 @@
                                  whole sheet is in — every column changes with it —
                                  and a switch says "in it" or "not" the way a button
                                  labelled Edit never quite did. --}}
-                            <div x-show="view === 'signin'" class="att-mode" :data-edit="editing ? 'true' : 'false'">
+                            {{-- Table view only. The cards are the live room — a face
+                                 a tap — and never offer Edit; see setMode(), which
+                                 drops back to Live on the way into them. --}}
+                            <div x-show="view === 'signin' && mode === 'sheet'" class="att-mode" :data-edit="editing ? 'true' : 'false'">
                                 <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : 'Live mode'" @click="switchMode()">
                                     <span class="att-knob" x-html="editing ? icons.edit : icons.lock"></span>
                                 </button>
@@ -539,7 +542,7 @@
                          and a tap on a card is a tap on that child's today cell
                          — the same sign-in Live, the same cycle in Edit. --}}
                     <template x-if="mode === 'avatar'">
-                        <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 xl:grid-cols-4 desktop:grid-cols-5">
+                        <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
                             <template x-for="child in filteredChildren" :key="'card-' + child.id">
                                 {{-- Live, a tap steps the child through the day: in,
                                      then out, a session at a time — and back in
@@ -643,7 +646,7 @@
                             </thead>
                             <tbody>
                                 <template x-for="child in filteredChildren" :key="child.id">
-                                    <tr class="transition hover:bg-slate-50/60 dark:hover:bg-white/5">
+                                    <tr :data-child-row="child.id" class="transition hover:bg-slate-50/60 dark:hover:bg-white/5" :class="revealed === child.id ? 'att-row-revealed' : ''">
                                         <td class="att-td att-lan sticky left-0 z-10 bg-white dark:bg-night-900" x-text="child.lan || '—'"></td>
                                         <td class="att-td att-student sticky left-[4rem] z-10 bg-white dark:bg-night-900">
                                             <div class="att-person">
@@ -838,14 +841,57 @@
                           :class="isHere(cardChild) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
                           x-text="isHere(cardChild) ? '✓ On premises · ' + cardState(cardChild) : (isDone(cardChild) ? '○ Left · ' + cardState(cardChild) : '○ Currently out')"></span></span>
 
+                    {{-- A School Age child has an AM and a PM, each its own row on
+                         the register, and the pop-up says so the way the door
+                         screen does: two blocks, "AM" and "PM", each with where it
+                         stands and its hours. It opens on the one still to do;
+                         the director can press the other, and the button follows.
+                         A block in progress is green; a finished one is quiet. --}}
+                    <template x-if="sessionsOf(cardChild).length > 1">
+                        <div class="mt-4 grid grid-cols-2 gap-2 text-left" aria-label="AM or PM">
+                            <template x-for="s in sessionsOf(cardChild)" :key="'card-session-' + s">
+                                {{-- The other half of the day is switched off: before
+                                     noon only the AM, from noon only the PM — a block
+                                     still open stays on, since the child has to be
+                                     clocked out of it whatever the hour. --}}
+                                <button type="button" data-session @click="pickCardSession(s)" :aria-pressed="cardSession === s"
+                                        :disabled="cardBlockDisabled(cardChild, s)"
+                                        :title="cardBlockDisabled(cardChild, s) ? (s === 'AM' ? 'The AM is closed after noon' : 'The PM opens at noon') : null"
+                                        class="rounded-2xl border px-3 py-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                        :class="cardSession === s
+                                            ? 'border-indigo-500 bg-indigo-50/70 shadow-sm dark:border-indigo-400 dark:bg-indigo-500/15'
+                                            : 'border-slate-200 bg-white hover:border-slate-300 dark:border-white/10 dark:bg-night-800 dark:hover:border-white/20'">
+                                    <span class="flex items-center justify-between gap-2">
+                                        <span class="text-[0.7333rem] font-bold uppercase tracking-wide"
+                                              :class="cardSession === s ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400'"
+                                              x-text="s"></span>
+                                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6667rem] font-semibold"
+                                              :class="isOut(cardChild.id, today, s)
+                                                  ? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
+                                                  : (isPresent(cardChild.id, today, s) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200')"
+                                              x-text="isOut(cardChild.id, today, s) ? '✓ Done' : (isPresent(cardChild.id, today, s) ? '● In' : 'To do')"></span>
+                                    </span>
+                                    <span class="mt-2 block text-xs tabular-nums text-slate-600 dark:text-slate-300"
+                                          x-text="isPresent(cardChild.id, today, s) ? sessionSpan(cardChild.id, today, s) : '—'"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+
                     <button type="button" @click="pressCard()" :disabled="cardSaving"
-                            :class="cardStep(cardChild).action === 'out' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
+                            :class="cardStepFor(cardChild, cardSession).action === 'out' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
                             class="mt-6 w-full rounded-xl py-3 text-sm font-bold text-white transition disabled:opacity-50"
                             x-text="cardSaving ? 'Saving…' : cardButton(cardChild)"></button>
                 </div>
             </div>
         </template>
+    </template>
 
+    {{-- A teleport of its own. Alpine carries a template's first element to
+         the body and nothing after it — so while this panel shared a
+         teleport with the card pop-up above, it was never drawn at all, and
+         the Recent button opened nothing. --}}
+    <template x-teleport="body">
         <div x-show="recentOpen" x-cloak class="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Recent sign-ins">
             {{-- The sheet stays readable underneath: this is something you glance
                  at, not something you fill in, so it does not black out the page. --}}
@@ -1075,6 +1121,13 @@ function attendanceApp() { return {
         this.cancelRetime();
 
         try { localStorage.setItem('attendance.view', this.mode); } catch { /* per-viewer convenience only */ }
+
+        if (this.mode === 'sheet') this.revealLastTouched();
+
+        // The cards have no Edit: the switch is the table's. Going to the
+        // cards in Edit mode leaves it, by the same reload the switch makes,
+        // so the cards never sit in a mode nothing on screen says they are in.
+        if (this.mode === 'avatar' && this.editing) this.switchMode();
     },
 
     /* ---- the cards, Live: in, then out, a session at a time ----
@@ -1108,6 +1161,22 @@ function attendanceApp() { return {
         return {session: sessions[sessions.length - 1], action: 'back'};
     },
 
+    /**
+     * The same, for one block the director has pressed in the pop-up: in if
+     * it has no arrival, out if it is open, back in once it is done. Falls
+     * to the card's own next step when no block is chosen or the child has
+     * only the one.
+     */
+    cardStepFor(child, session) {
+        if (! session || ! this.sessionsOf(child).includes(session)) return this.cardStep(child);
+        if (! this.isPresent(child.id, this.today, session)) return {session, action: 'in'};
+        if (! this.isOut(child.id, this.today, session)) return {session, action: 'out'};
+        return {session, action: 'back'};
+    },
+
+    /** The block the pop-up is on: AM or PM for a School Age child, else null. */
+    cardSession: null,
+
     /** Here now: arrived for some session and not yet gone from it. */
     isHere(child) {
         return this.sessionsOf(child).some(s => this.isPresent(child.id, this.today, s) && ! this.isOut(child.id, this.today, s));
@@ -1128,8 +1197,65 @@ function attendanceApp() { return {
         if (! this.canTap(this.today)) return;
 
         this.cardChild = child;
+        // Opens on the clock's block — the AM before noon, the PM from it —
+        // unless a block is still open, which has to be closed first. As
+        // the door screen does.
+        this.cardSession = this.sessionsOf(child).length > 1 ? this.clockSession(child) : null;
         this.cardOpen = true;
     },
+
+    /**
+     * The block the clock puts a press in: whichever is open, else the AM
+     * before noon and the PM from it.
+     */
+    clockSession(child) {
+        const sessions = this.sessionsOf(child);
+        const open = sessions.find(s => this.isPresent(child.id, this.today, s) && ! this.isOut(child.id, this.today, s));
+        if (open) return open;
+
+        const byClock = this.hourNow() < 12 ? 'AM' : 'PM';
+        return sessions.includes(byClock) ? byClock : sessions[sessions.length - 1];
+    },
+
+    /**
+     * Whether a block is switched off for now: the half of the day the
+     * clock is not in. A block still open is never off — the child has to
+     * be clocked out of it whatever the hour.
+     */
+    cardBlockDisabled(child, s) {
+        if (! child || this.sessionsOf(child).length === 1) return false;
+        if (this.isPresent(child.id, this.today, s) && ! this.isOut(child.id, this.today, s)) return false;
+
+        return s !== (this.hourNow() < 12 ? 'AM' : 'PM');
+    },
+
+    pickCardSession(s) {
+        if (this.cardBlockDisabled(this.cardChild, s)) return;
+        this.cardSession = s;
+    },
+
+    /**
+     * Minutes since midnight now, on the centre's clock — read in the app's
+     * timezone so a device set to another one still puts a noon press in
+     * the PM. A test pins it through window.__clockMinutes.
+     */
+    minutesNow() {
+        if (typeof window.__clockMinutes === 'number') return window.__clockMinutes;
+
+        try {
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: @js(config('app.timezone')), hour: 'numeric', minute: 'numeric', hourCycle: 'h23' })
+                .formatToParts(new Date());
+            const get = type => Number(parts.find(p => p.type === type)?.value);
+
+            return (get('hour') % 24) * 60 + get('minute');
+        } catch {
+            const now = new Date();
+
+            return now.getHours() * 60 + now.getMinutes();
+        }
+    },
+
+    hourNow() { return Math.floor(this.minutesNow() / 60); },
 
     closeCard() {
         this.cardOpen = false;
@@ -1140,22 +1266,60 @@ function attendanceApp() { return {
         const child = this.cardChild;
         if (! child || this.cardSaving || ! this.canTap(this.today)) return;
 
-        const step = this.cardStep(child);
+        if (this.cardSession && this.cardBlockDisabled(child, this.cardSession)) return;
+
+        const step = this.cardStepFor(child, this.cardSession);
         this.cardSaving = true;
 
         try {
             if (step.action === 'in') await this.signIn(child.id, this.today, step.session);
             if (step.action === 'out') await this.clockOut(child.id, this.today, step.session);
             if (step.action === 'back') await this.clockBack(child.id, this.today, step.session);
+            // Remembered, so the table opens on this child — see setMode().
+            this.lastTouched = child.id;
         } finally {
             this.cardSaving = false;
             this.closeCard();
         }
     },
 
+    /** The child last clocked from a card, and the row the table is showing off. */
+    lastTouched: null,
+    revealed: null,
+
+    /**
+     * Bring the child last clocked from a card into view on the table.
+     *
+     * A director works a child on the cards, switches to the table, and the
+     * child is the sixtieth row — off the bottom, with nothing to say which
+     * row was theirs. So the table scrolls to the row and lights it for a
+     * moment. The rows arrive a few frames after the switch (see
+     * buildAfterPaint), so this waits for the row rather than the frame.
+     */
+    revealLastTouched() {
+        const id = this.lastTouched;
+        if (id === null) return;
+
+        let tries = 0;
+        const look = () => {
+            const row = document.querySelector('[data-child-row="' + id + '"]');
+
+            if (! row) {
+                if (tries++ < 40) setTimeout(look, 50);
+                return;
+            }
+
+            row.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            this.revealed = id;
+            setTimeout(() => { if (this.revealed === id) this.revealed = null; }, 2500);
+        };
+
+        look();
+    },
+
     /** What the pop-up's button says: Clock in, Clock out, Clock in again — and AM/PM for School Age. */
     cardButton(child) {
-        const step = this.cardStep(child);
+        const step = this.cardStepFor(child, this.cardSession);
         const label = {in: 'Clock in', out: 'Clock out', back: 'Clock in again'}[step.action];
 
         return label + (step.session === 'FULL' ? '' : ' · ' + step.session);
