@@ -148,6 +148,8 @@ class ChildController extends Controller
 
         $name = 'children-'.($status !== '' ? strtolower($status).'-' : '').today()->format('Y-m-d').'.xlsx';
 
+        // Sent with headers that forbid the browser to keep it — see the
+        // never-cached middleware on the route, which every export carries.
         return Excel::download(new ChildrenExport($children, request()->user()?->nameFormat()), $name);
     }
 

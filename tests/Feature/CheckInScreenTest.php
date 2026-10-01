@@ -948,7 +948,9 @@ class CheckInScreenTest extends TestCase
 
         $export = e(route('attendance.month-sheet.export', ['month' => 9, 'year' => 2026]));
 
-        $this->assertStringContainsString('href="'.$export.'"', $html);
+        // Followed by a cache-busting timestamp, so the address is never the
+        // same twice — see the never-cached middleware.
+        $this->assertMatchesRegularExpression('/href="'.preg_quote($export, '/').'&amp;t=\d+"/', $html);
         $this->assertStringContainsString('>Export</a>', $html);
         $this->assertStringNotContainsString('x-show="editing" x-cloak href="'.$export, $html);
         $this->assertStringNotContainsString('Export month', $html);
@@ -956,7 +958,7 @@ class CheckInScreenTest extends TestCase
         // The month follows the day being looked at.
         $html = $this->actingAs($this->admin)->get(route('check-in.index', ['date' => '2026-08-12']))->assertOk()->getContent();
 
-        $this->assertStringContainsString('href="'.e(route('attendance.month-sheet.export', ['month' => 8, 'year' => 2026])).'"', $html);
+        $this->assertMatchesRegularExpression('/href="'.preg_quote(e(route('attendance.month-sheet.export', ['month' => 8, 'year' => 2026])), '/').'&amp;t=\d+"/', $html);
     }
 
     public function test_the_week_sheet_was_left_alone(): void

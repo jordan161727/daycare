@@ -87,7 +87,7 @@
             </form>
         @endunless
 
-        <a href="{{ route('timesheets.export', $period) }}" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700">
+        <a href="{{ route('timesheets.export', ['period' => $period, 't' => now()->timestamp]) }}" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700">
             Download CSV for payroll
         </a>
 

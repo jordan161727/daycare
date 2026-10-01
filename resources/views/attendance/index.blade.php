@@ -247,7 +247,7 @@
                              and the file is what the door hands to the office. --}}
                         @php($exportMonth = \Illuminate\Support\Carbon::parse($selectedDate))
                         <a x-show="mode === 'avatar'" x-cloak
-                           href="{{ route('attendance.month-sheet.export', ['month' => $exportMonth->month, 'year' => $exportMonth->year]) }}"
+                           href="{{ route('attendance.month-sheet.export', ['month' => $exportMonth->month, 'year' => $exportMonth->year, 't' => now()->timestamp]) }}"
                            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
                            title="{{ $exportMonth->format('F Y') }} as the paper sheet — a workbook, a sheet per room">Export</a>
 

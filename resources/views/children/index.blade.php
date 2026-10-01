@@ -72,7 +72,9 @@
                      Not behind the admin check beside it: reading the roll and
                      taking a copy of what you are already reading are the same
                      permission. Adding a child is not. --}}
-                <a href="{{ route('children.export', request()->only('sort', 'direction', 'status')) }}"
+                {{-- The timestamp is a cache-buster, never read: a browser that kept an
+                     earlier download must see a new address, not a reason to reuse. --}}
+                <a href="{{ route('children.export', request()->only('sort', 'direction', 'status') + ['t' => now()->timestamp]) }}"
                    class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
                    title="Download this list as an Excel file">
                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">

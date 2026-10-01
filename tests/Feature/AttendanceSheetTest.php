@@ -198,7 +198,7 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('x-show="mode === \'avatar\'" x-cloak', $html);
         // Blade escapes the & between the two query parameters, so the
         // address is asserted the way the page prints it.
-        $this->assertStringContainsString('href="'.e(route('attendance.month-sheet.export', ['month' => 7, 'year' => 2026])).'"', $html);
+        $this->assertMatchesRegularExpression('/href="'.preg_quote(e(route('attendance.month-sheet.export', ['month' => 7, 'year' => 2026])), '/').'&amp;t=\d+"/', $html);
         $this->assertStringContainsString('title="July 2026 as the paper sheet', $html);
         $this->assertStringContainsString('>Export</a>', $html);
     }

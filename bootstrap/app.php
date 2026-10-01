@@ -16,6 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
             'password.change' => \App\Http\Middleware\RequirePasswordChange::class,
+            // Every export: a file the browser must fetch afresh each time.
+            'never-cached' => \App\Http\Middleware\NeverCached::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

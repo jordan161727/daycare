@@ -73,7 +73,7 @@
              door's reading of the room, and the file is what it hands to the
              office. The same button the register's Card view carries. --}}
         @php($exportMonth = \Illuminate\Support\Carbon::parse($date))
-        <a href="{{ route('attendance.month-sheet.export', ['month' => $exportMonth->month, 'year' => $exportMonth->year]) }}"
+        <a href="{{ route('attendance.month-sheet.export', ['month' => $exportMonth->month, 'year' => $exportMonth->year, 't' => now()->timestamp]) }}"
            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
            title="{{ $exportMonth->format('F Y') }} as the paper sheet — a workbook, a sheet per room">Export</a>
 

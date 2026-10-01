@@ -49,7 +49,7 @@
         {{-- The same month as a workbook, a sheet per room, laid out as the
              paper form — for the file that gets kept rather than the page
              that gets read. --}}
-        <a href="{{ route('attendance.month-sheet.export', ['month' => $month, 'year' => $year]) }}"
+        <a href="{{ route('attendance.month-sheet.export', ['month' => $month, 'year' => $year, 't' => now()->timestamp]) }}"
            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">
             Export Excel
         </a>

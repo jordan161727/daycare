@@ -150,7 +150,7 @@ Route::get('/children', [ChildController::class, 'index'])->name('children.index
 // The roll as a spreadsheet. Same door as the roll itself — whoever may read
 // the list on screen may take it away — and the same filter, sort and
 // visibility, because it is built from the same query.
-Route::get('/children/export', [ChildController::class, 'export'])->name('children.export');
+Route::get('/children/export', [ChildController::class, 'export'])->middleware('never-cached')->name('children.export');
 
 // A child's record, readable by whoever may see the child on the roster — the
 // director, and the teacher whose room they are in. Numbers only, or this would
@@ -215,7 +215,7 @@ Route::get('/timesheets/{period}/staff/{user}', [TimesheetController::class, 'ed
 Route::put('/timesheets/{period}/staff/{user}', [TimesheetController::class, 'update'])->name('timesheets.update');
 Route::post('/timesheets/{period}/approve', [TimesheetController::class, 'approve'])->name('timesheets.approve');
 Route::post('/timesheets/{period}/reopen', [TimesheetController::class, 'reopen'])->name('timesheets.reopen');
-Route::get('/timesheets/{period}/export', [TimesheetController::class, 'export'])->name('timesheets.export');
+Route::get('/timesheets/{period}/export', [TimesheetController::class, 'export'])->middleware('never-cached')->name('timesheets.export');
 
 // Correcting the clock. A supervisor's act, never the employee's own — a
 // punch somebody can quietly amend is not a record of anything.
@@ -279,7 +279,7 @@ Route::get('/staff-timesheets', [StaffTimesheetController::class, 'index'])->nam
 
 // Before nothing in particular, but kept next to the screen it mirrors:
 // the file carries pay rates, so it stays inside the director-only group.
-Route::get('/staff-timesheets/export', [StaffTimesheetController::class, 'export'])->name('staff.timesheets.export');
+Route::get('/staff-timesheets/export', [StaffTimesheetController::class, 'export'])->middleware('never-cached')->name('staff.timesheets.export');
 
 /*
  * The reports somebody else asks for: a fortnight of hours per person, chosen
@@ -287,7 +287,7 @@ Route::get('/staff-timesheets/export', [StaffTimesheetController::class, 'export
  * sits beside — it can be asked to print pay.
  */
 Route::get('/staff-reports', [StaffReportController::class, 'index'])->name('staff.reports');
-Route::get('/staff-reports/export', [StaffReportController::class, 'export'])->name('staff.reports.export');
+Route::get('/staff-reports/export', [StaffReportController::class, 'export'])->middleware('never-cached')->name('staff.reports.export');
 
 /*
  * The parts of the centre. A department is a line on the org chart and the
@@ -441,7 +441,7 @@ Route::get('/attendance/month-sheet', [MonthSheetController::class, 'index'])->n
 // The month as the paper form, as a workbook: a sheet per room, four lines a
 // child, a column a day, the totals along the foot. Built from the same rows
 // the page above draws, so the file and the screen cannot disagree.
-Route::get('/attendance/month-sheet/export', [MonthSheetController::class, 'export'])->name('attendance.month-sheet.export');
+Route::get('/attendance/month-sheet/export', [MonthSheetController::class, 'export'])->middleware('never-cached')->name('attendance.month-sheet.export');
 
 Route::get('/check-in', [CheckInController::class, 'index'])->name('check-in.index');
 Route::post('/check-in', [CheckInController::class, 'store'])->name('check-in.store');

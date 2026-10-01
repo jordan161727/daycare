@@ -51,7 +51,7 @@
                  spreadsheet opens either. ?format=csv still works for anyone
                  who does care. The role filter rides along too, so the file is
                  the grid on screen and not some other week. --}}
-            <a href="{{ route('staff.timesheets.export', request()->only('from', 'to', 'role')) }}"
+            <a href="{{ route('staff.timesheets.export', request()->only('from', 'to', 'role') + ['t' => now()->timestamp]) }}"
                class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10">Export</a>
         </div>
 
