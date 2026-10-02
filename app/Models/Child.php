@@ -252,7 +252,11 @@ class Child extends Model
             return null;
         }
 
-        return route('children.photo', $this);
+        // The path is a fresh random name on every upload, so a stamp made
+        // from it changes the moment the photograph does. Without it the
+        // browser, told it may keep the picture for an hour, went on showing
+        // the one just replaced on every board and roster until the hour was up.
+        return route('children.photo', ['child' => $this, 'v' => substr(md5($this->photo_path), 0, 8)]);
     }
 
     /** The initial the avatar falls back to while there is no photograph. */

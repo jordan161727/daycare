@@ -58,6 +58,31 @@ class ChildPhotoTest extends TestCase
         Storage::disk('local')->assertExists($second);
     }
 
+    public function test_a_replaced_photo_is_shown_from_a_new_address(): void
+    {
+        // The browser is told it may keep the picture for an hour. If the
+        // address stayed the same, every board and roster would go on showing
+        // the photo just replaced until that hour was up — which is exactly
+        // what happened when the wrong picture was uploaded and then fixed.
+        $child = $this->child();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->put(route('children.update', $child), $this->form($child, ['photo' => UploadedFile::fake()->image('wrong.jpg')]));
+        $before = $child->fresh()->photoUrl();
+
+        $this->actingAs($admin)->put(route('children.update', $child), $this->form($child, ['photo' => UploadedFile::fake()->image('right.jpg')]));
+        $after = $child->fresh()->photoUrl();
+
+        $this->assertNotSame($before, $after);
+        $this->assertStringContainsString('?v=', $after);
+
+        // Both pages the photo is seen on carry the fresh address, and the
+        // attendance board hands it to the browser inside the avatar markup.
+        $this->actingAs($admin)->get(route('children.index'))->assertSee($after, escape: false)->assertDontSee($before, escape: false);
+        [$beforeStamp, $afterStamp] = [substr($before, strrpos($before, 'v=')), substr($after, strrpos($after, 'v='))];
+        $this->actingAs($admin)->get(route('attendance.index'))->assertSee($afterStamp, escape: false)->assertDontSee($beforeStamp, escape: false);
+    }
+
     public function test_the_photo_can_be_removed(): void
     {
         $child = $this->child();

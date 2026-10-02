@@ -329,8 +329,8 @@
                                 <span class="cs-help">Pending is a place agreed and not yet started: on the roll, not counted as here.</span>
                             </label>
                             <label>
-                                <span class="cs-label">Enrolled on</span>
-                                <input type="date" name="enrolled_on" value="{{ old('enrolled_on', $child?->enrolled_on?->toDateString()) }}" class="cs-input">
+                                <span class="cs-label">Enrolled on{!! $fromDocument('enrolled_on') ? $documentBadge : '' !!}</span>
+                                <input type="date" name="enrolled_on" value="{{ old('enrolled_on', $child?->enrolled_on?->toDateString() ?? ($extracted['enrolled_on'] ?? '')) }}" class="{{ $fieldClass('enrolled_on') }}">
                                 <x-input-error :messages="$errors->get('enrolled_on')" />
                                 <span class="cs-help">Attendance boxes start on this day. Blank if they have always been here.</span>
                             </label>

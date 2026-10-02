@@ -346,7 +346,10 @@ class ChildController extends Controller
 
         return Storage::disk('local')->response($child->photo_path, null, [
             // Private, so a shared cache never holds it: it is one person's
-            // photograph, served on the strength of who asked for it.
+            // photograph, served on the strength of who asked for it. The hour
+            // is safe because photoUrl() stamps the address with the file, so
+            // a replaced photo is fetched from a new address rather than
+            // found in the cache under the old one.
             'Cache-Control' => 'private, max-age=3600',
         ]);
     }
