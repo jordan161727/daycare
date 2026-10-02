@@ -1,5 +1,7 @@
 import './bootstrap';
 import Alpine from 'alpinejs';
+import 'flatpickr/dist/flatpickr.min.css';
+import { watchDateInputs } from './dates';
 
 window.Alpine = Alpine;
 
@@ -130,3 +132,6 @@ Alpine.data('avatarPicker', () => ({
 }));
 
 Alpine.start();
+
+// Every date field reads mm/dd/yyyy whatever the computer's language — see dates.js.
+watchDateInputs();

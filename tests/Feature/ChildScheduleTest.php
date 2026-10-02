@@ -10,7 +10,7 @@ use Tests\TestCase;
 
 /**
  * The two facts the office reads off a child record: the date of birth, which
- * the roster's Age column shows as 2026/03/15, and the hours of the day the
+ * the roster's Age column shows as 03/15/26, and the hours of the day the
  * child is contracted for.
  */
 class ChildScheduleTest extends TestCase
@@ -21,7 +21,7 @@ class ChildScheduleTest extends TestCase
     {
         $child = $this->makeChild(['birth_date' => '2026-03-15']);
 
-        $this->assertSame('2026/03/15', $child->ageLabel());
+        $this->assertSame('03/15/26', $child->ageLabel());
     }
 
     public function test_a_child_with_no_date_of_birth_has_no_age(): void
@@ -77,7 +77,7 @@ class ChildScheduleTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']))
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSee('2023/03/15')
+            ->assertSee('03/15/23')
             // Not the American order it used to be written in, which read as a
             // different date to half the people looking at it.
             ->assertDontSee('3/15/2023');
@@ -145,7 +145,7 @@ class ChildScheduleTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'admin']))
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSee('2023/06/15')
+            ->assertSee('06/15/23')
             ->assertSee('3y 2m');
     }
 
@@ -206,7 +206,7 @@ class ChildScheduleTest extends TestCase
 
         $rows = json_decode(json_decode('"'.$matches[1].'"'), associative: true);
 
-        $this->assertSame('2023/03/15', $rows[0]['birth_date']);
+        $this->assertSame('03/15/23', $rows[0]['birth_date']);
         $this->assertNotNull($rows[0]['age']);
     }
 
@@ -218,7 +218,7 @@ class ChildScheduleTest extends TestCase
             ->put(route('children.update', $child), $this->formFor($child, ['birth_date' => '2026-03-15']))
             ->assertRedirect();
 
-        $this->assertSame('2026/03/15', $child->fresh()->age);
+        $this->assertSame('03/15/26', $child->fresh()->age);
     }
 
     public function test_the_day_is_saved_and_read_back_as_it_is_spoken(): void

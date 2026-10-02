@@ -171,18 +171,18 @@ class Child extends Model
     }
 
     /**
-     * The date of birth written the way every screen reads it: 2022/12/15.
+     * The date of birth written the way every screen reads it: 12/15/22.
      *
-     * Year first, so a column of them sorts by eye the way it sorts by click,
-     * and so 3/4 is never one date to one reader and another to the next. Both
-     * halves padded to two digits — unpadded, 2023/6/15 and 2023/12/5 are
-     * different widths and the slashes stop lining up down a column of sixty.
-     * Formatted on every read rather than stored, so it cannot drift out of
-     * step with the date it comes from.
+     * Month, day, year — the way the centre writes a date on paper and asked
+     * to read it here, in place of the year-first form that sorted by eye but
+     * read as nobody's date. Every part padded to two digits, so 06/15/23
+     * and 12/05/23 are the same width and the slashes line up down a column
+     * of sixty. Formatted on every read rather than stored, so it cannot
+     * drift out of step with the date it comes from.
      */
     public static function ageLabelFor(?CarbonInterface $birthDate): ?string
     {
-        return $birthDate?->format('Y/m/d');
+        return $birthDate?->format('m/d/y');
     }
 
     /** This child's date of birth as the roster shows it, or null when none is on file. */

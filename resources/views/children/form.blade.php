@@ -564,11 +564,11 @@
                 if (isNaN(dob)) return 'The age on the roster follows this date.';
                 const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 if (dob > today) return 'That date is in the future — check the year.';
-                // Y/m/d, padded, exactly as Child::ageLabelFor writes it on the
-                // server. This line used to say M/D/YYYY, so the preview under
-                // the field disagreed with every column that shows the date.
+                // m/d/y, padded, exactly as Child::ageLabelFor writes it on the
+                // server, so the preview under the field agrees with every
+                // column that shows the date.
                 const pad = (number) => String(number).padStart(2, '0');
-                return `The roster shows this as ${dob.getFullYear()}/${pad(dob.getMonth() + 1)}/${pad(dob.getDate())}.`;
+                return `The roster shows this as ${pad(dob.getMonth() + 1)}/${pad(dob.getDate())}/${String(dob.getFullYear()).slice(-2)}.`;
             };
             const refresh = () => { preview.textContent = label(); };
             birth.addEventListener('change', refresh);
