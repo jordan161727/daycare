@@ -1,3 +1,14 @@
+# The host's LiteSpeed server cache must not keep any of these pages. Every
+# one is somebody's roll or record, read fresh on each visit; a page kept here
+# is the one that showed a child's old name and photograph after the director
+# had corrected both. The env sets the header LiteSpeed reads on each response
+# too, so the rule holds even where the application header is ignored.
+<IfModule LiteSpeed>
+    CacheLookup off
+    RewriteEngine On
+    RewriteRule .* - [E=Cache-Control:no-cache]
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

@@ -5,6 +5,14 @@ import { watchDateInputs } from './dates';
 
 window.Alpine = Alpine;
 
+// A page the back button brings back from the browser's back/forward cache
+// is the page as it was, not as it is: a roster shown before a child was
+// corrected still shows them uncorrected. The server already asks the
+// browser not to keep pages; this covers the browsers that keep them anyway.
+window.addEventListener('pageshow', (event) => {
+    if (event.persisted) window.location.reload();
+});
+
 Alpine.data('childrenImport', () => ({
     loading: false,
     filename: '',

@@ -13,6 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Every page is read fresh: no browser, back/forward or host cache
+        // may hand back a roster as it was before the last correction.
+        $middleware->web(append: [\App\Http\Middleware\FreshPages::class]);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
             'password.change' => \App\Http\Middleware\RequirePasswordChange::class,
