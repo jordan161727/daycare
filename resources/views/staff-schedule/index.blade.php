@@ -145,6 +145,10 @@
                                 class="{{ $chip }} bg-la-accent text-white shadow-sm hover:bg-[#174f7a]">+ Generate schedule</button>
                     </form>
 
+                    {{-- Teleported to the body: the header card carries a backdrop blur,
+                         which makes a fixed overlay inside it fixed to the card rather
+                         than the screen, and the dialog came up clipped to the header. --}}
+                    <template x-teleport="body">
                     <div x-show="confirming" x-cloak x-transition.opacity
                          class="fixed inset-0 z-[60] grid place-items-center bg-slate-950/70 p-5 backdrop-blur-sm"
                          @click="confirming = false">
@@ -184,6 +188,7 @@
                             </footer>
                         </div>
                     </div>
+                    </template>
                 </div>
             </div>
         </div>
