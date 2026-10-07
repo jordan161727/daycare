@@ -243,7 +243,12 @@ class User extends Authenticatable
             return null;
         }
 
-        return asset('storage/'.$this->avatar_path);
+        // A route rather than a path under public/storage: that is a symlink
+        // the host has to allow, and on the staging server it did not — every
+        // face answered 403. The route streams the file through PHP instead
+        // (see AvatarController), and the stamp changes with the file so a
+        // new upload is never shown from the browser's cache of the old one.
+        return route('avatars.show', ['user' => $this, 'v' => substr(md5($this->avatar_path), 0, 8)]);
     }
 
     /** First letters of the first and last name, for the fallback badge. */

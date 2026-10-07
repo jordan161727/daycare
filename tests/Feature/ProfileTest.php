@@ -268,8 +268,11 @@ class ProfileTest extends TestCase
 
         $html = $this->actingAs($user)->get(route('profile.edit'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('/storage/'.$user->fresh()->avatar_path, $html);
+        // Served through the avatar route, which follows the request's own
+        // host rather than APP_URL or the disk's pinned address.
+        $this->assertStringContainsString('/avatars/'.$user->id.'?v=', $html);
         $this->assertStringNotContainsString('live-site.test', $html);
+        $this->assertStringNotContainsString('/storage/avatars/', $html);
     }
 
     public function test_initials_stand_in_until_a_photo_is_uploaded(): void

@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\AssistanceController;
+use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\CheckInController;
 use App\Http\Controllers\ChildImportController;
 use App\Http\Controllers\DepartmentController;
@@ -160,6 +161,10 @@ Route::get('/children/{child}', [ChildController::class, 'show'])->name('childre
 // The child's photograph. On the private disk and served through here, so the
 // same people who may open the record are the only ones who may see the face.
 Route::get('/children/{child}/photo', [ChildController::class, 'photo'])->name('children.photo')->whereNumber('child');
+// A staff member's photograph, streamed the same way. Through a route rather
+// than public/storage, which is a symlink the host has to allow and the
+// staging server did not.
+Route::get('/avatars/{user}', [AvatarController::class, 'show'])->name('avatars.show')->whereNumber('user');
 
 Route::middleware('role:admin')->group(function () {
 Route::get('/children/import-document', [ChildDocumentController::class, 'create'])->name('children.document-import.create');
