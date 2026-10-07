@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Child;
 use App\Models\ClosureDay;
 use App\Models\LeaveRequest;
 use App\Models\StaffScheduleWeek;
@@ -32,9 +33,21 @@ class StaffScheduleController extends Controller
 
         $dates = StaffScheduleWeek::datesOf($weekStart);
 
+        // One room, or every room. Anything that is not a room on the list is
+        // read as "all" rather than refused: a stale link is not an error.
+        $room = in_array($request->query('room'), ClassroomAssignment::rooms(), true) ? $request->query('room') : null;
+
         return view('staff-schedule.index', [
             'weekStart' => $weekStart,
             'dates' => $dates,
+            'room' => $room,
+            // The children's week sits under the staff's, the way the floor
+            // reads it: who is in, and who they are in for. Only the children
+            // this person may see, which for a teacher is their own rooms.
+            'children' => Child::visibleTo($request->user())
+                ->where('status', 'Active')
+                ->orderBy('last_name')->orderBy('first_name')
+                ->get(),
             // Approved leave is overlaid rather than generated in: a request
             // granted after the week was built takes the shifts off but cannot
             // put a marker into a table of shifts, and a blank cell where
@@ -43,10 +56,19 @@ class StaffScheduleController extends Controller
             'week' => $week,
             'shifts' => $shifts,
             'byTeacher' => $shifts->groupBy('user_id'),
-            'staff' => User::teachers()->get(['id', 'name', 'employment', 'title']),
+            'staff' => User::teachers()->get(['id', 'name', 'employment', 'title', 'avatar_path']),
             'coverage' => $week ? $this->scheduler->coverage($weekStart) : [],
             'demand' => $this->demand->forWeek($weekStart),
             'rooms' => ClassroomAssignment::rooms(),
+            // Days the centre is shut, by date, so the coverage table can say
+            // "Closed" rather than leaving a holiday looking unstaffed.
+            'closures' => ClosureDay::betweenDates($dates[array_key_first($dates)], end($dates))
+                ->get()
+                ->keyBy(fn ($closed) => $closed->closed_on->toDateString())
+                ->map(fn ($closed) => $closed->label()),
+            // Which tab opens: Summary unless a link asked for Staff or Students,
+            // as the "Assign staff" buttons do.
+            'tab' => in_array($request->query('tab'), ['summary', 'staff', 'students'], true) ? $request->query('tab') : 'summary',
             'mode' => $request->query('mode') === 'room' ? 'room' : 'teacher',
             'day' => in_array($request->query('day'), config('daycare.days'), true)
                 ? $request->query('day')

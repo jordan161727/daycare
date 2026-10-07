@@ -25,6 +25,11 @@ return [
 
     'company' => [
         'name' => env('DAYCARE_COMPANY_NAME', 'Little Angels Day Care Center'),
+        // How a parent reaches the centre while the site is down for
+        // maintenance. Blank leaves that line off the page rather than
+        // printing a number nobody answers.
+        'phone' => env('DAYCARE_COMPANY_PHONE'),
+        'email' => env('DAYCARE_COMPANY_EMAIL'),
     ],
 
     /*

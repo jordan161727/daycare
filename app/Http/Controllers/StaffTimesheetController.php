@@ -95,6 +95,9 @@ class StaffTimesheetController extends Controller
             'role' => $role,
             'roles' => User::jobRolesAmong($staff),
             'counts' => $this->counts($staff),
+            // The rooms on offer in the filter: the centre's, plus the office
+            // for whoever is on staff without a room.
+            'rooms' => array_values(array_unique(array_merge(\App\Services\ClassroomAssignment::rooms(), ['Office']))),
         ]);
     }
 
@@ -213,15 +216,31 @@ class StaffTimesheetController extends Controller
             $days[$iso] = $this->cell($person, $iso, $day);
         }
 
+        $today = $days[today()->toDateString()] ?? null;
+
         return [
             'id' => $person->id,
             'staff_id' => $person->staffId(),
             'name' => $person->name,
             'email' => $person->email,
             'initials' => $person->initials,
+            // Their photograph where they have one; the initials stand in otherwise.
+            'avatar' => $person->avatar_url,
             'role' => $person->jobRole(),
+            // The room they work, for the filter: their title, failing that
+            // the room on their account, failing that the office.
+            'room' => $person->title ?: ($person->classroom ?: 'Office'),
             'rate' => $person->pay_rate,
             'hours' => round($worked / 60, 1),
+            'minutes' => $worked,
+            // What the week is measured against — the hours their rules say
+            // they are owed, or the default for their employment type.
+            'target' => $person->loadMissing('staffRules')->weeklyHours(),
+            // Days that need a fix: an amber or a red one. The chip on the
+            // row and the "Needs attention" filter both count these.
+            'fix' => count(array_filter($days, fn ($day) => in_array($day['status'], [self::LATE, self::MISSING_OUT], true))),
+            'on_shift' => $today !== null && ! $today['empty'] && $today['open'],
+            'not_in' => $today !== null && $today['empty'],
             'days' => $days,
         ];
     }
@@ -256,6 +275,12 @@ class StaffTimesheetController extends Controller
             // Nothing at all, which is not the same as a day that went
             // wrong: a day off has no dot and no dash to read.
             'empty' => $day['first_in'] === null && $day['last_out'] === null,
+            // Paid minutes so far — the clock counts an open day up to now —
+            // and whether it is still open, so today's cell can say "On shift".
+            'worked' => (int) $day['worked'],
+            'open' => (bool) $day['open'],
+            'today' => $date === today()->toDateString(),
+            'future' => $date > today()->toDateString(),
         ];
     }
 

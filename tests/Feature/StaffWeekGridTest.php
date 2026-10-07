@@ -51,8 +51,8 @@ class StaffWeekGridTest extends TestCase
         $this->assertStringContainsString('7:52 AM', $html);
         $this->assertStringContainsString('4:05 PM', $html);
 
-        // Eight hours thirteen, to one place, across the whole week.
-        $this->assertStringContainsString('8.2h', $html);
+        // Eight hours thirteen, as hours and minutes, across the whole week.
+        $this->assertStringContainsString('8h 13m', $html);
     }
 
     public function test_a_day_gone_by_with_no_clock_out_is_flagged(): void
@@ -267,7 +267,7 @@ class StaffWeekGridTest extends TestCase
         // It does point at the screen that can, though. The grid's whole job is
         // to show what did not go in properly, and until this said where to put
         // that right, the answer was a sentence nobody read.
-        $this->assertStringContainsString('Click an amber or red dot', $html);
+        $this->assertStringContainsString('Amber and red days need a fix', $html);
     }
 
     public function test_a_flagged_day_leads_to_the_screen_that_fixes_it(): void

@@ -12,194 +12,352 @@
     which record who changed what and why; a grid somebody can type into is a
     grid with no audit behind it.
 --}}
-@php($fmt = fn ($date) => $date->toDateString())
+@php
+    use App\Http\Controllers\StaffTimesheetController as Grid;
+
+    $fmt = fn ($date) => $date->toDateString();
+    /** Minutes as "7h 45m". */
+    $dur = fn (int $minutes) => intdiv(max(0, $minutes), 60).'h '.str_pad((string) ($minutes % 60), 2, '0', STR_PAD_LEFT).'m';
+    /** Hours as a whole number where they are one — "40h", "37.5h". */
+    $hrs = fn (float $hours) => rtrim(rtrim(number_format($hours, 1), '0'), '.').'h';
+
+    $attention = $rows->where('fix', '>', 0);
+    $onShift = $rows->where('on_shift', true);
+    $notIn = $rows->where('not_in', true);
+    $totalMinutes = $rows->sum('minutes');
+    $problemDays = $rows->sum('fix');
+
+    $chip = 'inline-flex min-h-[44px] items-center gap-2 rounded-full px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent focus-visible:ring-offset-2';
+    $weekBack = ['from' => $start->copy()->subWeek()->toDateString(), 'to' => $end->copy()->subWeek()->toDateString()];
+    $weekOn = ['from' => $start->copy()->addWeek()->toDateString(), 'to' => $end->copy()->addWeek()->toDateString()];
+@endphp
 
 {{-- The grid reads; the panel writes — through the punch endpoints, which
      record who changed what and why. See timesheetGrid() at the foot. --}}
 <div x-data="timesheetGrid()" @keydown.escape.window="close()">
 
-    {{-- relative z-20 is what keeps the date picker on top of the grid.
-
-         .glass-card carries backdrop-blur, and a backdrop-filter creates a
-         stacking context — so the panel's own z-40 only ever competed inside
-         this card. The table below is a sibling card with the same automatic
-         level, and being later in the document it won, painting straight over
-         an open calendar. Lifting this card lifts everything in it. --}}
-    <section class="glass-card relative z-20 rounded-2xl p-5">
+    {{-- relative z-20 keeps the date picker on top of the grid: .glass-card
+         carries backdrop-blur, which starts a stacking context, so the panel's
+         own z-index only ever competed inside this card. --}}
+    <section class="glass-card relative z-20 rounded-2xl p-6 sm:p-8">
         <div class="flex flex-wrap items-center gap-3">
-            <h1 class="text-xl font-bold tracking-tight">Staff Timesheets</h1>
+            <h1 class="text-2xl font-bold tracking-tight text-la-ink dark:text-white">Staff Timesheets</h1>
 
-            {{-- Any range, by name or by calendar. The role filter rides along
-                 so choosing a period does not quietly drop it. --}}
-            <x-date-range
-                :from="$start->toDateString()"
-                :to="$end->toDateString()"
-                :action="route('staff.timesheets')"
-                :keep="array_filter(['role' => $role])" />
+            {{-- A week either way, around the range picker. The role filter
+                 rides along so choosing a period does not quietly drop it. --}}
+            <div class="flex items-center gap-1">
+                <a href="{{ route('staff.timesheets', array_filter(['role' => $role]) + $weekBack) }}" aria-label="Previous week"
+                   class="grid h-11 w-11 place-items-center rounded-full text-la-muted hover:bg-la-well dark:text-la-faint dark:hover:bg-white/10">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                </a>
+                <x-date-range
+                    :from="$start->toDateString()"
+                    :to="$end->toDateString()"
+                    :action="route('staff.timesheets')"
+                    :keep="array_filter(['role' => $role])" />
+                <a href="{{ route('staff.timesheets', array_filter(['role' => $role]) + $weekOn) }}" aria-label="Next week"
+                   class="grid h-11 w-11 place-items-center rounded-full text-la-muted hover:bg-la-well dark:text-la-faint dark:hover:bg-white/10">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </a>
+            </div>
 
-            {{-- Back to the ordinary answer in one press, from wherever the
-                 range has wandered to. --}}
+            {{-- Back to the ordinary answer in one press. --}}
             <a href="{{ route('staff.timesheets', array_filter(['role' => $role])) }}"
-               class="rounded-full bg-sky-100 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25">This week</a>
+               class="{{ $chip }} bg-la-accent-soft text-la-accent hover:bg-[#cfe2f7] dark:bg-la-accent/20 dark:text-indigo-200 dark:hover:bg-la-accent/30">This week</a>
 
-            {{-- Beside the range rather than over the table, because what it
-                 exports is the range: the two belong to each other, and from
-                 the table's own header it read as being about the rows.
-
-                 Excel and CSV were two buttons for one idea, and the choice
-                 between them is not one a director has an opinion about — the
-                 spreadsheet opens either. ?format=csv still works for anyone
-                 who does care. The role filter rides along too, so the file is
-                 the grid on screen and not some other week. --}}
+            {{-- The export is the range on screen: same dates, same role. --}}
             <a href="{{ route('staff.timesheets.export', request()->only('from', 'to', 'role') + ['t' => now()->timestamp]) }}"
-               class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10">Export</a>
+               class="{{ $chip }} ml-auto border border-la-border-strong text-la-ink hover:bg-la-well dark:border-white/15 dark:text-white dark:hover:bg-white/10">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
+                Export
+            </a>
         </div>
 
         @if($truncated)
-            <p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
-                That range is longer than {{ \App\Http\Controllers\StaffTimesheetController::MAX_DAYS }} days. Showing the first {{ \App\Http\Controllers\StaffTimesheetController::MAX_DAYS }}, because a column a day past that is a table nobody can read.
+            <p class="mt-4 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:bg-la-warn-dot/10 dark:text-amber-200">
+                That range is longer than {{ Grid::MAX_DAYS }} days. Showing the first {{ Grid::MAX_DAYS }}, because a column per day past that is a table nobody can read.
             </p>
         @endif
 
-        {{-- The three numbers about today, and nothing else.
+        {{-- Four tiles: who is here, the week's paid time, what needs a fix,
+             and the day itself. Each is a card with its own mark on the left,
+             and the three that describe people are buttons that narrow the
+             grid below to those people — a number you can act on. --}}
+        @php
+            $expected = $rows->sum('target') * 60;
+            $tile = 'glass-card flex items-start gap-3 rounded-2xl px-4 py-3 text-left transition';
+            $clickable = 'hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent focus-visible:ring-offset-2';
+            $pct = fn (int $part, int $whole) => $whole > 0 ? round($part / $whole * 100, 1) : 0;
+        @endphp
+        <div class="mt-5 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
 
-             There was a row of role chips above them. It offered "Admin" and
-             "Teacher", which is the account type rather than the job, and the
-             Role column repeats it on every row — a filter whose options are
-             already visible sixteen times is a row of buttons that only takes
-             up the space. ?role= still narrows the page and the export for
-             anyone who wants it. --}}
-        <div class="mt-4 flex flex-wrap items-center gap-2">
-            <p class="ml-auto text-xs text-slate-500 dark:text-slate-400">
-                <span class="font-semibold">{{ $counts['staff'] }}</span> staff &middot;
-                <span class="font-semibold text-emerald-600">{{ $counts['in'] }}</span> clocked in &middot;
-                <span class="font-semibold">{{ $counts['out'] }}</span> clocked out &middot;
-                <span class="font-semibold text-slate-400">{{ $counts['not_in'] }}</span> not in
-            </p>
+            <button type="button" @click="$dispatch('filter-status', 'onshift')" class="{{ $tile }} {{ $clickable }}" title="Show who is on shift now">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-la-accent-soft text-la-accent dark:bg-indigo-500/20 dark:text-indigo-200" aria-hidden="true">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.25"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7.5V12l2.75 1.75"/></svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-la-muted dark:text-slate-400">On shift now</span>
+                    <span class="mt-0.5 block text-[22px] font-bold leading-none tabular-nums text-la-accent dark:text-indigo-300">{{ $counts['in'] }}<span class="text-sm font-semibold text-la-muted"> of {{ $counts['staff'] }}</span></span>
+                    {{-- Everyone on staff as one bar: in, gone home, not yet here. --}}
+                    <span class="mt-2 flex h-1 w-full overflow-hidden rounded-full bg-la-border dark:bg-white/10" aria-hidden="true">
+                        <span class="h-full bg-la-accent" style="width:{{ $pct($counts['in'], $counts['staff']) }}%"></span>
+                        <span class="h-full bg-la-faint" style="width:{{ $pct($counts['out'], $counts['staff']) }}%"></span>
+                    </span>
+                    <span class="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-la-muted dark:text-slate-400">
+                        <span><span class="font-semibold text-la-ink dark:text-slate-200">{{ $counts['in'] }}</span> clocked in</span>
+                        <span><span class="font-semibold text-la-ink dark:text-slate-200">{{ $counts['out'] }}</span> clocked out</span>
+                        <span><span class="font-semibold text-la-ink dark:text-slate-200">{{ $counts['not_in'] }}</span> not in</span>
+                    </span>
+                </span>
+            </button>
+
+            <div class="{{ $tile }}">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-la-well text-la-ink dark:bg-white/10 dark:text-slate-200" aria-hidden="true">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3.75 8.25h16.5M4.5 5.25h15a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75h-15a.75.75 0 01-.75-.75V6a.75.75 0 01.75-.75z"/></svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-la-muted dark:text-slate-400">Hours this week</span>
+                    <span class="mt-0.5 block text-[22px] font-bold leading-none tabular-nums text-la-ink dark:text-white">{{ $dur($totalMinutes) }}</span>
+                    {{-- Against what every rota adds up to, so a thin bar says
+                         how far through the week's hours the centre is. --}}
+                    <span class="mt-2 block h-1 w-full overflow-hidden rounded-full bg-la-border dark:bg-white/10" aria-hidden="true">
+                        <span class="block h-full rounded-full bg-la-bar" style="width:{{ min(100, $pct($totalMinutes, (int) $expected)) }}%"></span>
+                    </span>
+                    <span class="mt-1.5 block text-xs text-la-muted dark:text-slate-400">Paid time, lunch excluded{{ $expected > 0 ? ' · of '.$hrs($expected / 60).' expected' : '' }}</span>
+                </span>
+            </div>
+
+            <button type="button" @click="$dispatch('filter-status', 'attention')"
+                    class="{{ $tile }} {{ $clickable }} {{ $problemDays > 0 ? '!border-la-warn-border !bg-la-warn-soft dark:!border-amber-500/40 dark:!bg-amber-500/10' : '' }}"
+                    title="Show the staff with days to fix">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full {{ $problemDays > 0 ? 'bg-la-warn-dot/20 text-la-warn dark:bg-amber-500/20 dark:text-amber-200' : 'bg-la-well text-la-ok dark:bg-white/10 dark:text-emerald-300' }}" aria-hidden="true">
+                    @if($problemDays > 0)
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3h.008M10.3 4.2L2.8 17.3A1.9 1.9 0 004.5 20h15a1.9 1.9 0 001.7-2.7L13.7 4.2a1.9 1.9 0 00-3.4 0z"/></svg>
+                    @else
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    @endif
+                </span>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] {{ $problemDays > 0 ? 'text-la-warn dark:text-amber-300' : 'text-la-muted dark:text-slate-400' }}">Needs attention</span>
+                    <span class="mt-0.5 block text-[22px] font-bold leading-none tabular-nums {{ $problemDays > 0 ? 'text-la-warn dark:text-amber-200' : 'text-la-ink dark:text-white' }}">{{ $problemDays }}<span class="text-sm font-semibold {{ $problemDays > 0 ? 'text-la-warn/80 dark:text-amber-200/80' : 'text-la-muted' }}"> {{ \Illuminate\Support\Str::plural('day', $problemDays) }}</span></span>
+                    <span class="mt-2 block text-xs {{ $problemDays > 0 ? 'text-la-warn/90 dark:text-amber-200/80' : 'text-la-muted dark:text-slate-400' }}">
+                        @if($problemDays > 0)
+                            <span class="font-semibold">{{ $attention->count() }} staff</span> · missing outs and late ins
+                        @else
+                            Every day so far adds up
+                        @endif
+                    </span>
+                </span>
+            </button>
+
+            <div class="{{ $tile }}" x-data="{ now: @js(now()->format('g:i A')), tick() { const d = new Date(); let h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0'); this.now = ((h % 12) || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM') } }" x-init="setInterval(() => tick(), 30000)">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-la-today text-la-accent dark:bg-indigo-500/20 dark:text-indigo-200" aria-hidden="true">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1.5M12 19.5V21M4.2 4.2l1.06 1.06M18.74 18.74l1.06 1.06M3 12h1.5M19.5 12H21M4.2 19.8l1.06-1.06M18.74 5.26l1.06-1.06M12 8.25a3.75 3.75 0 100 7.5 3.75 3.75 0 000-7.5z"/></svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-[11px] font-semibold uppercase tracking-[0.06em] text-la-muted dark:text-slate-400">Today</span>
+                    <span class="mt-0.5 block text-[22px] font-bold leading-none text-la-ink dark:text-white">{{ today()->format('D, M j') }}</span>
+                    <span class="mt-2 block text-xs text-la-muted dark:text-slate-400">Live as of <span class="font-semibold tabular-nums text-la-ink dark:text-slate-200" x-text="now">{{ now()->format('g:i A') }}</span></span>
+                </span>
+            </div>
         </div>
     </section>
 
-    <section class="glass-card mt-5 overflow-hidden rounded-2xl">
+    {{-- The table card: filters above, the week, the legend below. The
+         filters narrow what is on screen without a round trip — every row
+         is already here, and the three combine. --}}
+    <section class="glass-card mt-5 overflow-hidden rounded-2xl"
+             @filter-status.window="status = $event.detail; $el.scrollIntoView({ behavior: 'smooth', block: 'start' })"
+             x-data="{ status: 'all', search: '', room: '',
+                       matches(row) {
+                           const text = (row.dataset.search || '');
+                           if (this.search && ! text.includes(this.search.toLowerCase())) return false;
+                           if (this.room && row.dataset.room !== this.room) return false;
+                           if (this.status === 'attention' && row.dataset.fix === '0') return false;
+                           if (this.status === 'onshift' && row.dataset.onshift !== '1') return false;
+                           if (this.status === 'notin' && row.dataset.notin !== '1') return false;
+                           return true;
+                       },
+                       get shown() { return Array.from($el.querySelectorAll('tbody tr[data-search]')).filter(row => this.matches(row)).length } }">
+
+        <div class="flex flex-wrap items-center gap-2 border-b border-la-border px-5 py-4 dark:border-white/10">
+            <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by status">
+                @foreach([
+                    'all' => ['All staff', $rows->count(), null],
+                    'attention' => ['Needs attention', $attention->count(), 'bg-la-warn-dot'],
+                    'onshift' => ['On shift now', $onShift->count(), 'bg-la-accent'],
+                    'notin' => ['Not in today', $notIn->count(), 'bg-la-faint'],
+                ] as $key => [$label, $count, $dot])
+                    <button type="button" @click="status = '{{ $key }}'" :aria-pressed="status === '{{ $key }}'"
+                            :class="status === '{{ $key }}' ? 'bg-la-accent-soft text-la-accent dark:bg-la-accent/20 dark:text-indigo-200' : 'text-la-muted hover:bg-la-well dark:text-la-faint dark:hover:bg-white/10'"
+                            class="{{ $chip }}">
+                        @if($dot)<span class="h-2 w-2 rounded-full {{ $dot }}" aria-hidden="true"></span>@endif
+                        {{ $label }}
+                        <span class="rounded-full bg-white/70 px-2 py-0.5 text-xs font-semibold tabular-nums text-la-muted ring-1 ring-la-border dark:bg-white/10 dark:text-la-faint dark:ring-white/10">{{ $count }}</span>
+                    </button>
+                @endforeach
+            </div>
+
+            <div class="ml-auto flex flex-wrap items-center gap-2">
+                <label class="relative block">
+                    <span class="sr-only">Search name or ID</span>
+                    <svg class="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-la-faint" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M20 20l-3.5-3.5"/></svg>
+                    <input type="search" x-model.trim="search" placeholder="Search name or ID"
+                           class="min-h-[44px] w-[220px] rounded-lg border border-la-border-strong bg-white pl-10 pr-3 text-sm text-la-ink placeholder:text-la-faint focus:border-la-accent focus:ring-2 focus:ring-la-accent/30 dark:border-white/15 dark:bg-slate-950 dark:text-white">
+                </label>
+                <label class="flex items-center gap-2 text-sm text-la-muted dark:text-la-faint">
+                    <span>Room</span>
+                    <select x-model="room" class="min-h-[44px] rounded-lg border border-la-border-strong bg-white py-1.5 pl-3 pr-9 text-sm text-la-ink focus:border-la-accent focus:ring-2 focus:ring-la-accent/30 dark:border-white/15 dark:bg-slate-950 dark:text-white">
+                        <option value="">All rooms</option>
+                        @foreach($rooms as $option)
+                            <option value="{{ $option }}">{{ $option }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            </div>
+        </div>
+
         <div class="overflow-x-auto">
-            <table class="w-full min-w-[64rem] text-left text-sm">
+            <table class="w-full min-w-[66rem] text-left text-sm">
                 <thead>
-                    <tr class="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-400 dark:border-white/10">
-                        <th class="px-4 py-3 font-semibold">ID</th>
-                        <th class="px-4 py-3 font-semibold">Staff</th>
-                        <th class="px-4 py-3 font-semibold">Role</th>
-                        <th class="px-4 py-3 font-semibold">Rate</th>
-                        <th class="px-4 py-3 font-semibold">Hours</th>
+                    <tr class="border-b border-la-border text-xs font-semibold uppercase tracking-[0.06em] text-la-muted dark:border-white/10 dark:text-la-faint">
+                        <th class="w-[248px] px-5 py-3">Staff</th>
+                        <th class="w-[140px] px-4 py-3">Week</th>
                         @foreach($dates as $date)
                             {{-- Today's column is tinted the whole way down: it
-                                 is the one being punched into and the one a
-                                 correction is allowed on. --}}
-                            <th class="px-4 py-3 text-center font-semibold {{ $date->isToday() ? 'bg-sky-50 dark:bg-sky-500/10' : '' }}">
-                                <span class="block {{ $date->isToday() ? 'text-sky-700 dark:text-sky-300' : '' }}">{{ $date->format('D') }}</span>
-                                <span class="block text-[13px] font-bold normal-case {{ $date->isToday() ? 'text-sky-900 dark:text-sky-100' : 'text-slate-700 dark:text-slate-200' }}">{{ $date->format('M j') }}</span>
+                                 is the one being punched into. --}}
+                            <th class="px-2 py-3 text-center {{ $date->isToday() ? 'bg-la-today text-la-accent dark:bg-la-accent/10 dark:text-indigo-300' : '' }}">
+                                <span class="block">{{ $date->format('D') }}</span>
+                                <span class="block text-[13px] font-bold normal-case tracking-normal {{ $date->isToday() ? 'text-la-accent dark:text-indigo-100' : 'text-la-ink dark:text-slate-200' }}">{{ $date->format('M j') }}</span>
                             </th>
                         @endforeach
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-white/5">
+                <tbody class="divide-y divide-la-border dark:divide-white/5">
                     @forelse($rows as $row)
-                        <tr class="transition hover:bg-slate-50/60 dark:hover:bg-white/5">
-                            <td class="px-4 py-3 tabular-nums text-slate-400">{{ $row['staff_id'] }}</td>
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-2.5">
-                                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{{ $row['initials'] }}</span>
+                        <tr class="transition hover:bg-la-well/60 dark:hover:bg-white/5"
+                            data-search="{{ strtolower($row['name'].' '.$row['staff_id']) }}"
+                            data-room="{{ $row['room'] }}" data-fix="{{ $row['fix'] }}"
+                            data-onshift="{{ $row['on_shift'] ? 1 : 0 }}" data-notin="{{ $row['not_in'] ? 1 : 0 }}"
+                            x-show="matches($el)">
+                            <td class="px-5 py-3 align-middle">
+                                <div class="flex items-center gap-3">
+                                    @if($row['avatar'])
+                                        <img src="{{ $row['avatar'] }}" alt="" class="h-10 w-10 shrink-0 rounded-full bg-la-navpill object-cover" loading="lazy" decoding="async">
+                                    @else
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-la-navpill text-xs font-bold text-la-link dark:bg-la-accent/20 dark:text-indigo-300" aria-hidden="true">{{ $row['initials'] }}</span>
+                                    @endif
                                     <span class="min-w-0">
-                                        <a href="{{ route('teachers.show', $row['id']) }}" class="block truncate font-semibold text-indigo-600 hover:underline dark:text-indigo-400">{{ $row['name'] }}</a>
-                                        <span class="block truncate text-[11px] text-slate-400">{{ $row['email'] }}</span>
+                                        <a href="{{ route('teachers.show', $row['id']) }}" class="block truncate text-[15px] font-semibold text-la-link hover:underline dark:text-indigo-400">{{ $row['name'] }}</a>
+                                        <span class="block truncate text-[13px] text-la-muted dark:text-la-faint"><span class="tabular-nums">{{ $row['staff_id'] }}</span> &middot; {{ $row['role'] }}</span>
                                     </span>
                                 </div>
                             </td>
-                            <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ $row['role'] }}</td>
-                            <td class="px-4 py-3 tabular-nums text-slate-500">{{ filled($row['rate']) ? '$'.$row['rate'].'/hr' : '—' }}</td>
-                            <td class="px-4 py-3 font-bold tabular-nums"><span data-hours="{{ $row['id'] }}">{{ $row['hours'] }}h</span></td>
+
+                            {{-- Paid hours against what they are owed, as a bar, with
+                                 the days that need a fix counted beside it. --}}
+                            <td class="px-4 py-3 align-middle">
+                                <span class="block text-sm font-bold tabular-nums text-la-ink dark:text-white"><span data-hours="{{ $row['id'] }}">{{ $dur($row['minutes']) }}</span><span class="font-medium text-la-faint"> / {{ $hrs($row['target']) }}</span></span>
+                                <span class="mt-1.5 block h-1.5 w-full overflow-hidden rounded-full bg-la-border dark:bg-white/10" aria-hidden="true">
+                                    <span class="block h-full rounded-full bg-la-accent" style="width:{{ $row['target'] > 0 ? min(100, round($row['minutes'] / ($row['target'] * 60) * 100)) : 0 }}%"></span>
+                                </span>
+                                @if($row['fix'] > 0)
+                                    <span class="mt-1.5 inline-flex rounded-full bg-la-warn-soft px-2 py-0.5 text-xs font-semibold text-la-warn dark:bg-la-warn-dot/20 dark:text-amber-200">{{ $row['fix'] }} {{ \Illuminate\Support\Str::plural('day', $row['fix']) }} to fix</span>
+                                @endif
+                            </td>
 
                             @foreach($dates as $date)
-                                @php($day = $row['days'][$fmt($date)])
-                                <td class="px-3 py-3 text-center {{ $date->isToday() ? 'bg-sky-50/60 dark:bg-sky-500/5' : '' }}"
-                                    data-cell="{{ $row['id'] }}|{{ $fmt($date) }}"
-                                    :class="isOpen({{ $row['id'] }}, '{{ $fmt($date) }}') ? 'ring-2 ring-inset ring-indigo-400 dark:ring-indigo-500' : ''">
-                                    @if($day['empty'])
-                                        {{-- Nothing happened. A dot here would
-                                             be a judgement about a day off. --}}
-                                        <span class="text-slate-300 dark:text-slate-600">·</span>
+                                @php
+                                    $day = $row['days'][$fmt($date)];
+                                    $late = $day['status'] === Grid::LATE;
+                                    $missing = $day['status'] === Grid::MISSING_OUT;
+                                    $onShiftNow = $day['today'] && $day['open'] && ! $day['empty'];
+                                    $fine = in_array($day['status'], [Grid::ON_TIME, Grid::EDITED], true) && ! $onShiftNow;
+                                    $cellClass = match (true) {
+                                        $late => 'border-la-danger-border bg-la-danger-soft text-la-danger hover:shadow-md dark:border-rose-500/40 dark:bg-la-danger-dot/10 dark:text-rose-100',
+                                        $missing => 'border-la-warn-border bg-la-warn-soft text-la-warn hover:shadow-md dark:border-amber-500/40 dark:bg-la-warn-dot/10 dark:text-amber-100',
+                                        $onShiftNow => 'border-la-accent-border bg-la-accent-soft text-la-accent hover:shadow-md dark:border-indigo-500/40 dark:bg-la-accent/10 dark:text-indigo-100',
+                                        default => 'border-la-border bg-la-card text-la-ink hover:shadow-md dark:border-white/10 dark:bg-slate-900 dark:text-white',
+                                    };
+                                    $dotClass = match (true) {
+                                        $late => 'bg-la-danger-dot ring-4 ring-la-danger-soft dark:ring-rose-500/30',
+                                        $missing => 'bg-la-warn-dot ring-4 ring-la-warn-soft dark:ring-amber-500/30',
+                                        $onShiftNow => 'bg-la-accent',
+                                        $day['status'] === Grid::EDITED => 'border-[1.5px] border-la-ok-dot bg-transparent',
+                                        default => 'bg-la-ok-dot',
+                                    };
+                                    $tag = $late ? 'Late' : ($onShiftNow ? 'On shift' : null);
+                                    $spoken = match (true) {
+                                        $missing => 'Missing clock-out, needs a fix',
+                                        $late && $onShiftNow => 'On shift, clocked in late',
+                                        $late => 'Clocked in late, needs a fix',
+                                        $onShiftNow => 'On shift since '.$day['in'],
+                                        $day['status'] === Grid::EDITED => 'Corrected, adds up now',
+                                        default => 'On time',
+                                    };
+                                @endphp
+                                <td class="px-1.5 py-2 align-top {{ $date->isToday() ? 'bg-la-today dark:bg-la-accent/5' : '' }}"
+                                    data-cell="{{ $row['id'] }}|{{ $fmt($date) }}">
+                                    @if($day['empty'] && $day['today'])
+                                        {{-- Nobody has punched yet. Not a judgement, a fact
+                                             about the morning so far. --}}
+                                        <span class="flex min-h-[56px] flex-col justify-center rounded-xl border border-dashed border-la-border-strong px-2.5 py-2 text-left dark:border-white/20">
+                                            <span class="text-sm font-semibold text-la-muted dark:text-la-faint">Not in</span>
+                                            <span class="text-[13px] text-la-faint">No punch yet</span>
+                                        </span>
+                                    @elseif($day['empty'])
+                                        {{-- A day off, or a day still to come. A dot here
+                                             would be a judgement about either. --}}
+                                        <span class="flex min-h-[56px] items-center justify-center text-la-faint dark:text-la-muted" aria-hidden="true">—</span>
                                     @else
-                                        {{-- One grid for both lines, not two
-                                             separately centred rows. Centring
-                                             each row on its own put the times
-                                             out of line, because IN and OUT are
-                                             not the same width and only IN
-                                             carries a dot. Shared tracks line
-                                             the times up, and the dot has a
-                                             column of its own on both rows so
-                                             its presence cannot shift them. --}}
-                                        {{-- The dot's column is a finger wide, not a dot wide: the
-                                             dot stays six pixels, the thing you click is twenty. --}}
-                                        <div class="inline-grid grid-cols-[auto_minmax(3.6rem,auto)_1.25rem] items-center gap-x-1 gap-y-0.5 text-[12px] tabular-nums">
-                                            <span class="text-[10px] font-bold uppercase text-slate-400">In</span>
-                                            <span class="text-right font-semibold">{{ $day['in'] ?? '—' }}</span>
-                                            @if($day['status'])
-                                                {{-- A day that went wrong leads to the
-                                                     screen that puts it right. A day that
-                                                     went fine is a dot and nothing more:
-                                                     making every cell a link would bury
-                                                     the handful that need one. --}}
-                                                {{-- Every dot opens the panel. Green and the ring
-                                                     open it to review; amber and red open it to put
-                                                     the day right, and keep their link so a page
-                                                     with no script still leads somewhere.
-                                                     Painted again by cellHtml() below after a save,
-                                                     so the two have to agree. --}}
-                                                {{-- Links, not buttons, all four: the grid holds
-                                                     nothing that edits in place, only ways through
-                                                     to the screens that record who and why. --}}
-                                                @if($day['status'] === \App\Http\Controllers\StaffTimesheetController::ON_TIME)
-                                                    <a href="{{ route('timesheets.fix', ['user' => $row['id'], 'date' => $fmt($date)]) }}" @click.prevent="open({{ $row['id'] }}, '{{ $fmt($date) }}')" class="grid h-5 w-5 place-items-center rounded-full transition hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-400 dark:hover:bg-emerald-500/20" title="On time — open {{ $row['name'] }}&rsquo;s {{ $date->format('D j M') }} to review" aria-label="On time: review {{ $row['name'] }} on {{ $date->format('D j M') }}"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span></a>
-                                                @elseif($day['status'] === \App\Http\Controllers\StaffTimesheetController::EDITED)
-                                                    <a href="{{ route('timesheets.fix', ['user' => $row['id'], 'date' => $fmt($date)]) }}" @click.prevent="open({{ $row['id'] }}, '{{ $fmt($date) }}')" class="grid h-5 w-5 place-items-center rounded-full transition hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-400 dark:hover:bg-emerald-500/20" title="Edited — put right by hand; open {{ $row['name'] }}&rsquo;s {{ $date->format('D j M') }} to review" aria-label="Edited: review {{ $row['name'] }} on {{ $date->format('D j M') }}"><span class="h-1.5 w-1.5 rounded-full border-[1.5px] border-emerald-500 bg-transparent"></span></a>
-                                                @else
-                                                    <a href="{{ route('timesheets.fix', ['user' => $row['id'], 'date' => $fmt($date)]) }}"
-                                                       @click.prevent="open({{ $row['id'] }}, '{{ $fmt($date) }}')"
-                                                       class="grid h-5 w-5 place-items-center rounded-full transition focus-visible:ring-2 {{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'hover:bg-rose-100 focus-visible:ring-rose-400 dark:hover:bg-rose-500/20' : 'hover:bg-amber-100 focus-visible:ring-amber-400 dark:hover:bg-amber-500/20' }}"
-                                                       title="{{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'Late' : 'Missing time out' }} — open {{ $row['name'] }}&rsquo;s {{ $date->format('D j M') }} to put it right"
-                                                       aria-label="{{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'Late' : 'Missing time out' }}: correct {{ $row['name'] }} on {{ $date->format('D j M') }}"><span class="h-1.5 w-1.5 rounded-full {{ $day['status'] === \App\Http\Controllers\StaffTimesheetController::LATE ? 'bg-rose-500' : 'bg-amber-500' }}"></span></a>
+                                        {{-- Every punched day opens the panel. A link, not a
+                                             button, so a page with no script still leads to
+                                             the screen that puts the day right. Painted again
+                                             by cellHtml() below after a save, so the two have
+                                             to agree. --}}
+                                        <a href="{{ route('timesheets.fix', ['user' => $row['id'], 'date' => $fmt($date)]) }}"
+                                           @click.prevent="open({{ $row['id'] }}, '{{ $fmt($date) }}')"
+                                           :class="isOpen({{ $row['id'] }}, '{{ $fmt($date) }}') ? 'border-la-accent ring-[3px] ring-[rgba(27,94,145,.25)]' : ''"
+                                           class="flex min-h-[56px] w-full flex-col justify-center rounded-xl border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent focus-visible:ring-offset-2 {{ $cellClass }}"
+                                           title="{{ $day['label'] }} — open {{ $row['name'] }}’s day{{ $fine ? ' to review' : '' }}"
+                                           aria-label="{{ $row['name'] }}, {{ $date->format('D M j') }}: {{ $spoken }}. Edit day">
+                                            <span class="flex items-center gap-1.5">
+                                                <span class="h-2 w-2 shrink-0 rounded-full {{ $dotClass }}" aria-hidden="true"></span>
+                                                <span class="min-w-0 flex-1 truncate text-sm font-bold tabular-nums">{{ $missing ? $day['label'] : $dur($day['worked']) }}</span>
+                                                @if($tag)<span class="shrink-0 text-[11px] font-semibold uppercase tracking-wide opacity-80">{{ $tag }}</span>@endif
+                                            </span>
+                                            <span class="mt-0.5 block truncate text-[13px] tabular-nums {{ $late || $missing ? 'opacity-90' : 'text-la-muted dark:text-la-faint' }}">
+                                                @if($missing) In {{ $day['in'] }} &middot; no out
+                                                @elseif($onShiftNow) In {{ $day['in'] }}
+                                                @else {{ $day['in'] }} &ndash; {{ $day['out'] ?? '—' }}
                                                 @endif
-                                            @else
-                                                <span></span>
-                                            @endif
-
-                                            <span class="text-[10px] font-bold uppercase text-slate-400">Out</span>
-                                            {{-- An amber dash rather than a
-                                                 blank: somebody went home
-                                                 without clocking out, and the
-                                                 blank read as "not in yet". --}}
-                                            <span class="text-right font-semibold {{ $day['out'] ? '' : 'text-amber-600' }}">{{ $day['out'] ?? '—' }}</span>
-                                            <span></span>
-                                        </div>
+                                            </span>
+                                        </a>
                                     @endif
                                 </td>
                             @endforeach
                         </tr>
                     @empty
-                        <tr><td colspan="10" class="px-4 py-12 text-center text-slate-500">No staff match this filter.</td></tr>
                     @endforelse
+                    <tr x-show="shown === 0" x-cloak>
+                        <td colspan="{{ $dates->count() + 2 }}" class="px-5 py-12 text-center text-la-muted dark:text-la-faint">No staff match these filters.</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-la-border bg-la-well px-5 py-3 text-[13px] text-la-muted dark:border-white/10 dark:bg-white/5 dark:text-la-faint">
             <span>
-                Showing <span class="font-semibold">{{ $rows->count() }}</span> staff
-                &middot; <b class="font-semibold text-slate-700 dark:text-slate-200">To edit a day, click its dot</b> &mdash; the small circle beside the In time. Click an amber or red dot to put that day right (a missed clock-out, a break nobody punched, a time that needs moving); a green one just to review it. Every change records who made it and why.
+                Showing <span class="font-semibold text-la-ink dark:text-slate-200" x-text="shown">{{ $rows->count() }}</span> of {{ $counts['staff'] }} staff
+                &middot; Click any day to edit it. Amber and red days need a fix; every change records who made it and why.
             </span>
-            <span class="flex items-center gap-4">
-                <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> On time</span>
-                <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span> Missing out</span>
-                <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span> Late</span>
-                <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full border-[1.5px] border-emerald-500"></span> Edited</span>
+            <span class="flex flex-wrap items-center gap-4">
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-la-ok-dot"></span> On time</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-la-accent"></span> On shift</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-la-warn-dot"></span> Missing out</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-la-danger-dot"></span> Late</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border-[1.5px] border-la-ok-dot"></span> Edited</span>
+                <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-dashed border-slate-400"></span> Not in</span>
             </span>
         </div>
     </section>
@@ -220,32 +378,32 @@
     <div x-show="panel" x-cloak class="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px]" @click="close()" aria-hidden="true"></div>
 
     <aside x-show="panel" x-cloak x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
-           class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-night-900"
+           class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-la-border bg-white shadow-2xl dark:border-white/10 dark:bg-night-900"
            role="dialog" aria-modal="true" :aria-label="p ? p.staff.name + ', ' + p.date_label : 'Edit day'">
 
         <template x-if="loading">
-            <p class="p-6 text-sm text-slate-500">Opening the day…</p>
+            <p class="p-6 text-sm text-la-muted">Opening the day…</p>
         </template>
 
         <template x-if="! loading && p">
             <div class="flex min-h-0 flex-1 flex-col">
                 {{-- Who, when, and how the day stands. --}}
-                <header class="border-b border-slate-200 px-5 py-4 dark:border-white/10">
+                <header class="border-b border-la-border px-5 py-4 dark:border-white/10">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <h2 class="truncate text-base font-bold" x-text="p.staff.name"></h2>
-                            <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                            <p class="mt-0.5 text-xs text-la-muted dark:text-la-faint">
                                 <span x-text="p.staff.staff_id"></span> · <span x-text="p.staff.role"></span> · <span x-text="p.date_label"></span>
                             </p>
                         </div>
-                        <button type="button" @click="close()" class="rounded-lg px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10" aria-label="Close">✕</button>
+                        <button type="button" @click="close()" class="rounded-lg px-2 py-1 text-sm text-la-muted hover:bg-la-well dark:hover:bg-white/10" aria-label="Close">✕</button>
                     </div>
                     <span class="mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide" :class="statusClass()" x-text="statusLabel()"></span>
                 </header>
 
                 <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                     <template x-if="p.locked">
-                        <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300">
+                        <div class="mb-4 rounded-xl border border-la-border bg-slate-50 px-3 py-2 text-xs text-la-muted dark:border-white/10 dark:bg-slate-800 dark:text-la-faint">
                             🔒 This period has been approved, so the punches are a record now. Reopen the period first if something genuinely has to change.
                         </div>
                     </template>
@@ -253,19 +411,19 @@
                     {{-- The totals, live: they follow the rows as they are typed. --}}
                     <dl class="grid grid-cols-4 gap-2 text-center">
                         <div class="rounded-xl bg-slate-50 px-2 py-2 dark:bg-white/5">
-                            <dt class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Paid</dt>
+                            <dt class="text-[10px] font-bold uppercase tracking-wide text-la-faint">Paid</dt>
                             <dd class="mt-0.5 text-sm font-bold tabular-nums" :class="check().errors.size ? 'text-rose-600' : ''" x-text="paidLabel()"></dd>
                         </div>
                         <div class="rounded-xl bg-slate-50 px-2 py-2 dark:bg-white/5">
-                            <dt class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Breaks</dt>
+                            <dt class="text-[10px] font-bold uppercase tracking-wide text-la-faint">Breaks</dt>
                             <dd class="mt-0.5 text-sm font-bold tabular-nums" x-text="check().totals.paidBreak + 'm'"></dd>
                         </div>
                         <div class="rounded-xl bg-slate-50 px-2 py-2 dark:bg-white/5">
-                            <dt class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Lunch</dt>
+                            <dt class="text-[10px] font-bold uppercase tracking-wide text-la-faint">Lunch</dt>
                             <dd class="mt-0.5 text-sm font-bold tabular-nums" x-text="check().totals.unpaidBreak + 'm'"></dd>
                         </div>
                         <div class="rounded-xl bg-slate-50 px-2 py-2 dark:bg-white/5">
-                            <dt class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Scheduled</dt>
+                            <dt class="text-[10px] font-bold uppercase tracking-wide text-la-faint">Scheduled</dt>
                             <dd class="mt-0.5 text-sm font-bold tabular-nums" x-text="hours(p.totals.scheduled)"></dd>
                         </div>
                     </dl>
@@ -273,7 +431,7 @@
                     {{-- The day as a bar: green is on the clock, amber a break, grey lunch. --}}
                     <div class="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/10" aria-hidden="true">
                         <template x-for="segment in timeline()" :key="segment.key">
-                            <span :style="'width:' + segment.width + '%'" :class="{working: 'bg-emerald-400', break: 'bg-amber-400', lunch: 'bg-slate-400'}[segment.kind]"></span>
+                            <span :style="'width:' + segment.width + '%'" :class="{working: 'bg-emerald-400', break: 'bg-amber-400', lunch: 'bg-la-faint'}[segment.kind]"></span>
                         </template>
                     </div>
 
@@ -284,13 +442,13 @@
                                 <div class="flex items-center gap-2">
                                     <span class="min-w-0 flex-1 truncate text-sm font-semibold" x-text="row.label"></span>
                                     <input type="time" step="60" x-model="row.at" :disabled="p.locked"
-                                           class="w-[7.2rem] rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums dark:border-white/10 dark:bg-slate-800"
+                                           class="w-[7.2rem] rounded-lg border border-la-border bg-white px-2 py-1 text-sm tabular-nums dark:border-white/10 dark:bg-slate-800"
                                            :aria-label="row.label + ' time'">
                                     {{-- Only a break or a lunch comes off. The clock-in can be
                                          moved, never removed; the clock-out likewise. --}}
-                                    <button type="button" x-show="canRemove(row)" @click="remove(row)" :disabled="p.locked" class="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500 hover:border-rose-300 hover:text-rose-600 dark:border-white/10" :aria-label="'Remove ' + row.label">−</button>
+                                    <button type="button" x-show="canRemove(row)" @click="remove(row)" :disabled="p.locked" class="rounded-lg border border-la-border px-2 py-1 text-xs font-bold text-la-muted hover:border-rose-300 hover:text-rose-600 dark:border-white/10" :aria-label="'Remove ' + row.label">−</button>
                                 </div>
-                                <p class="mt-1 text-[11px]" :class="row.error ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500 dark:text-slate-400'">
+                                <p class="mt-1 text-[11px]" :class="row.error ? 'text-rose-700 dark:text-rose-300' : 'text-la-muted dark:text-la-faint'">
                                     <template x-if="row.error"><span x-text="row.error"></span></template>
                                     <template x-if="! row.error && row.missing && ! row.at">
                                         <span>
@@ -319,47 +477,47 @@
                     </ol>
 
                     <div class="mt-2 flex gap-2" x-show="! p.locked">
-                        <button type="button" @click="addPair('BREAK')" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">+ Break</button>
-                        <button type="button" @click="addPair('LUNCH')" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">+ Lunch</button>
+                        <button type="button" @click="addPair('BREAK')" class="rounded-lg border border-la-border px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">+ Break</button>
+                        <button type="button" @click="addPair('LUNCH')" class="rounded-lg border border-la-border px-2.5 py-1 text-xs font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">+ Lunch</button>
                     </div>
 
                     {{-- Why. Appears once anything has changed, and is required. --}}
                     <div class="mt-5" x-show="changes().length > 0" x-cloak>
-                        <p class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Reason</p>
+                        <p class="text-xs font-bold uppercase tracking-wide text-la-muted dark:text-la-faint">Reason</p>
                         <div class="mt-1.5 flex flex-wrap gap-1.5">
                             <template x-for="(label, code) in p.reasons" :key="code">
-                                <button type="button" @click="reason = code" :class="reason === code ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200' : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="rounded-full border px-2.5 py-1 text-xs font-semibold" x-text="label"></button>
+                                <button type="button" @click="reason = code" :class="reason === code ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-la-accent/20 dark:text-indigo-200' : 'border-la-border text-la-muted hover:bg-slate-50 dark:border-white/10 dark:text-la-faint dark:hover:bg-white/10'" class="rounded-full border px-2.5 py-1 text-xs font-semibold" x-text="label"></button>
                             </template>
                         </div>
                         <input type="text" x-model="note" maxlength="120" :placeholder="reason === 'other' ? 'What happened — required' : 'Note (optional)'"
-                               class="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm dark:border-white/10 dark:bg-slate-800"
+                               class="mt-2 w-full rounded-lg border border-la-border bg-white px-3 py-1.5 text-sm dark:border-white/10 dark:bg-slate-800"
                                :class="reason === 'other' && ! note.trim() ? 'border-amber-400' : ''">
                     </div>
 
                     {{-- What went before. Newest first; the entry just written is the one being looked for. --}}
                     <div class="mt-5">
-                        <p class="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Change history</p>
-                        <template x-if="p.history.length === 0"><p class="mt-1 text-xs text-slate-400">Nothing has been changed on this day.</p></template>
+                        <p class="text-xs font-bold uppercase tracking-wide text-la-muted dark:text-la-faint">Change history</p>
+                        <template x-if="p.history.length === 0"><p class="mt-1 text-xs text-la-faint">Nothing has been changed on this day.</p></template>
                         <ul class="mt-1.5 space-y-1.5">
                             <template x-for="(entry, index) in p.history" :key="index">
                                 <li class="rounded-lg bg-slate-50 px-3 py-1.5 text-xs dark:bg-white/5">
                                     <span class="font-semibold" x-text="entry.who || 'Someone'"></span>
-                                    <span class="text-slate-400"> · <span x-text="entry.when"></span></span>
-                                    <span class="text-slate-500 dark:text-slate-400"> · <span x-text="entry.reason"></span></span>
-                                    <span class="block tabular-nums text-slate-700 dark:text-slate-200" x-text="entry.what"></span>
+                                    <span class="text-la-faint"> · <span x-text="entry.when"></span></span>
+                                    <span class="text-la-muted dark:text-la-faint"> · <span x-text="entry.reason"></span></span>
+                                    <span class="block tabular-nums text-la-ink dark:text-slate-200" x-text="entry.what"></span>
                                 </li>
                             </template>
                         </ul>
                     </div>
                 </div>
 
-                <footer class="border-t border-slate-200 px-5 py-3 dark:border-white/10">
-                    <p x-show="error" x-cloak class="mb-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-800 dark:bg-rose-500/10 dark:text-rose-200" x-text="error"></p>
-                    <p x-show="flash" x-cloak class="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200" x-text="flash"></p>
+                <footer class="border-t border-la-border px-5 py-3 dark:border-white/10">
+                    <p x-show="error" x-cloak class="mb-2 rounded-lg bg-rose-50 px-3 py-1.5 text-xs text-rose-800 dark:bg-la-danger-dot/10 dark:text-rose-200" x-text="error"></p>
+                    <p x-show="flash" x-cloak class="mb-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800 dark:bg-la-ok-dot/10 dark:text-emerald-200" x-text="flash"></p>
                     <div class="flex items-center justify-between gap-2">
-                        <button type="button" @click="undoAll()" x-show="changes().length > 0" class="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">Undo all</button>
+                        <button type="button" @click="undoAll()" x-show="changes().length > 0" class="text-xs font-semibold text-la-muted hover:text-slate-800 dark:hover:text-white">Undo all</button>
                         <span class="flex-1"></span>
-                        <button type="button" @click="close()" class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">Cancel</button>
+                        <button type="button" @click="close()" class="rounded-lg border border-la-border px-3 py-1.5 text-sm font-semibold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">Cancel</button>
                         <button type="button" @click="save()" :disabled="! canSave()" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40" x-text="saving ? 'Saving…' : 'Save changes'"></button>
                     </div>
                 </footer>
@@ -674,38 +832,64 @@ function timesheetGrid() { return {
         if (cell) cell.innerHTML = this.cellHtml(p);
 
         const hours = document.querySelector('[data-hours="' + p.staff.id + '"]');
-        if (hours) hours.textContent = p.hours + 'h';
+        if (hours) hours.textContent = this.duration(p.hours * 60);
     },
 
     esc(value) {
         return String(value ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
     },
 
-    /** The same cell the Blade draws — see the dots in the table above. */
+    /** Minutes as "7h 45m", the way the Blade's $dur writes it. */
+    duration(minutes) {
+        const m = Math.max(0, Math.round(minutes || 0));
+        return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+    },
+
+    /** The same cell the Blade draws — see the day cells in the table above. */
     cellHtml(p) {
         const c = p.cell, name = this.esc(p.staff.name), day = this.esc(p.date_label), id = p.staff.id, date = p.date;
-        if (c.empty) return '<span class="text-slate-300 dark:text-slate-600">·</span>';
+
+        if (c.empty && c.today) {
+            return '<span class="flex min-h-[56px] flex-col justify-center rounded-xl border border-dashed border-la-border-strong px-2.5 py-2 text-left dark:border-white/20">'
+                + '<span class="text-sm font-semibold text-la-muted dark:text-slate-400">Not in</span><span class="text-[13px] text-la-faint">No punch yet</span></span>';
+        }
+        if (c.empty) return '<span class="flex min-h-[56px] items-center justify-center text-la-faint dark:text-slate-600" aria-hidden="true">—</span>';
 
         // The words come from the server with the cell — see cell() on the
-        // controller — so this script names no state and cannot drift from
-        // what the Blade above says about the same colour.
-        const link = '<a href="/timesheets/fix/' + id + '/' + date + '" @click.prevent="open(' + id + ', \'' + date + '\')" ';
+        // controller — so this script names no state of its own.
+        const late = c.status === 'late', missing = c.status === 'missing_out';
+        const onShift = c.today && c.open;
         const label = this.esc(c.label);
-        const fine = c.status === 'on_time' || c.status === 'edited';
-        let dot = '<span></span>';
-        if (fine) {
-            const shape = c.status === 'edited' ? 'border-[1.5px] border-emerald-500 bg-transparent' : 'bg-emerald-500';
-            dot = link + 'class="grid h-5 w-5 place-items-center rounded-full transition hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-400 dark:hover:bg-emerald-500/20" title="' + label + ' — open ' + name + '’s ' + day + ' to review"><span class="h-1.5 w-1.5 rounded-full ' + shape + '"></span></a>';
-        } else if (c.status) {
-            const late = c.status === 'late';
-            const hover = late ? 'hover:bg-rose-100 focus-visible:ring-rose-400 dark:hover:bg-rose-500/20' : 'hover:bg-amber-100 focus-visible:ring-amber-400 dark:hover:bg-amber-500/20';
-            dot = link + 'class="grid h-5 w-5 place-items-center rounded-full transition focus-visible:ring-2 ' + hover + '" title="' + label + ' — open ' + name + '’s ' + day + ' to put it right"><span class="h-1.5 w-1.5 rounded-full ' + (late ? 'bg-rose-500' : 'bg-amber-500') + '"></span></a>';
-        }
 
-        return '<div class="inline-grid grid-cols-[auto_minmax(3.6rem,auto)_1.25rem] items-center gap-x-1 gap-y-0.5 text-[12px] tabular-nums">'
-            + '<span class="text-[10px] font-bold uppercase text-slate-400">In</span><span class="text-right font-semibold">' + this.esc(c.in ?? '—') + '</span>' + dot
-            + '<span class="text-[10px] font-bold uppercase text-slate-400">Out</span><span class="text-right font-semibold' + (c.out ? '' : ' text-amber-600') + '">' + this.esc(c.out ?? '—') + '</span><span></span>'
-            + '</div>';
+        const cell = late ? 'border-la-danger-border bg-la-danger-soft text-la-danger hover:shadow-md dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100'
+            : missing ? 'border-la-warn-border bg-la-warn-soft text-la-warn hover:shadow-md dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100'
+            : onShift ? 'border-la-accent-border bg-la-accent-soft text-la-accent hover:shadow-md dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-100'
+            : 'border-la-border bg-la-card text-la-ink hover:shadow-md dark:border-white/10 dark:bg-slate-900 dark:text-white';
+        const dot = late ? 'bg-la-danger-dot ring-4 ring-la-danger-soft dark:ring-rose-500/30'
+            : missing ? 'bg-la-warn-dot ring-4 ring-la-warn-soft dark:ring-amber-500/30'
+            : onShift ? 'bg-la-accent'
+            : c.status === 'edited' ? 'border-[1.5px] border-la-ok-dot bg-transparent'
+            : 'bg-la-ok-dot';
+        const tag = late ? 'Late' : (onShift ? 'On shift' : '');
+        const spoken = missing ? 'Missing clock-out, needs a fix'
+            : (late && onShift) ? 'On shift, clocked in late'
+            : late ? 'Clocked in late, needs a fix'
+            : onShift ? 'On shift since ' + this.esc(c.in)
+            : c.status === 'edited' ? 'Corrected, adds up now'
+            : 'On time';
+        const main = missing ? label : this.duration(c.worked);
+        const detail = missing ? 'In ' + this.esc(c.in) + ' · no out'
+            : onShift ? 'In ' + this.esc(c.in)
+            : this.esc(c.in) + ' – ' + this.esc(c.out ?? '—');
+
+        return '<a href="/timesheets/fix/' + id + '/' + date + '" @click.prevent="open(' + id + ', \'' + date + '\')" '
+            + ':class="isOpen(' + id + ', \'' + date + '\') ? \'border-indigo-500 ring-[3px] ring-indigo-500/25\' : \'\'" '
+            + 'class="flex min-h-[56px] w-full flex-col justify-center rounded-xl border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent focus-visible:ring-offset-2 ' + cell + '" '
+            + 'title="' + label + ' — open ' + name + '’s day' + (late || missing || onShift ? '' : ' to review') + '" aria-label="' + name + ', ' + day + ': ' + spoken + '. Edit day">'
+            + '<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full ' + dot + '" aria-hidden="true"></span>'
+            + '<span class="min-w-0 flex-1 truncate text-sm font-bold tabular-nums">' + this.esc(main) + '</span>'
+            + (tag ? '<span class="shrink-0 text-[11px] font-semibold uppercase tracking-wide opacity-80">' + tag + '</span>' : '')
+            + '</span><span class="mt-0.5 block truncate text-[13px] tabular-nums ' + (late || missing ? 'opacity-90' : 'text-la-muted dark:text-slate-400') + '">' + detail + '</span></a>';
     },
 
     statusLabel() {

@@ -256,11 +256,6 @@ Route::get('/payroll/{batch}/slips/{slip}/preview', [PayrollController::class, '
 Route::put('/payroll/{batch}/slips/{slip}', [PayrollController::class, 'reassign'])->name('payroll.reassign');
 Route::post('/payroll/{batch}/slips/{slip}/send', [PayrollController::class, 'send'])->name('payroll.send');
 
-// The staff roster is built from pay-affecting rules, so it stays director-only
-// too — but every teacher can read the generated week, which is the point of
-// generating it.
-Route::post('/staff-schedule/generate', [StaffScheduleController::class, 'generate'])->name('staff-schedule.generate');
-
 /*
  * The screens staff punch at, and the cards they punch with.
  *
@@ -383,6 +378,11 @@ Route::middleware('role:admin,teacher')->group(function () {
     // Read-only for teachers: knowing who else is on the floor at 3pm is the
     // reason the roster exists, and hiding it would send them back to asking.
     Route::get('/staff-schedule', [StaffScheduleController::class, 'index'])->name('staff-schedule.index');
+
+    // Generating it is open to teachers as well as the director: the lead
+    // teacher on the floor is often the one who knows the week has changed and
+    // needs the roster rebuilt. The rules it is built from stay director-only.
+    Route::post('/staff-schedule/generate', [StaffScheduleController::class, 'generate'])->name('staff-schedule.generate');
 
     // The same week, narrowed to the person asking. Their own row is the one
     // they came for, and a phone in a corridor is no place to find it in a

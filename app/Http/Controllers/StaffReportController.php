@@ -47,7 +47,9 @@ class StaffReportController extends Controller
         'attendance-counter' => ['label' => 'Attendance Counter', 'period' => 'range', 'pay' => false],
         'attendance-only' => ['label' => 'Attendance-Only', 'period' => 'range', 'pay' => false],
         'daily-absence' => ['label' => 'Daily Attendance Absence', 'period' => 'range', 'pay' => false],
-        'current-status' => ['label' => 'Current Employee Status', 'period' => 'none', 'pay' => false],
+        // One day rather than none: it reads today by default, and any other
+        // day on request, so "who was in on Tuesday" is the same report.
+        'current-status' => ['label' => 'Current Employee Status', 'period' => 'day', 'pay' => false],
 
         'daily-summary-1w' => ['label' => 'Employee Daily Summary — One Week', 'period' => 7, 'pay' => true],
         'daily-summary-2w' => ['label' => 'Employee Daily Summary — Two Weeks', 'period' => 14, 'pay' => true],
@@ -165,11 +167,15 @@ class StaffReportController extends Controller
             ];
         }
 
+        // A one-day report defaults to today; everything else to this week.
         $start = blank($request->input('start'))
-            ? today()->startOfWeek(Carbon::MONDAY)
+            ? ($period === 'day' ? today() : today()->startOfWeek(Carbon::MONDAY))
             : Carbon::parse($request->input('start'))->startOfDay();
 
-        if (is_int($period)) {
+        if ($period === 'day') {
+            $end = $start->copy();
+            $truncated = false;
+        } elseif (is_int($period)) {
             $end = $start->copy()->addDays($period - 1);
             $truncated = false;
         } else {
@@ -220,7 +226,7 @@ class StaffReportController extends Controller
             'attendance-counter' => $this->attendanceCounter($staff, $filters),
             'attendance-only' => $this->attendanceOnly($staff, $filters),
             'daily-absence' => $this->dailyAbsence($staff, $filters),
-            'current-status' => $this->currentStatus($staff),
+            'current-status' => $this->currentStatus($staff, $filters['start']->toDateString()),
             'daily-summary-1w', 'daily-summary-2w' => $this->dailySummary($staff, $filters),
             'employee-summary' => $this->employeeSummary($staff, $filters),
             'date-wise-summary' => $this->dateWiseSummary($staff, $filters),
@@ -344,9 +350,9 @@ class StaffReportController extends Controller
     }
 
     /** Where everybody stands right now, which is the only period it has. */
-    private function currentStatus(Collection $staff): array
+    private function currentStatus(Collection $staff, string $date): array
     {
-        $today = today()->toDateString();
+        $today = $date;
 
         $rows = $staff->map(function (User $person) use ($today) {
             $day = $this->day($person, $today);

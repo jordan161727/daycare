@@ -99,17 +99,25 @@ class StaffReportCatalogueTest extends TestCase
         $this->assertStringContainsString('Showing 1 row', $html);
     }
 
-    public function test_current_status_reads_today_and_takes_no_dates(): void
+    public function test_current_status_reads_today_unless_another_day_is_chosen(): void
     {
         $this->punch($this->rachel, '2026-09-23 07:45', TimePunch::IN);
+        $this->punch($this->rachel, '2026-09-22 08:00', TimePunch::IN);
+        $this->punch($this->rachel, '2026-09-22 16:00', TimePunch::OUT);
 
         $html = $this->report('current-status');
 
         $this->assertStringContainsString('Clocked in', $html);
         $this->assertStringContainsString('Not in', $html);
-        // A report about right now has no period to set, so the form does not
-        // offer one — an input that changes nothing is one somebody will set.
-        $this->assertStringNotContainsString('id="start"', $html);
+        // One day to set, today by default — so "who was in on Tuesday" is
+        // the same report pointed at Tuesday.
+        $this->assertStringContainsString('id="start"', $html);
+        $this->assertStringNotContainsString('id="end"', $html);
+
+        $html = $this->report('current-status', ['start' => '2026-09-22']);
+
+        $this->assertStringContainsString('Clocked out', $html);
+        $this->assertStringContainsString('4:00 PM', $html);
     }
 
     public function test_the_summary_averages_over_days_worked_not_days_in_the_range(): void

@@ -126,7 +126,7 @@
     <div class="glass-card mt-5 rounded-2xl px-6 py-16 text-center">
         <p class="text-sm text-slate-500">
             You are not scheduled for any shift this week.
-            @if(! $week) The week has not been built yet — it will appear here once the director generates it. @endif
+            @if(! $week) The week has not been built yet — it will appear here once it is generated. @endif
         </p>
     </div>
 @else

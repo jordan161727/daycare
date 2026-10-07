@@ -196,7 +196,7 @@ class LeaveScheduleTest extends TestCase
 
         $this->actingAs($this->admin)->get(route('staff-schedule.index'))
             ->assertOk()
-            ->assertSee('VACATION')
+            ->assertSee('Vacation')
             ->assertSee('approved leave');
     }
 

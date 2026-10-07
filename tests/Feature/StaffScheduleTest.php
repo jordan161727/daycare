@@ -6,6 +6,7 @@ use App\Models\Child;
 use App\Models\ScheduleSlot;
 use App\Models\StaffRule;
 use App\Models\StaffShift;
+use App\Models\StaffScheduleWeek;
 use App\Models\User;
 use App\Services\StaffSchedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -352,7 +353,7 @@ class StaffScheduleTest extends TestCase
             ->get(route('staff-schedule.index', ['week' => self::WEEK]))
             ->assertOk()
             ->assertSee('Emily Carter')
-            ->assertSee('Week Schedule');
+            ->assertSee('Weekly schedule');
     }
 
     public function test_nobody_is_ever_scheduled_in_two_rooms_at_once(): void
@@ -457,13 +458,65 @@ class StaffScheduleTest extends TestCase
             ->assertSee('Under ratio');
     }
 
-    public function test_a_teacher_can_read_the_roster_but_not_regenerate_it(): void
+    public function test_a_teacher_can_read_the_roster_and_regenerate_it(): void
     {
         $emily = $this->teacher('Emily Carter', 'FT', 'Toddler');
         $this->scheduler->generate(self::WEEK);
 
         $this->actingAs($emily)->get(route('staff-schedule.index', ['week' => self::WEEK]))->assertOk();
-        $this->actingAs($emily)->post(route('staff-schedule.generate'), ['week' => self::WEEK])->assertForbidden();
+        $this->actingAs($emily)->post(route('staff-schedule.generate'), ['week' => self::WEEK])->assertRedirect(route('staff-schedule.index', ['week' => self::WEEK, 'mode' => 'teacher']));
+        $this->assertSame($emily->id, StaffScheduleWeek::firstWhere('week_start', self::WEEK)->generated_by);
+    }
+
+    public function test_generating_asks_in_the_apps_own_dialog_not_the_browsers(): void
+    {
+        $admin = $this->admin();
+
+        // Before the week is built: nothing is lost, and the dialog says so.
+        $html = $this->actingAs($admin)->get(route('staff-schedule.index', ['week' => self::WEEK]))->assertOk()->getContent();
+        $this->assertStringNotContainsString('confirm(', $html, 'the browser\'s own confirm box is back');
+        $this->assertStringContainsString('role="alertdialog"', $html);
+        $this->assertStringContainsString('Generate this week?', $html);
+        $this->assertStringContainsString('nothing is replaced', $html);
+
+        // Once built, it says how many shifts go.
+        $this->teacher('Emily Carter', 'FT', 'Toddler');
+        $this->scheduler->generate(self::WEEK);
+        $html = $this->actingAs($admin)->get(route('staff-schedule.index', ['week' => self::WEEK]))->assertOk()->getContent();
+        $this->assertStringContainsString('Regenerate this week?', $html);
+        $this->assertStringContainsString('Replace and regenerate', $html);
+        $this->assertMatchesRegularExpression('/The \d+ shifts? on this week/', $html);
+    }
+
+    public function test_the_week_grid_shows_the_children_under_the_staff_and_filters_by_room(): void
+    {
+        $admin = $this->admin();
+        $this->teacher('Emily Carter', 'FT', 'Toddler');
+        $this->teacher('Maria Santos', 'FT', 'Infant');
+        $this->scheduler->generate(self::WEEK);
+
+        \App\Models\Child::create([
+            'lan' => '1001', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'status' => 'Active',
+            'classroom' => 'Toddler', 'schedule_days' => [1, 3], 'drop_off_time' => '08:00', 'pick_up_time' => '16:00',
+        ]);
+        \App\Models\Child::create([
+            'lan' => '1002', 'first_name' => 'Grace', 'last_name' => 'Hopper', 'status' => 'Inactive', 'classroom' => 'Toddler',
+        ]);
+
+        $html = $this->actingAs($admin)->get(route('staff-schedule.index', ['week' => self::WEEK]))->assertOk()->getContent();
+        $this->assertStringContainsString('Staff scheduled', $html);
+        $this->assertStringContainsString('Students booked', $html);
+        $this->assertStringContainsString('Lovelace', $html);
+        $this->assertStringContainsString('8:00 AM – 4:00 PM', $html);
+        // On the roll but not coming: not a row on the week.
+        $this->assertStringNotContainsString('Hopper', $html);
+        // The week is named the way the toolbar reads it.
+        $this->assertStringContainsString('All rooms', $html);
+
+        // One room: the other room's teacher and children drop out.
+        $html = $this->actingAs($admin)->get(route('staff-schedule.index', ['week' => self::WEEK, 'room' => 'Infant']))->assertOk()->getContent();
+        $this->assertStringContainsString('Maria Santos', $html);
+        $this->assertStringNotContainsString('Lovelace', $html);
     }
 
     // ---------------------------------------------------------------- helpers

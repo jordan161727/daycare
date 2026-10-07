@@ -42,6 +42,36 @@
     --color-indigo-900: #303a53;
     --color-indigo-950: #20283b;
 
+    /* Little Angels design system — the light-theme tokens the admin screens
+       are drawn with, named so a template reads "la-accent" rather than a
+       hex nobody can place. Dark mode keeps using the dark: variants. */
+    --color-la-bg: #f6f7fb;
+    --color-la-card: #ffffff;
+    --color-la-well: #f2f4f9;
+    --color-la-brand: #b4c0e8;
+    --color-la-navpill: #eef1fb;
+    --color-la-border: #e7e9f0;
+    --color-la-border-strong: #cfd3de;
+    --color-la-ink: #1c2130;
+    --color-la-muted: #5f6676;
+    --color-la-faint: #8a90a0;
+    --color-la-link: #4c5a9e;
+    --color-la-accent: #1b5e91;
+    --color-la-accent-soft: #dcebfa;
+    --color-la-accent-border: #b9d6f5;
+    --color-la-today: #f1f6fd;
+    --color-la-bar: #5b8fd6;
+    --color-la-ok: #15803d;
+    --color-la-ok-dot: #10b981;
+    --color-la-warn: #b45309;
+    --color-la-warn-soft: #fef3c7;
+    --color-la-warn-border: #f3d27a;
+    --color-la-warn-dot: #f59e0b;
+    --color-la-danger: #be123c;
+    --color-la-danger-soft: #ffe4e6;
+    --color-la-danger-border: #f9c2cb;
+    --color-la-danger-dot: #f43f5e;
+
     --color-violet-400: #b6c3e6;
     --color-violet-500: #93a4d1;
     --color-violet-600: #7486b6;
