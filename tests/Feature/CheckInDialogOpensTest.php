@@ -226,13 +226,14 @@ class CheckInDialogOpensTest extends TestCase
         $this->assertSame(
             [
                 // From noon the AM is switched off: only the PM clocks in and out.
-                ['text' => 'AM ✓ Done 1 8:05a → 11:30a 3h 25m 1 check-in 3h 25m', 'selected' => false, 'disabled' => true],
+                ['text' => 'AM ✓ Done 8:05a → 11:30a 1 check-in · 3h 25m', 'selected' => false, 'disabled' => true],
                 ['text' => 'PM To do — : — Not clocked in', 'selected' => true, 'disabled' => false],
             ],
             $result['tabs']
         );
         $this->assertNull($result['status']);
-        $this->assertSame([], $result['entries']);
+        // And the one list under the blocks carries the pair, named for its block, with its check.
+        $this->assertSame(['1 AM In 8:05a0 → Out 11:30a 3h 25m'], $result['entries']);
         $this->assertSame('Clock in · PM', $result['button']);
 
         // And the clock-in books the PM row, not the AM again.

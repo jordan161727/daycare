@@ -58,9 +58,11 @@ class AttendanceCellDesignTest extends TestCase
         $map = $response->viewData('attendanceMap');
         $this->assertSame('8:42a', $map[$child->id][self::MONDAY]['FULL']);
 
-        // And the cell is that time — with the departure on the end once
-        // there is one, and no other mark beside it.
-        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $response->getContent());
+        // And the cell is that arrival, alone: the departure is the cards'
+        // to show, and the hover's. Only in Edit is the whole session
+        // written in the box, because that is where a wrong departure is
+        // put right and it cannot be corrected unseen.
+        $this->assertStringContainsString('return this.editing ? this.sessionSpan(childId, date, session) : this.sessionTime(childId, date, session);', $response->getContent());
     }
 
     public function test_the_four_states_are_the_four_marks_on_the_sheet(): void
@@ -129,7 +131,7 @@ class AttendanceCellDesignTest extends TestCase
         // which is now the only form, so a whole day and a half day are the
         // same shape down one column.
         $this->assertStringContainsString('let text = this.sessionTime(childId, date, session);', $html);
-        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $html);
+        $this->assertStringContainsString('return this.editing ? this.sessionSpan(childId, date, session) : this.sessionTime(childId, date, session);', $html);
     }
 
     public function test_a_sheet_with_no_half_day_room_keeps_its_rows_compact(): void
@@ -408,5 +410,27 @@ class AttendanceCellDesignTest extends TestCase
             'classroom' => 'PreK',
             'birth_date' => '2022-12-15',
         ]);
+    }
+
+    /**
+     * A child who left and came back has more than one entry on the day. The
+     * box stays the arrival alone — the centre did not want a count in it —
+     * and the hover says how many entries there are and lists them as pairs
+     * rather than one run of dashes.
+     */
+    public function test_a_day_with_a_return_counts_its_entries_on_hover_only(): void
+    {
+        $this->makeChild();
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        $html = $this->actingAs($this->admin)
+            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringNotContainsString('att-count', $html);
+        $this->assertStringContainsString("entryCount(childId, date, session) { return this.isPresent(childId, date, session) ? 1 + this.returnsOf(childId, date, session).length : 0; }", $html);
+        $this->assertStringContainsString("? entries + ' entries: ' + this.entryList(childId, date, session)", $html);
+        $this->assertStringContainsString("pairs.push(arrived + '–' + left); arrived = back;", $html);
     }
 }

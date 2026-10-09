@@ -372,22 +372,16 @@
                                               : (slotAt(child, s) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200')"
                                           x-text="slotAt(child, s)?.out ? '✓ Done' : (slotAt(child, s) ? '● In' : 'To do')"></span>
                                 </span>
-                                {{-- The block's entries, in order: a numbered
-                                     line a pair, in → out and how long, and
-                                     the block's count and total under them. --}}
+                                {{-- First in and last out, and the block's count and
+                                     total: the block is a selector, half the dialog
+                                     wide, and that is all that fits it legibly. The
+                                     entries themselves, with their checks, are listed
+                                     in full under the blocks. --}}
                                 <template x-if="slotAt(child, s)">
-                                    <span class="mt-2 block text-xs tabular-nums" data-session-entries>
-                                        <template x-for="(entry, i) in entriesOf(slotAt(child, s))" :key="'entry-' + s + '-' + i">
-                                            <span class="flex items-baseline gap-1.5 py-0.5">
-                                                <span class="w-3 shrink-0 text-[0.6667rem] text-slate-400 dark:text-slate-500" x-text="i + 1"></span>
-                                                <span class="flex-1 truncate"><b x-text="entry.in"></b> <span class="text-slate-400">→</span> <b x-text="entry.out || 'now'" :class="entry.out ? '' : 'text-emerald-700 dark:text-emerald-300'"></b></span>
-                                                <span class="shrink-0 text-[0.6667rem]" :class="entry.out ? 'text-slate-500 dark:text-slate-400' : 'font-semibold text-emerald-700 dark:text-emerald-300'" x-text="entry.out ? spanText(spanOf(entry)) : 'open'"></span>
-                                            </span>
-                                        </template>
-                                        <span class="mt-1 flex items-center justify-between border-t border-slate-200/70 pt-1 text-[0.6667rem] dark:border-white/10">
-                                            <span class="text-slate-500 dark:text-slate-400" x-text="entriesOf(slotAt(child, s)).length + ' check-in' + (entriesOf(slotAt(child, s)).length === 1 ? '' : 's')"></span>
-                                            <span class="font-semibold" x-text="spanText(slotTotal(slotAt(child, s)).closed) + (slotTotal(slotAt(child, s)).open ? ' + open' : '')"></span>
-                                        </span>
+                                    <span class="mt-1.5 block" data-session-summary>
+                                        <span class="block text-sm font-semibold tabular-nums"><span x-text="slotAt(child, s).in"></span> <span class="font-normal text-slate-400">→</span> <span x-text="slotAt(child, s).out || 'now'" :class="slotAt(child, s).out ? '' : 'text-emerald-700 dark:text-emerald-300'"></span></span>
+                                        <span class="block text-[0.6667rem] text-slate-500 dark:text-slate-400"
+                                              x-text="entriesOf(slotAt(child, s)).length + ' check-in' + (entriesOf(slotAt(child, s)).length === 1 ? '' : 's') + ' · ' + spanText(slotTotal(slotAt(child, s)).closed) + (slotTotal(slotAt(child, s)).open ? ' + open' : '')"></span>
                                     </span>
                                 </template>
                                 <template x-if="! slotAt(child, s)">
@@ -399,12 +393,6 @@
                             </button>
                         </template>
                     </div>
-                </template>
-
-                {{-- The day across both blocks: how many times, and how long so far. --}}
-                <template x-if="sessionsOf(child).length > 1 && dayEntries(child).length">
-                    <p class="mt-2 text-[0.7333rem] text-slate-500 dark:text-slate-400" data-day-summary
-                       x-text="'Today · ' + dayEntries(child).length + ' check-in' + (dayEntries(child).length === 1 ? '' : 's') + ' · ' + spanText(dayTotal(child)) + ' so far'"></p>
                 </template>
 
                 {{-- One session a day: the one line says it all. --}}
@@ -482,11 +470,13 @@
                     </form>
                 </template>
 
-                {{-- Every clock-in and clock-out of the day, on the chosen
-                     session, in order. A child who left at eleven and came
-                     back at one has two entries, and both stay: the client's
-                     rule is that nothing on the day's clock is overwritten. --}}
-                <template x-if="! correcting(child) && sessionsOf(child).length === 1 && dayEntries(child).length">
+                {{-- Every clock-in and clock-out of the day, in order, each
+                     with the check taken at it. A child who left at eleven and
+                     came back at one has two entries, and both stay: the
+                     client's rule is that nothing on the day's clock is
+                     overwritten. A School Age day names the block on each row,
+                     because the AM and the PM are two rows on the register. --}}
+                <template x-if="! correcting(child) && dayEntries(child).length">
                     <div class="mt-5 rounded-xl bg-slate-50 px-3 py-2.5 text-left dark:bg-white/5" data-entries>
                         <p class="text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400"
                            x-text="'Today\'s entries · ' + dayEntries(child).length"></p>
@@ -494,7 +484,8 @@
                             <template x-for="(entry, i) in dayEntries(child)" :key="'entry-' + i">
                                 <li class="flex items-baseline gap-2">
                                     <span class="w-3 shrink-0 text-slate-400 dark:text-slate-500" x-text="i + 1"></span>
-                                    <span class="flex-1">In <b x-text="entry.in"></b> <span class="text-slate-400">→</span> <span x-text="entry.out ? 'Out ' : ''"></span><b x-text="entry.out || 'now'" :class="entry.out ? '' : 'text-emerald-700 dark:text-emerald-300'"></b></span>
+                                    <template x-if="sessionsOf(child).length > 1"><span class="w-6 shrink-0 text-[0.6rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400" x-text="entry.session" data-entry-session></span></template>
+                                    <span class="flex-1 whitespace-nowrap">In <b x-text="entry.in"></b><template x-if="entry.in_code !== null && entry.in_code !== undefined"><span class="att-chip att-chip-xs ml-1" :class="entry.in_code === 0 ? 'att-chip-ok' : 'att-chip-sick'" :title="codeLabel(entry.in_code) + (entry.in_note ? ' — ' + entry.in_note : '')" x-text="entry.in_code" data-entry-in-code></span></template> <span class="text-slate-400">→</span> <span x-text="entry.out ? 'Out ' : ''"></span><b x-text="entry.out || 'now'" :class="entry.out ? '' : 'text-emerald-700 dark:text-emerald-300'"></b><template x-if="entry.out && entry.out_code !== null && entry.out_code !== undefined"><span class="att-chip att-chip-xs ml-1" :class="entry.out_code === 0 ? 'att-chip-ok' : 'att-chip-sick'" :title="codeLabel(entry.out_code) + (entry.out_note ? ' — ' + entry.out_note : '')" x-text="entry.out_code" data-entry-out-code></span></template></span>
                                     <span class="shrink-0 text-[0.6667rem]" :class="entry.out ? 'text-slate-500 dark:text-slate-400' : 'font-semibold text-emerald-700 dark:text-emerald-300'" x-text="entry.out ? spanText(spanOf(entry)) : 'open'"></span>
                                 </li>
                             </template>
@@ -838,13 +829,31 @@ function checkInGrid() { return {
         let arrived = slot.in;
 
         for (const [left, back] of slot.trips ?? []) {
-            entries.push({ in: arrived, out: left });
+            entries.push({ session: slot.session, in: arrived, out: left });
             arrived = back;
         }
 
-        entries.push({ in: arrived, out: slot.out || null });
+        entries.push({ session: slot.session, in: arrived, out: slot.out || null });
+
+        // The checks ride with the latest entry: a child clocked in again
+        // is checked again at the door, and that check replaces the row's
+        // arrival code (the earlier one stays in the audit), so it belongs
+        // beside the latest in. The leaving check sits beside the out it was
+        // taken at, and comes off once the child is back in.
+        const final = entries[entries.length - 1];
+        final.in_code = slot.in_code ?? null;
+        final.in_note = slot.in_note ?? null;
+        if (final.out) { final.out_code = slot.out_code ?? null; final.out_note = slot.out_note ?? null; }
 
         return entries;
+    },
+
+    /** "0 · Normal" for a saved code, or nothing when no check was taken. */
+    codeLabel(code) {
+        if (code === null || code === undefined) return '';
+        const entry = this.codes.find(c => Number(c.code) === Number(code));
+
+        return entry ? entry.code + ' · ' + entry.label : String(code);
     },
 
     /** The latest arrival on a slot or a day: the last return, else the first in. */

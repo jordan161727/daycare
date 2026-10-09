@@ -1147,6 +1147,8 @@ function attendanceApp() { return {
     outTime(childId, date, session) { return this.out?.[childId]?.[date]?.[session] ?? null; },
     isOut(childId, date, session) { return this.outTime(childId, date, session) !== null; },
     returnsOf(childId, date, session) { return this.returns?.[childId]?.[date]?.[session] ?? []; },
+    /** How many times the child clocked in on the session: the arrival, and once more for each trip back. */
+    entryCount(childId, date, session) { return this.isPresent(childId, date, session) ? 1 + this.returnsOf(childId, date, session).length : 0; },
 
     /**
      * The next thing a tap does: {session, action: 'in' | 'out' | 'done'}.
@@ -1401,6 +1403,15 @@ function attendanceApp() { return {
         let text = this.sessionTime(childId, date, session);
         for (const [left, back] of this.returnsOf(childId, date, session)) text += '–' + left + ', ' + back;
         return text + (this.isOut(childId, date, session) ? '–' + this.outTime(childId, date, session) : '');
+    },
+
+    /** The same session as pairs — "12:54p–4:04p, 4:04p–4:30p" — one for each time the child was in. */
+    entryList(childId, date, session) {
+        const pairs = [];
+        let arrived = this.sessionTime(childId, date, session);
+        for (const [left, back] of this.returnsOf(childId, date, session)) { pairs.push(arrived + '–' + left); arrived = back; }
+        pairs.push(arrived + (this.isOut(childId, date, session) ? '–' + this.outTime(childId, date, session) : '–now'));
+        return pairs.join(', ');
     },
 
     /** What a card says under the name: today, every session it books. */
@@ -2719,9 +2730,15 @@ function attendanceApp() { return {
             // The hover tells the whole session — "Signed in 8:05a–11:30a" —
             // where the box itself shows the arrival alone; the departure is
             // read here without leaving the table.
+            // More than one entry is said as such — "2 entries: 12:54p–4:04p,
+            // 4:04p–4:30p" — rather than left for the reader to count the dashes.
+            const entries = this.entryCount(childId, date, session);
+            const span = entries > 1
+                ? entries + ' entries: ' + this.entryList(childId, date, session)
+                : this.sessionSpan(childId, date, session);
             let note = this.isScheduled(childId, date, session)
-                ? 'Signed in ' + this.sessionSpan(childId, date, session)
-                : 'Signed in ' + this.sessionSpan(childId, date, session) + ' — not scheduled, still billable';
+                ? 'Signed in ' + span
+                : 'Signed in ' + span + ' — not scheduled, still billable';
 
             // Live today, the box is a clock: say where the day stands.
             if (! this.editing && date === this.today) {

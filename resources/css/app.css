@@ -414,6 +414,10 @@
         font-size: 0.7333rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
     }
     .att-chip + .att-chip { margin-left: 0.1333rem; }
+    /* The door dialog's entries list: the same chip, but a code beside a
+       time on a line that must stay one line in a block half the dialog
+       wide. Not pressed, so it does not need a finger's width. */
+    .att-chip-xs { min-width: 1.3rem; height: 0.9333rem; padding: 0 0.2rem; font-size: 0.6rem; border-radius: 0.2667rem; cursor: default; vertical-align: 1px; }
     .att-chip-none { border-style: dashed; @apply border-slate-300 text-slate-400 dark:border-white/20 dark:text-slate-500; }
     .att-chip-ok { border-style: solid; @apply border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
     .att-chip-sick { border-style: solid; @apply border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100; }

@@ -974,4 +974,71 @@ class CheckInScreenTest extends TestCase
         $this->assertStringNotContainsString('chipHtml', $html);
         $this->assertStringNotContainsString('sickToday', $html);
     }
+
+    /**
+     * The code a teacher saved is read back, not just stored: the dialog's
+     * entries list carries the arrival and leaving checks beside their times
+     * as small numbered chips, the label on hover, so an entry stays on one
+     * line. The roster card keeps to the time alone — the centre's ask.
+     */
+    public function test_the_saved_health_codes_are_shown_in_the_dialog_only(): void
+    {
+        Attendance::create([
+            'child_id' => $this->child->id, 'attendance_date' => '2026-09-23', 'session' => 'FULL',
+            'signed_in_at' => Carbon::parse('2026-09-23 07:46'), 'signed_out_at' => Carbon::parse('2026-09-23 15:11'),
+            'health_in_code' => 0, 'health_out_code' => 4,
+        ]);
+
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        // The data reaches the page with both codes on the day…
+        $data = str_replace('\u0022', '"', $html);
+        $this->assertStringContainsString('"in":"7:46a","in_code":0', $data);
+        $this->assertStringContainsString('"out":"3:11p","out_code":4', $data);
+
+        // …and the dialog's entries draw them as chips with the code's label.
+        $this->assertStringContainsString('data-entry-in-code', $html);
+        $this->assertStringContainsString('data-entry-out-code', $html);
+        $this->assertStringContainsString('x-text="entry.in_code" data-entry-in-code', $html);
+        $this->assertStringContainsString(':title="codeLabel(entry.in_code)', $html);
+        $this->assertStringContainsString("return entry ? entry.code + ' · ' + entry.label : String(code);", $html);
+
+        // The card's line is the time alone.
+        $this->assertStringNotContainsString("' · code ' + day.in_code", $html);
+        $this->assertStringContainsString("if (this.isIn(row)) return 'In · ' + last.in + nth;", $html);
+    }
+
+    /**
+     * A School Age day is two blocks, and each keeps its own checks: the AM
+     * arrival and leaving codes on the AM row, the PM ones on the PM row. The
+     * door saves them per block and reads both back into the dialog.
+     */
+    public function test_school_age_blocks_each_save_and_show_their_own_health_codes(): void
+    {
+        $this->child->update(['classroom' => 'School Age', 'dob' => Carbon::parse('2026-09-23')->subYears(7)->toDateString()]);
+
+        // Morning: in with 0, out with 3.
+        $am = $this->actingAs($this->admin)->postJson(route('check-in.store'), ['child_id' => $this->child->id, 'session' => 'AM', 'health_code' => 0])
+            ->assertOk()->assertJsonPath('health_in', 0)->json('attendance_id');
+        $this->travelTo(Carbon::parse('2026-09-23 11:40:00'));
+        $this->actingAs($this->admin)->postJson(route('check-in.out', $am), ['health_code' => 3])
+            ->assertOk()->assertJsonPath('health_out', 3);
+
+        // Afternoon: in with 4 and a note.
+        $this->travelTo(Carbon::parse('2026-09-23 13:05:00'));
+        $this->actingAs($this->admin)->postJson(route('check-in.store'), ['child_id' => $this->child->id, 'session' => 'PM', 'health_code' => 4, 'health_note' => 'warm'])
+            ->assertOk()->assertJsonPath('health_in', 4);
+
+        $rows = Attendance::where('child_id', $this->child->id)->get()->keyBy('session');
+        $this->assertSame([0, 3], [$rows['AM']->health_in_code, $rows['AM']->health_out_code]);
+        $this->assertSame([4, null], [$rows['PM']->health_in_code, $rows['PM']->health_out_code]);
+
+        // Both blocks reach the page with their codes, and the per-block list draws them.
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+        $data = str_replace('\u0022', '"', $html);
+        $this->assertStringContainsString('"AM":{"id":'.$am.',"session":"AM","in":"8:00a","in_code":0,"in_note":null,"out":"11:40a","out_code":3', $data);
+        $this->assertStringContainsString('"session":"PM","in":"1:05p","in_code":4,"in_note":"warm","out":null,"out_code":null', $data);
+        $this->assertStringContainsString('data-entry-session', $html);
+        $this->assertStringContainsString('data-session-summary', $html);
+    }
 }

@@ -56,23 +56,17 @@ class LayoutChromeTest extends TestCase
     }
 
     /**
-     * Leave is parked, like the time clock, and parked means nothing renders.
+     * The sidebar as the centre set it on 2026-10-09: four links — Dashboard,
+     * Director Attendance, Teacher Attendance, Children — and nothing else.
      *
-     * This used to assert the director's queue and its waiting-count badge.
-     * Both links are commented out of the sidebar now — built, not yet being
-     * run — so what is worth holding is that the badge does not appear for
-     * requests that really are waiting. Restore the count assertions with the
-     * link.
+     * Everything after Children is parked behind @if(false): built, kept in
+     * the file with its comments and role checks, not being run. Parked
+     * means nothing renders, so the director's leave queue and its waiting
+     * badge stay off even with requests really waiting. When the links are
+     * switched back on, restore the count assertions with them.
      */
-    public function test_the_leave_links_are_live_for_the_roles_they_belong_to(): void
+    public function test_the_sidebar_is_the_four_core_links_and_the_rest_is_parked(): void
     {
-        /*
-         * The sidebar as the centre set it on 2026-09-29, with every parked
-         * link switched back on: the director's queue, with the count of
-         * requests waiting on it, and everybody's own "My Leave" — the
-         * director included, who has leave too and simply cannot sign off
-         * their own. A teacher sees their own leave and not the queue.
-         */
         $admin = User::factory()->create(['role' => 'admin']);
         $teacher = User::factory()->create(['role' => 'teacher']);
 
@@ -87,17 +81,23 @@ class LayoutChromeTest extends TestCase
             ]);
         }
 
-        // The director: the queue, the two waiting on it, and their own leave.
-        $this->actingAs($admin)->get(route('dashboard'))->assertOk()
-            ->assertSee('Leave Requests')
-            ->assertSee('rounded-full bg-amber-500', escape: false)
-            ->assertSee('My Leave');
+        foreach ([$admin, $teacher] as $user) {
+            // The sidebar's own label markup, so a "Reports" card on the
+            // dashboard body does not stand in for the parked link.
+            $label = fn (string $text) => '<span x-show="!collapsed">'.$text.'</span>';
 
-        // A teacher: their own leave, but not the queue nor its badge.
-        $this->actingAs($teacher)->get(route('dashboard'))->assertOk()
-            ->assertSee('My Leave')
-            ->assertDontSee('Leave Requests')
-            ->assertDontSee('rounded-full bg-amber-500', escape: false);
+            $this->actingAs($user)->get(route('dashboard'))->assertOk()
+                ->assertSee($label('Dashboard'), escape: false)
+                ->assertSee($label('Director Attendance'), escape: false)
+                ->assertSee($label('Teacher Attendance'), escape: false)
+                ->assertSee($label('Children'), escape: false)
+                ->assertDontSee($label('Reports'), escape: false)
+                ->assertDontSee($label('Leave Requests'), escape: false)
+                ->assertDontSee($label('My Leave'), escape: false)
+                ->assertDontSee($label('Payroll Prep'), escape: false)
+                ->assertDontSee($label('Settings'), escape: false)
+                ->assertDontSee('rounded-full bg-amber-500', escape: false);
+        }
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void

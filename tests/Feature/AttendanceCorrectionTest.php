@@ -655,7 +655,8 @@ class AttendanceCorrectionTest extends TestCase
         // can be seen to be put right.
         $this->assertStringContainsString("' — tap: clock out'", $html);
         // The hover carries the departure the box leaves out.
-        $this->assertStringContainsString("'Signed in ' + this.sessionSpan(childId, date, session)", $html);
+        $this->assertStringContainsString("'Signed in ' + span", $html);
+        $this->assertStringContainsString(": this.sessionSpan(childId, date, session);", $html);
         $this->assertStringContainsString("' — clocked out ' + this.outTime(childId, date, session)", $html);
         $this->assertStringNotContainsString("' — tap: clock in again'", $html);
         $this->assertStringContainsString('return this.editing ? this.sessionSpan(childId, date, session) : this.sessionTime(childId, date, session);', $html);
