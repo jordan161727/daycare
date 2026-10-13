@@ -56,16 +56,16 @@ class LayoutChromeTest extends TestCase
     }
 
     /**
-     * The sidebar as the centre set it on 2026-10-09: four links — Dashboard,
-     * Director Attendance, Teacher Attendance, Children — and nothing else.
+     * The sidebar as the centre set it on 2026-10-14.
      *
-     * Everything after Children is parked behind @if(false): built, kept in
-     * the file with its comments and role checks, not being run. Parked
-     * means nothing renders, so the director's leave queue and its waiting
-     * badge stay off even with requests really waiting. When the links are
-     * switched back on, restore the count assertions with them.
+     * Four links and no more: Dashboard, Director Attendance, Teacher
+     * Attendance, Children — and the register only for the director, since a
+     * teacher works the door screen. Everything else is parked behind
+     * @if(false): built, kept in the file with its comments and role checks,
+     * not being run. Parked means nothing renders, so the leave queue and its
+     * waiting badge stay off even with requests really waiting.
      */
-    public function test_the_sidebar_is_the_four_core_links_and_the_rest_is_parked(): void
+    public function test_the_sidebar_is_the_four_core_links_and_the_register_is_the_directors(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $teacher = User::factory()->create(['role' => 'teacher']);
@@ -81,23 +81,27 @@ class LayoutChromeTest extends TestCase
             ]);
         }
 
-        foreach ([$admin, $teacher] as $user) {
-            // The sidebar's own label markup, so a "Reports" card on the
-            // dashboard body does not stand in for the parked link.
-            $label = fn (string $text) => '<span x-show="!collapsed">'.$text.'</span>';
+        // The sidebar's own label markup, so a "Reports" card on the
+        // dashboard body does not stand in for a link.
+        $label = fn (string $text) => '<span x-show="!collapsed">'.$text.'</span>';
 
+        foreach ([$admin, $teacher] as $user) {
             $this->actingAs($user)->get(route('dashboard'))->assertOk()
                 ->assertSee($label('Dashboard'), escape: false)
-                ->assertSee($label('Director Attendance'), escape: false)
                 ->assertSee($label('Teacher Attendance'), escape: false)
                 ->assertSee($label('Children'), escape: false)
                 ->assertDontSee($label('Reports'), escape: false)
-                ->assertDontSee($label('Leave Requests'), escape: false)
+                ->assertDontSee($label('Timesheets'), escape: false)
+                ->assertDontSee($label('Week Schedule'), escape: false)
                 ->assertDontSee($label('My Leave'), escape: false)
+                ->assertDontSee($label('Leave Requests'), escape: false)
                 ->assertDontSee($label('Payroll Prep'), escape: false)
                 ->assertDontSee($label('Settings'), escape: false)
                 ->assertDontSee('rounded-full bg-amber-500', escape: false);
         }
+
+        $this->actingAs($admin)->get(route('dashboard'))->assertSee($label('Director Attendance'), escape: false);
+        $this->actingAs($teacher)->get(route('dashboard'))->assertDontSee($label('Director Attendance'), escape: false);
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void

@@ -10,7 +10,7 @@
          Collapsed, the logo goes and the toggle centres in the rail. There is
          no room for both: the rail is eighty pixels wide, and a mark beside the
          toggle overflowed it rather than sitting in it. --}}
-    <div :class="collapsed ? 'desktop:justify-center' : ''" class="flex h-16 items-center justify-between px-3 lg:h-24">
+    <div :class="collapsed ? 'desktop:justify-center' : ''" class="flex h-20 items-center justify-between px-3 lg:h-28">
         {{-- flex-1 so the logo centres in the space the toggle leaves, rather
              than sitting hard against the left edge.
 
@@ -24,11 +24,14 @@
              Dark mode inverts it to a white mark. The lettering is outlined in
              near-black, and on the deep purple "Day Care Center" all but
              disappears otherwise. --}}
-        <a x-show="!collapsed" href="{{ route('dashboard') }}" class="flex min-w-0 flex-1 justify-center" aria-label="{{ $companyName }} — dashboard">
+        <a x-show="!collapsed" href="{{ route('dashboard') }}" class="flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5" aria-label="{{ $companyName }} — dashboard">
             <img src="{{ asset('images/littleangels-logo.png') }}"
                  alt="{{ $companyName }}"
                  width="531" height="228"
                  class="h-12 w-auto shrink-0 drop-shadow-sm lg:h-16 dark:brightness-0 dark:invert">
+            {{-- The app's name, under the centre's: the logo says whose it is,
+                 this says what it is. --}}
+            <span class="text-[0.6667rem] font-bold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-200" data-wordmark>AngelNest</span>
         </a>
         <button @click="collapsed = !collapsed" class="hidden rounded-lg p-2 text-slate-700 hover:bg-white/55 dark:text-slate-300 dark:hover:bg-white/10 desktop:block" aria-label="Collapse sidebar"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <button @click="mobileOpen = false" class="rounded-lg p-2 text-2xl leading-none text-slate-700 dark:text-slate-300 desktop:hidden" aria-label="Close menu">×</button>
@@ -44,15 +47,21 @@
          the scrollbar never appeared because there was nothing to overflow. --}}
     <nav class="sidebar-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-3 py-2">
         <a href="{{ route('dashboard') }}" class="nav-link {{ request()->routeIs('dashboard') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13h8V3H3v10zm10 8h8V3h-8v18zM3 21h8v-6H3v6z"/></svg><span x-show="!collapsed">Dashboard</span></a>
+        {{-- The register is the director's. A teacher works the door screen
+             below; the week sheet is not on their sidebar (14 Oct 2026). --}}
+        @if(auth()->user()->isAdmin())
         <a href="{{ route('attendance.index') }}" class="nav-link {{ request()->routeIs('attendance.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span x-show="!collapsed">Director Attendance</span><span x-show="!collapsed" class="ml-auto rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold">Today</span></a>
+        @endif
         {{-- The door screen, above the register: it is opened every morning
              and every afternoon, and the week sheet is opened to read. --}}
         <a href="{{ route('check-in.index') }}" class="nav-link {{ request()->routeIs('check-in.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg><span x-show="!collapsed">Teacher Attendance</span></a>
         <a href="{{ route('children.index') }}" class="nav-link {{ request()->routeIs('children.index') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-4-4h-1m-4 6H2v-2a4 4 0 014-4h3a4 4 0 014 4v2zm-5-6a4 4 0 100-8 4 4 0 000 8z"/></svg><span x-show="!collapsed">Children</span></a>
-        {{-- Hidden for now, Jordan's call (9 Oct 2026): the sidebar is the four
-             links above and nothing else. Everything below is parked, not
-             removed — the links, their comments and their role checks are
-             exactly as they were, and @if(true) brings them all back. --}}
+        {{-- Jordan's call (14 Oct 2026): the sidebar is Dashboard, Director
+             Attendance (director only), Teacher Attendance and Children, and
+             nothing else. Everything below is parked, not removed — the
+             links, their comments and their role checks are exactly as they
+             were, and @if(auth()->user()->isAdmin()) gives the director the
+             lot back. --}}
         @if(false)
         <a href="{{ route('reports.index') }}" class="nav-link {{ request()->routeIs('reports.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span x-show="!collapsed">Reports</span></a>
 
