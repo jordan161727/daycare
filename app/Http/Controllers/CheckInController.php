@@ -97,7 +97,15 @@ class CheckInController extends Controller
         $days = collect(range(0, $start->diffInDays($end)))
             ->map(fn (int $offset) => $start->copy()->addDays($offset));
 
-        $children = Child::visibleTo($user)
+        /*
+         * The whole floor, whoever is at the door. A teacher used to see
+         * their own room alone here, which fitted the register but not a
+         * door: the Infant teacher covering the Toddler room at seven has
+         * to be able to record the Toddler arriving. Their own room is
+         * where the screen opens — see $defaultRoom — not all it shows.
+         * The register (AttendanceController) keeps the per-room scope.
+         */
+        $children = Child::query()
             ->where('status', 'Active')
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -262,8 +270,14 @@ class CheckInController extends Controller
         $stats['awaited'] = $rows->filter(fn (array $row) => ($row['booked'][$today] ?? false)
             && ($row['byDay'][$today]['in'] ?? null) === null)->count();
 
+        // The room the screen opens on: a teacher's own, every time — the
+        // Infant teacher lands on Infant — with the other rooms a chip away.
+        // The director opens on everyone.
+        $defaultRoom = $user->isAdmin() ? '' : ($user->assignedClassrooms()[0] ?? '');
+
         return view('attendance.check-in', [
             'rows' => $rows,
+            'defaultRoom' => $defaultRoom,
             'days' => $days,
             'today' => $today,
             'codes' => $this->screening->codes(),
@@ -297,7 +311,9 @@ class CheckInController extends Controller
             'health_note' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $child = Child::visibleTo($request->user())->findOrFail($data['child_id']);
+        // Any child on the roll: the door shows the whole floor, so it
+        // clocks the whole floor — see index().
+        $child = Child::findOrFail($data['child_id']);
         $today = today()->toDateString();
 
         abort_unless($child->isEnrolledOn($today), 422, $child->displayName().' is not on the roll today.');
@@ -461,10 +477,7 @@ class CheckInController extends Controller
      */
     private function guard(Request $request, Attendance $attendance): void
     {
-        abort_unless(
-            Child::visibleTo($request->user())->whereKey($attendance->child_id)->exists(),
-            404,
-        );
+        abort_unless(Child::whereKey($attendance->child_id)->exists(), 404);
 
         abort_unless(
             $attendance->attendance_date->toDateString() === today()->toDateString(),

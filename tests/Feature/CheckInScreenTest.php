@@ -1041,4 +1041,56 @@ class CheckInScreenTest extends TestCase
         $this->assertStringContainsString('data-entry-session', $html);
         $this->assertStringContainsString('data-session-summary', $html);
     }
+
+    /**
+     * The door shows the whole floor to whoever is at it, and opens on the
+     * teacher's own room every time — the Infant teacher lands on Infant —
+     * with the other rooms a chip away. The director opens on everyone.
+     */
+    public function test_a_teacher_sees_every_room_at_the_door_and_opens_on_their_own(): void
+    {
+        $this->teacher->update(['classroom' => 'Toddler', 'classrooms' => ['Toddler']]);
+        $this->child->update(['classroom' => 'Infant']);
+        Child::create(['lan' => '10065', 'first_name' => 'Rowan', 'last_name' => 'Zane', 'status' => 'Active', 'classroom' => 'Toddler', 'dob' => '2024-05-01']);
+
+        // Every room is on the roll, not only theirs, and the screen opens on theirs.
+        foreach ([1, 2] as $visit) {
+            $html = $this->actingAs($this->teacher)->get(route('check-in.index'))->assertOk()
+                ->assertSee('Adkins', false)
+                ->assertSee('Zane', false)
+                ->getContent();
+            $this->assertStringContainsString("room: 'Toddler'", str_replace('"', "'", $html), "visit $visit");
+        }
+
+        // The director: everyone.
+        $this->assertStringContainsString("room: ''", $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent());
+
+        // And the teacher can clock a child from another room, since they can see them.
+        $this->actingAs($this->teacher)->postJson(route('check-in.store'), ['child_id' => $this->child->id, 'session' => 'FULL', 'health_code' => 0])
+            ->assertOk();
+        $this->assertSame(1, Attendance::where('child_id', $this->child->id)->count());
+    }
+
+    /**
+     * The leaving check opens on the arrival check. A child checked in with
+     * a 3 is offered a 3 at pick-up, not a 0, so the code is confirmed rather
+     * than retyped — and cannot fall back to Normal because nobody touched
+     * the box. Clocking in opens on 0, since there is nothing to carry.
+     */
+    public function test_clocking_out_carries_the_code_the_child_came_in_with_read_only(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString("this.code = leaving ? (slot?.in_code ?? 0) : 0;", $html);
+        $this->assertStringContainsString("this.note = leaving ? (slot?.in_note ?? '') : '';", $html);
+        // Run when the dialog opens, and again when the AM/PM block is switched.
+        $this->assertStringContainsString("this.session = this.nextStep(this.child).session;\n        this.presetCode();", $html);
+        $this->assertStringContainsString("this.session = s;\n        this.presetCode();", $html);
+
+        // Clocking out, the box is read-only and says so; the options carry
+        // :selected as well as x-model, or the preset would not show.
+        $this->assertStringContainsString('<select id="ci-code" x-model.number="code" :disabled="slotIn(child)"', $html);
+        $this->assertStringContainsString(':selected="Number(entry.code) === Number(code)"', $html);
+        $this->assertStringContainsString('Carried from check-in.', $html);
+    }
 }

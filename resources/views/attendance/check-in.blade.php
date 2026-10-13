@@ -500,9 +500,19 @@
                 <template x-if="! correcting(child)">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
                         <label for="ci-code" class="block text-sm font-semibold">Health code</label>
-                        <select id="ci-code" x-model.number="code" class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-night-800">
+                        {{-- Clocking out, the box is the arrival check, read-only: the
+                             code the child came in with is the code they leave with
+                             — the client's rule — and it is shown here so the teacher
+                             sees it, not retyped. A change of condition during the day
+                             is put right in Edit, where both checks can be corrected
+                             and the change is written down. --}}
+                        <select id="ci-code" x-model.number="code" :disabled="slotIn(child)"
+                                class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:font-semibold disabled:text-slate-700 dark:border-white/10 dark:bg-night-800 dark:disabled:bg-white/10 dark:disabled:text-slate-200">
                             <template x-for="entry in codes" :key="entry.code">
-                                <option :value="entry.code" x-text="entry.code + ' · ' + entry.label"></option>
+                                {{-- :selected as well as x-model: the options are
+                                     drawn after the value is set, and without it
+                                     the select falls back to its first option. --}}
+                                <option :value="entry.code" :selected="Number(entry.code) === Number(code)" x-text="entry.code + ' · ' + entry.label"></option>
                             </template>
                         </select>
 
@@ -512,7 +522,8 @@
                                       class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-night-800"></textarea>
                         </div>
 
-                        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">Defaults to 0 · Normal. Choose another code when something was seen.</p>
+                        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"
+                           x-text="slotIn(child) ? 'Carried from check-in. The child leaves with the code they arrived with; a change of condition is corrected in Edit.' : 'Defaults to 0 · Normal. Choose another code when something was seen.'"></p>
 
                         <p x-show="error" x-cloak class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300" x-text="error"></p>
 
@@ -596,7 +607,8 @@ function checkInGrid() { return {
         edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
     },
     search: '',
-    room: '',
+    // The room the screen opens on: a teacher's own, the director's everyone.
+    room: @js($defaultRoom),
     picker: null,
     note: '',
     error: '',
@@ -976,7 +988,24 @@ function checkInGrid() { return {
     pickSession(s) {
         if (this.blockDisabled(this.child, s)) return;
         this.session = s;
+        this.presetCode();
         this.loadForm();
+    },
+
+    /**
+     * What the health code select opens on.
+     *
+     * Clocking out, it is the code the child came in with — a child checked
+     * in with a 3 is still a 3 at pick-up unless somebody says otherwise —
+     * so the leaving check is confirmed rather than retyped, and a code
+     * cannot quietly fall back to Normal because nobody touched the box.
+     * Clocking in, there is nothing to carry, and it opens on 0.
+     */
+    presetCode() {
+        const slot = this.slotOf(this.child);
+        const leaving = this.slotIn(this.child);
+        this.code = leaving ? (slot?.in_code ?? 0) : 0;
+        this.note = leaving ? (slot?.in_note ?? '') : '';
     },
 
     /**
@@ -1073,13 +1102,12 @@ function checkInGrid() { return {
     openChild(id) {
         this.child = this.rows[id] ?? null;
         this.dialogOpen = this.child !== null;
-        this.code = 0;
-        this.note = '';
         this.error = '';
 
         // The register row the next press lands on. For a whole-day room,
         // the day; in Edit mode the cards above can switch it.
         this.session = this.nextStep(this.child).session;
+        this.presetCode();
 
         // What the checks are now, so the form opens on them and Save only
         // lights up when something is actually different.
