@@ -31,7 +31,7 @@
                  class="h-12 w-auto shrink-0 drop-shadow-sm lg:h-16 dark:brightness-0 dark:invert">
             {{-- The app's name, under the centre's: the logo says whose it is,
                  this says what it is. --}}
-            <span class="text-[0.6667rem] font-bold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-200" data-wordmark>AngelNest</span>
+            <span class="text-xs font-bold tracking-wide text-slate-700 dark:text-slate-200" data-wordmark>Angel Nest</span>
         </a>
         <button @click="collapsed = !collapsed" class="hidden rounded-lg p-2 text-slate-700 hover:bg-white/55 dark:text-slate-300 dark:hover:bg-white/10 desktop:block" aria-label="Collapse sidebar"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <button @click="mobileOpen = false" class="rounded-lg p-2 text-2xl leading-none text-slate-700 dark:text-slate-300 desktop:hidden" aria-label="Close menu">×</button>
