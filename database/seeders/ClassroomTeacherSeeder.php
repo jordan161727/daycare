@@ -20,12 +20,18 @@ use Illuminate\Support\Str;
  * password does not open every room.
  *
  * This keeps (or makes) exactly one account per room, named for the room,
- * sets the room's own password on it, and deletes every other teacher. The
- * director's account is not touched. Deleting a teacher takes their shifts,
- * punches and leave with them (the tables cascade), so run this before the
- * schedule and punch seeders, not after, if you want those to line up.
+ * and sets the room's own password on it. That is all it does by default:
+ * no child, no attendance row, no health code and no other account is
+ * touched — the director's included — so it is safe to run on a live
+ * database with real teachers on it.
+ *
+ * Removing the other teacher accounts is a separate, deliberate step, because
+ * deleting a teacher takes their shifts, punches and leave with them (the
+ * tables cascade). It happens only with TEACHER_PRUNE=1, and the seeder says
+ * how many it is about to remove before it does.
  *
  *     php artisan db:seed --class=ClassroomTeacherSeeder --force
+ *     TEACHER_PRUNE=1 php artisan db:seed --class=ClassroomTeacherSeeder --force
  */
 class ClassroomTeacherSeeder extends Seeder
 {
@@ -77,11 +83,22 @@ class ClassroomTeacherSeeder extends Seeder
             $this->command?->line(sprintf('  %-11s %-36s %s', $room, $email, $password));
         }
 
-        $gone = User::teachers()->whereNotIn('id', $keep)->get();
-        foreach ($gone as $user) {
-            $user->delete();
+        $others = User::teachers()->whereNotIn('id', $keep)->get();
+        $prune = filter_var(env('TEACHER_PRUNE', false), FILTER_VALIDATE_BOOL);
+
+        if ($prune) {
+            $this->command?->warn(sprintf('Removing %d other teacher account%s, with their shifts, punches and leave…', $others->count(), $others->count() === 1 ? '' : 's'));
+            foreach ($others as $user) {
+                $user->delete();
+            }
         }
 
-        $this->command?->info(sprintf('%d room teachers set; %d other teacher account%s deleted.', count($keep), $gone->count(), $gone->count() === 1 ? '' : 's'));
+        $this->command?->info(sprintf(
+            '%d room teachers set; %d other teacher account%s %s.',
+            count($keep),
+            $others->count(),
+            $others->count() === 1 ? '' : 's',
+            $prune ? 'removed' : 'left as they are (TEACHER_PRUNE=1 removes them)',
+        ));
     }
 }

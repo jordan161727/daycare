@@ -102,14 +102,14 @@
          and because switching to it should not cost a request. --}}
     <div x-show="view === 'sheet'" x-cloak>
     <div class="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" @click="room = ''"
+        <button type="button" @click="pickRoom('')"
                 :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'"
                 class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
             All <span x-text="counts.in"></span>/{{ $stats['enrolled'] }}
         </button>
 
         @foreach($roomChips as $chip)
-            <button type="button" @click="room = @js($chip['room'])"
+            <button type="button" @click="pickRoom(@js($chip['room']))"
                     :class="room === @js($chip['room']) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'"
                     class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
                 <span aria-hidden="true">{{ $chip['animal'] }}</span>
@@ -223,13 +223,13 @@
     <div x-show="view === 'today'" class="mt-4">
         {{-- Room pills: who is in, over who is enrolled. --}}
         <div class="flex flex-wrap gap-2" role="group" aria-label="Filter children by room">
-            <button type="button" @click="room = ''" :aria-pressed="room === '' ? 'true' : 'false'"
+            <button type="button" @click="pickRoom('')" :aria-pressed="room === '' ? 'true' : 'false'"
                     :class="room === '' ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-900 dark:text-slate-300 dark:hover:bg-white/10'"
                     class="rounded-full px-3.5 py-1.5 text-sm font-semibold transition">
                 All <span class="ml-1.5 opacity-70 tabular-nums" x-text="tally('').in + '/' + tally('').total"></span>
             </button>
             <template x-for="chip in rooms" :key="chip.room">
-                <button type="button" @click="room = chip.room" :aria-pressed="room === chip.room ? 'true' : 'false'"
+                <button type="button" @click="pickRoom(chip.room)" :aria-pressed="room === chip.room ? 'true' : 'false'"
                         :class="room === chip.room ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-900 dark:text-slate-300 dark:hover:bg-white/10'"
                         class="rounded-full px-3.5 py-1.5 text-sm font-semibold transition">
                     <span x-text="chip.animal" aria-hidden="true"></span>
@@ -248,6 +248,15 @@
                         <span class="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400" x-text="cards.length + ' children'"></span>
                     </h2>
                     <p class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                        {{-- The client's ask: "Sort", and the children currently in go
+                             all the way to the top. Pressed again, back to A–Z. --}}
+                        <button type="button" @click="inFirst = ! inFirst" data-card-sort :aria-pressed="inFirst ? 'true' : 'false'"
+                                :title="inFirst ? 'Children currently in are at the top — press for A–Z' : 'Put the children currently in at the top'"
+                                :class="inFirst ? 'border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 dark:border-emerald-400 dark:bg-emerald-500 dark:text-white' : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25'"
+                                class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition">
+                            <span aria-hidden="true">⇅</span>
+                            <span>Sort</span>
+                        </button>
                         <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span> On premises</span>
                         <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-slate-400" aria-hidden="true"></span> Currently out</span>
                     </p>
@@ -607,8 +616,20 @@ function checkInGrid() { return {
         edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
     },
     search: '',
-    // The room the screen opens on: a teacher's own, the director's everyone.
+    // The room the screen opens on: a teacher's own, the director's everyone,
+    // or the one the address names (/check-in?infant). The address follows
+    // the chips from then on — see pickRoom() — so the link can be copied.
     room: @js($defaultRoom),
+
+    /** A chip pressed: the room, and the address to match — /check-in?infant. */
+    pickRoom(room) {
+        this.room = room;
+        try {
+            const slug = room.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const url = window.location.pathname + (slug ? '?' + slug : '');
+            if (url !== window.location.pathname + window.location.search) history.replaceState(null, '', url);
+        } catch { /* nothing to update outside a browser */ }
+    },
     picker: null,
     note: '',
     error: '',
@@ -800,14 +821,25 @@ function checkInGrid() { return {
             .map(room => ({room, animal: seen[room] || ''}));
     },
 
-    /** The cards on screen: the room chosen, and the search box. */
+    /** The Sort button: the children currently in, at the top. */
+    inFirst: false,
+
+    /** The cards on screen: the room chosen, the search box, and the sort —
+        A–Z, with whoever is in first when the button is pressed. */
     get cards() {
         const term = this.search.trim().toLowerCase();
         return Object.values(this.rows)
             .filter(row => this.room === '' || row.room === this.room)
             .filter(row => term === '' || (row.display + ' ' + row.lan).toLowerCase().includes(term))
-            .sort((a, b) => a.display.localeCompare(b.display));
+            .sort((a, b) => (this.inFirst ? this.dayRank(a) - this.dayRank(b) : 0) || a.display.localeCompare(b.display));
     },
+
+    /**
+     * Where a child's day puts them when Sort is pressed: in the building
+     * first, then gone home, then not yet arrived — the client's mock, read
+     * left to right. A–Z inside each group.
+     */
+    dayRank(row) { return this.isIn(row) ? 0 : (this.isOut(row) ? 1 : 2); },
 
     /** The row's record on the day being looked at: first in, last out. */
     dayOf(row) { return row?.byDay?.[this.day] ?? null; },

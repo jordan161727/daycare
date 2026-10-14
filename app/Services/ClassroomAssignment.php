@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Child;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 /**
@@ -78,6 +79,32 @@ class ClassroomAssignment
     public static function rooms(): array
     {
         return array_column(self::BANDS, 'room');
+    }
+
+    /**
+     * The room named in a page's address, if any: "?infant", "?upk-4",
+     * "?upk4", "?school-age", "?schoolage" — a key with no value, spelt
+     * however the hand that typed it spells it, matched to a room by its
+     * letters alone. "?room=Infant" works too. Anything else is ignored, so
+     * a date or a page's own parameters can sit beside it.
+     */
+    public static function fromQuery(Request $request): ?string
+    {
+        $wanted = array_filter(array_merge(
+            [(string) $request->query('room', '')],
+            array_keys($request->query()),
+        ));
+        $letters = fn (string $text) => preg_replace('/[^a-z0-9]/', '', strtolower($text));
+
+        foreach ($wanted as $candidate) {
+            foreach (self::rooms() as $room) {
+                if ($letters($candidate) === $letters($room)) {
+                    return $room;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

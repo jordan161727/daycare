@@ -54,7 +54,7 @@ class RoomOrderTest extends TestCase
 
         $html = $this->actingAs($this->admin())->get(route('attendance.index'))->assertOk()->getContent();
 
-        preg_match_all('/@click="room=&quot;([^&]+)&quot;"|@click="room=\'([^\']+)\'"/', $html, $matches);
+        preg_match_all('/@click="pickRoom\(&quot;([^&]+)&quot;\)"|@click="pickRoom\(\'([^\']+)\'\)"/', $html, $matches);
         $chips = array_values(array_filter(array_map(fn ($a, $b) => $a ?: $b, $matches[1], $matches[2])));
 
         $this->assertSame(self::EXPECTED, $chips);
@@ -80,7 +80,7 @@ class RoomOrderTest extends TestCase
 
         $html = $this->actingAs($this->admin())->get(route('check-in.index'))->assertOk()->getContent();
 
-        preg_match_all('/@click="room = &quot;([^&]+)&quot;"|@click="room = \'([^\']+)\'"/', $html, $matches);
+        preg_match_all('/@click="pickRoom\(&quot;([^&]+)&quot;\)"|@click="pickRoom\(\'([^\']+)\'\)"/', $html, $matches);
         $chips = array_values(array_filter(array_map(fn ($a, $b) => $a ?: $b, $matches[1], $matches[2])));
 
         $this->assertSame(self::EXPECTED, $chips);

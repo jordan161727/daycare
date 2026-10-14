@@ -334,10 +334,12 @@ class AttendanceSheetTest extends TestCase
         // search box narrow every one of them alike.
         $this->assertSame(3, substr_count($html, 'child in filteredChildren"'));
         // The desktop grid has a sortable heading per column and the phone
-        // list one button that turns whichever column is in use around.
+        // list one button that turns whichever column is in use around. The
+        // cards' Sort button is the client's: whoever is in, to the top.
         $this->assertSame(1, substr_count($html, "toggleSort('lan')"));
         $this->assertSame(1, substr_count($html, "toggleSort('name')"));
         $this->assertSame(1, substr_count($html, 'toggleSort(sortBy)'));
+        $this->assertSame(1, substr_count($html, '@click="inFirst = ! inFirst"'));
     }
 
     public function test_both_layouts_render_the_same_sign_in_controls(): void

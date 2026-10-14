@@ -209,7 +209,12 @@ class AttendanceController extends Controller
             // week it is about to copy forward before it is accepted.
             $previousWeekStart = $canEditSchedule || $canOpenWeek ? $weeks->sourceFor($weekStartDate) : null;
 
+            // The room the chips open on, when the address names one —
+            // /attendance?infant — as the door screen does. Else everyone.
+            $defaultRoom = ClassroomAssignment::fromQuery(request()) ?? '';
+
             return view('attendance.index', compact(
+                'defaultRoom',
                 'children',
                 'classrooms',
                 'weekDates',

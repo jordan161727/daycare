@@ -443,11 +443,11 @@
                          rows deep. Each carries its own count, so the size of a
                          room is answered without filtering to it first. --}}
                     <div class="-mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-                        <button @click="room=''" :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
+                        <button @click="pickRoom('')" :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
                             All <span class="ml-0.5 opacity-60 tabular-nums" x-text="centreIn + '/' + {{ $totalChildren }}" :title="centreIn + ' of {{ $totalChildren }} in'"></span>
                         </button>
                         @foreach($classrooms as $classroom)
-                            <button @click="room=@js($classroom)" :class="room === @js($classroom) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
+                            <button @click="pickRoom(@js($classroom))" :class="room === @js($classroom) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
                             <x-room-icon :room="$classroom" size="text-sm" /> {{ $classroom }} <span class="ml-0.5 opacity-60 tabular-nums" x-text="roomIn(@js($classroom)) + '/' + roomCount(@js($classroom))" :title="roomIn(@js($classroom)) + ' of ' + roomCount(@js($classroom)) + ' in'"></span>
                             </button>
                         @endforeach
@@ -542,6 +542,20 @@
                          and a tap on a card is a tap on that child's today cell
                          — the same sign-in Live, the same cycle in Edit. --}}
                     <template x-if="mode === 'avatar'">
+                        <div>
+                        {{-- The cards' one control, the client's ask: "Sort", top
+                             right, and it puts the children currently in all the way
+                             to the top. Pressed again, the cards go back to the
+                             table's order. The same button is on the door screen. --}}
+                        <div class="flex items-center justify-end px-4 pt-3">
+                            <button type="button" @click="inFirst = ! inFirst" data-card-sort :aria-pressed="inFirst ? 'true' : 'false'"
+                                    :title="inFirst ? 'Children currently in are at the top — press to put them back in order' : 'Put the children currently in at the top'"
+                                    :class="inFirst ? 'border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 dark:border-emerald-400 dark:bg-emerald-500 dark:text-white' : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25'"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition">
+                                <span aria-hidden="true">⇅</span>
+                                <span>Sort</span>
+                            </button>
+                        </div>
                         <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
                             <template x-for="child in filteredChildren" :key="'card-' + child.id">
                                 {{-- Live, a tap steps the child through the day: in,
@@ -577,6 +591,7 @@
                             </template>
                             {{-- No empty-state line of its own: the one under the
                                  layouts says it once, for every one of them. --}}
+                        </div>
                         </div>
                     </template>
 
@@ -1075,12 +1090,32 @@ function weekPicker() { return {
 
 function attendanceApp() { return {
     search: '',
-    room: '',
+    // The room the chips open on: everyone, or the one the address names
+    // (/attendance?infant). The address follows the chips from then on — see
+    // pickRoom() — so a room's sheet can be copied as a link.
+    room: @js($defaultRoom),
+
+    /** A chip pressed: the room, and the address to match, keeping the date. */
+    pickRoom(room) {
+        this.room = room;
+        try {
+            const letters = text => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const rooms = @js(\App\Services\ClassroomAssignment::rooms()).map(letters);
+            const params = new URLSearchParams(window.location.search);
+            for (const key of [...params.keys()]) if (key === 'room' || rooms.includes(letters(key))) params.delete(key);
+            const slug = room.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            const query = params.toString() + (slug ? (params.toString() ? '&' : '') + slug : '');
+            const url = window.location.pathname + (query ? '?' + query : '');
+            if (url !== window.location.pathname + window.location.search) history.replaceState(null, '', url);
+        } catch { /* nothing to update outside a browser */ }
+    },
     // Which column the sheet is ordered by, and which way. LAN to begin
     // with, like the roll: it is the number on the cabinet and the parent
     // letter, so it is what somebody arrives already holding.
     sortBy: 'lan',
     sortDirection: 'asc',
+    // The cards' Sort button: the children currently in, at the top.
+    inFirst: false,
     view: 'signin',
     recentOpen: false,
     // The card pop-up: the child it is about, whether it is up, and whether
@@ -1679,7 +1714,19 @@ function attendanceApp() { return {
             };
         }
 
-        return this.filteredCache.rows;
+        if (! this.inFirst) return this.filteredCache.rows;
+
+        // The client's Sort: in the building first, then gone home, then not
+        // yet arrived. Done outside the cache because who is in changes with
+        // every tap, and the sort is stable, so inside each group the table's
+        // order holds.
+        return [...this.filteredCache.rows].sort((a, b) => this.dayRank(a) - this.dayRank(b));
+    },
+
+    /** Where a child's day puts them under Sort: in 0, gone home 1, not yet here 2. */
+    dayRank(child) {
+        if (this.isHere(child)) return 0;
+        return this.sessionsOf(child).some(s => this.isPresent(child.id, this.today, s)) ? 1 : 2;
     },
 
     /* The column the header is set to, in the direction it is set to. */

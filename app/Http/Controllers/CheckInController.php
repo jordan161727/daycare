@@ -272,8 +272,10 @@ class CheckInController extends Controller
 
         // The room the screen opens on: a teacher's own, every time — the
         // Infant teacher lands on Infant — with the other rooms a chip away.
-        // The director opens on everyone.
-        $defaultRoom = $user->isAdmin() ? '' : ($user->assignedClassrooms()[0] ?? '');
+        // The director opens on everyone. Either can be sent to a room by the
+        // address: /check-in?infant, /check-in?upk4, /check-in?school-age —
+        // a link the office can put on a tablet's home screen, one a room.
+        $defaultRoom = ClassroomAssignment::fromQuery($request) ?? ($user->isAdmin() ? '' : ($user->assignedClassrooms()[0] ?? ''));
 
         return view('attendance.check-in', [
             'rows' => $rows,

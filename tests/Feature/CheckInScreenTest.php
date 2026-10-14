@@ -1093,4 +1093,44 @@ class CheckInScreenTest extends TestCase
         $this->assertStringContainsString(':selected="Number(entry.code) === Number(code)"', $html);
         $this->assertStringContainsString('Carried from check-in.', $html);
     }
+
+    /**
+     * The address can name the room: /check-in?infant opens on Infant, for
+     * anybody. Spelt loosely — ?upk4 and ?upk-4 are the same room, as are
+     * ?schoolage and ?school-age — and a word that is no room is ignored, so
+     * the teacher still lands on their own.
+     */
+    public function test_the_address_can_name_the_room(): void
+    {
+        $this->teacher->update(['classroom' => 'Toddler', 'classrooms' => ['Toddler']]);
+        $room = fn ($user, string $query) => preg_match("/room: '([^']*)'/", str_replace('"', "'", $this->actingAs($user)->get('/check-in'.$query)->assertOk()->getContent()), $m) ? $m[1] : null;
+
+        $this->assertSame('Infant', $room($this->admin, '?infant'));
+        $this->assertSame('Infant', $room($this->teacher, '?infant'));
+        $this->assertSame('UPK-4', $room($this->admin, '?upk4'));
+        $this->assertSame('UPK-4', $room($this->admin, '?upk-4'));
+        $this->assertSame('School Age', $room($this->admin, '?schoolage'));
+        $this->assertSame('School Age', $room($this->admin, '?school-age'));
+        $this->assertSame('PreK', $room($this->admin, '?room=PreK'));
+
+        // Not a room: the teacher's own, the director's everyone.
+        $this->assertSame('Toddler', $room($this->teacher, '?kitchen'));
+        $this->assertSame('', $room($this->admin, '?kitchen'));
+        $this->assertSame('', $room($this->admin, ''));
+    }
+
+    /**
+     * The client's Sort button: the children currently in go to the top,
+     * then the ones gone home, then the ones not yet here — A–Z within each
+     * group; pressed again, plain A–Z.
+     */
+    public function test_the_sort_button_puts_the_children_currently_in_at_the_top(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('@click="inFirst = ! inFirst" data-card-sort', $html);
+        $this->assertStringContainsString(".sort((a, b) => (this.inFirst ? this.dayRank(a) - this.dayRank(b) : 0) || a.display.localeCompare(b.display));", $html);
+        // In, then gone home, then not yet here — the client's mock.
+        $this->assertStringContainsString("dayRank(row) { return this.isIn(row) ? 0 : (this.isOut(row) ? 1 : 2); },", $html);
+    }
 }

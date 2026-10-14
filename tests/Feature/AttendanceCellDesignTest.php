@@ -433,4 +433,46 @@ class AttendanceCellDesignTest extends TestCase
         $this->assertStringContainsString("? entries + ' entries: ' + this.entryList(childId, date, session)", $html);
         $this->assertStringContainsString("pairs.push(arrived + '–' + left); arrived = back;", $html);
     }
+
+    /**
+     * The address can name the room, as it can at the door: /attendance?infant
+     * opens the chips on Infant, beside the date the sheet is already given,
+     * and a word that is no room leaves them on everyone.
+     */
+    public function test_the_address_can_name_the_room(): void
+    {
+        $this->makeChild();
+        app(WeekSchedule::class)->open(self::MONDAY);
+        $room = fn (string $query) => preg_match("/room: '([^']*)'/", str_replace('"', "'", $this->actingAs($this->admin)->get('/attendance?date='.self::MONDAY.$query)->assertOk()->getContent()), $m) ? $m[1] : null;
+
+        $this->assertSame('Infant', $room('&infant'));
+        $this->assertSame('UPK-4', $room('&upk4'));
+        $this->assertSame('School Age', $room('&school-age'));
+        $this->assertSame('PreK', $room('&room=PreK'));
+        $this->assertSame('', $room('&kitchen'));
+        $this->assertSame('', $room(''));
+
+        // The chips keep the address in step, and keep the date while they do.
+        $html = $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::MONDAY]))->getContent();
+        $this->assertStringContainsString("@click=\"pickRoom('')\"", $html);
+        $this->assertStringContainsString("if (key === 'room' || rooms.includes(letters(key))) params.delete(key);", $html);
+    }
+
+    /**
+     * The client's Sort button on the cards: the children currently in go
+     * to the top, the table's order within each group; pressed again, back
+     * to the table's order.
+     */
+    public function test_the_sort_button_puts_the_children_currently_in_at_the_top(): void
+    {
+        $this->makeChild();
+        app(WeekSchedule::class)->open(self::MONDAY);
+
+        $html = $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::MONDAY]))->assertOk()->getContent();
+
+        $this->assertStringContainsString('@click="inFirst = ! inFirst" data-card-sort', $html);
+        $this->assertStringContainsString("return [...this.filteredCache.rows].sort((a, b) => this.dayRank(a) - this.dayRank(b));", $html);
+        $this->assertStringContainsString("if (this.isHere(child)) return 0;", $html);
+        $this->assertStringContainsString("return this.sessionsOf(child).some(s => this.isPresent(child.id, this.today, s)) ? 1 : 2;", $html);
+    }
 }
