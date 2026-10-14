@@ -341,7 +341,12 @@ class ChildController extends Controller
      */
     public function photo(Child $child)
     {
-        abort_unless($this->isVisibleTo($child, request()->user()), 403);
+        // Any signed-in staff member, not only one assigned to the child's
+        // room: the door screen shows the whole floor to whoever is at it,
+        // and a face there has to load for the teacher covering another
+        // room. The record itself (show, edit) keeps the room check; this
+        // route is under auth, so nobody outside the building reaches it.
+        abort_unless(request()->user()?->isAdmin() || request()->user()?->role === 'teacher', 403);
         abort_if(blank($child->photo_path) || ! Storage::disk('local')->exists($child->photo_path), 404);
 
         return Storage::disk('local')->response($child->photo_path, null, [

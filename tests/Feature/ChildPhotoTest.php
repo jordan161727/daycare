@@ -148,13 +148,15 @@ class ChildPhotoTest extends TestCase
             ->assertOk();
     }
 
-    public function test_the_photo_is_not_served_to_anybody_else(): void
+    public function test_the_photo_is_not_served_to_anybody_outside_the_building(): void
     {
+        // Any staff member gets it (the door shows the whole floor); a
+        // visitor to the address with no login does not.
         $child = $this->childWithPhoto();
 
         $this->actingAs(User::factory()->create(['role' => 'teacher', 'classroom' => 'PreK']))
             ->get(route('children.photo', $child))
-            ->assertForbidden();
+            ->assertOk();
 
         auth()->logout();
         $this->get(route('children.photo', $child))->assertRedirect(route('login'));
@@ -388,6 +390,24 @@ class ChildPhotoTest extends TestCase
     }
 
     /** Renders a run of children of one gender and checks every face drawn. */
+    /**
+     * A teacher at the door sees the whole floor, so the faces have to load
+     * for rooms other than their own — the photo route takes any signed-in
+     * staff member. The record itself still keeps to the teacher's rooms, and
+     * nobody signed out gets the file at all.
+     */
+    public function test_a_teacher_gets_the_photo_of_a_child_in_another_room(): void
+    {
+        $child = $this->childWithPhoto();
+        $child->update(['classroom' => 'Toddler']);
+        $teacher = User::factory()->create(['role' => 'teacher', 'classroom' => 'Infant', 'classrooms' => ['Infant']]);
+
+        $this->actingAs($teacher)->get(route('children.photo', $child))->assertOk();
+
+        auth()->logout();
+        $this->get(route('children.photo', $child))->assertRedirect(route('login'));
+    }
+
     private function assertDrawnFrom(?string $gender, array $expected, bool $atLeastTwo = true): void
     {
         $seen = collect(range(1, 24))->map(function (int $number) use ($gender) {
