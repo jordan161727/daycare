@@ -1120,17 +1120,17 @@ class CheckInScreenTest extends TestCase
     }
 
     /**
-     * The client's Sort button: the children currently in go to the top,
-     * then the ones gone home, then the ones not yet here — A–Z within each
-     * group; pressed again, plain A–Z.
+     * The cards sort themselves: whoever is in the building first, then
+     * whoever has gone home, then whoever has not arrived — A–Z inside each
+     * group — so a child clocked in moves to the top. No button: the centre
+     * asked for the order to be automatic.
      */
-    public function test_the_sort_button_puts_the_children_currently_in_at_the_top(): void
+    public function test_the_cards_put_the_children_currently_in_at_the_top_by_themselves(): void
     {
         $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('@click="inFirst = ! inFirst" data-card-sort', $html);
-        $this->assertStringContainsString(".sort((a, b) => (this.inFirst ? this.dayRank(a) - this.dayRank(b) : 0) || a.display.localeCompare(b.display));", $html);
-        // In, then gone home, then not yet here — the client's mock.
+        $this->assertStringNotContainsString('data-card-sort', $html);
+        $this->assertStringContainsString(".sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.display.localeCompare(b.display));", $html);
         $this->assertStringContainsString("dayRank(row) { return this.isIn(row) ? 0 : (this.isOut(row) ? 1 : 2); },", $html);
     }
 }

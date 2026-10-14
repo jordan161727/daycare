@@ -97,8 +97,7 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 60));
         return;
     }
 
-    // The first button after the template is the Sort button now; a card is the first button that is not it.
-    const card = () => doc.querySelector('template[x-if="mode === \'avatar\'"] ~ div button:not([data-card-sort]), [x-html="child.avatar"]')?.closest('button');
+    const card = () => doc.querySelector('template[x-if="mode === \'avatar\'"] ~ div button, [x-html="child.avatar"]')?.closest('button');
     const result = { alpine: !! window.Alpine, cardFound: !! card(), steps: [], errors };
 
     // A tap opens the child's pop-up; its one button does the clocking. So

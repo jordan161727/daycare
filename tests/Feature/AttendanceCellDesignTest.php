@@ -459,20 +459,21 @@ class AttendanceCellDesignTest extends TestCase
     }
 
     /**
-     * The client's Sort button on the cards: the children currently in go
-     * to the top, the table's order within each group; pressed again, back
-     * to the table's order.
+     * The cards sort themselves: whoever is in the building first, then
+     * whoever has gone home, then whoever has not arrived — the table's order
+     * inside each group. No button: the centre asked for it to be automatic.
+     * The table itself keeps its column order.
      */
-    public function test_the_sort_button_puts_the_children_currently_in_at_the_top(): void
+    public function test_the_cards_put_the_children_currently_in_at_the_top_by_themselves(): void
     {
         $this->makeChild();
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::MONDAY]))->assertOk()->getContent();
 
-        $this->assertStringContainsString('@click="inFirst = ! inFirst" data-card-sort', $html);
+        $this->assertStringNotContainsString('data-card-sort', $html);
+        $this->assertStringContainsString("if (this.mode !== 'avatar') return this.filteredCache.rows;", $html);
         $this->assertStringContainsString("return [...this.filteredCache.rows].sort((a, b) => this.dayRank(a) - this.dayRank(b));", $html);
         $this->assertStringContainsString("if (this.isHere(child)) return 0;", $html);
-        $this->assertStringContainsString("return this.sessionsOf(child).some(s => this.isPresent(child.id, this.today, s)) ? 1 : 2;", $html);
     }
 }

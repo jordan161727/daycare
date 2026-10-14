@@ -248,15 +248,6 @@
                         <span class="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400" x-text="cards.length + ' children'"></span>
                     </h2>
                     <p class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-                        {{-- The client's ask: "Sort", and the children currently in go
-                             all the way to the top. Pressed again, back to A–Z. --}}
-                        <button type="button" @click="inFirst = ! inFirst" data-card-sort :aria-pressed="inFirst ? 'true' : 'false'"
-                                :title="inFirst ? 'Children currently in are at the top — press for A–Z' : 'Put the children currently in at the top'"
-                                :class="inFirst ? 'border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 dark:border-emerald-400 dark:bg-emerald-500 dark:text-white' : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25'"
-                                class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition">
-                            <span aria-hidden="true">⇅</span>
-                            <span>Sort</span>
-                        </button>
                         <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span> On premises</span>
                         <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-slate-400" aria-hidden="true"></span> Currently out</span>
                     </p>
@@ -821,24 +812,22 @@ function checkInGrid() { return {
             .map(room => ({room, animal: seen[room] || ''}));
     },
 
-    /** The Sort button: the children currently in, at the top. */
-    inFirst: false,
-
-    /** The cards on screen: the room chosen, the search box, and the sort —
-        A–Z, with whoever is in first when the button is pressed. */
+    /**
+     * The cards on screen: the room chosen, the search box, and the order —
+     * the client's: whoever is in the building first, then whoever has gone
+     * home, then whoever has not arrived, A–Z inside each group. It sorts
+     * itself: a child clocked in moves to the top as the toast fades. There
+     * was a Sort button for a day; the centre asked for the order without it.
+     */
     get cards() {
         const term = this.search.trim().toLowerCase();
         return Object.values(this.rows)
             .filter(row => this.room === '' || row.room === this.room)
             .filter(row => term === '' || (row.display + ' ' + row.lan).toLowerCase().includes(term))
-            .sort((a, b) => (this.inFirst ? this.dayRank(a) - this.dayRank(b) : 0) || a.display.localeCompare(b.display));
+            .sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.display.localeCompare(b.display));
     },
 
-    /**
-     * Where a child's day puts them when Sort is pressed: in the building
-     * first, then gone home, then not yet arrived — the client's mock, read
-     * left to right. A–Z inside each group.
-     */
+    /** Where a child's day puts them: in 0, gone home 1, not yet here 2. */
     dayRank(row) { return this.isIn(row) ? 0 : (this.isOut(row) ? 1 : 2); },
 
     /** The row's record on the day being looked at: first in, last out. */

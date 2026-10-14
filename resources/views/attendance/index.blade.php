@@ -542,20 +542,6 @@
                          and a tap on a card is a tap on that child's today cell
                          — the same sign-in Live, the same cycle in Edit. --}}
                     <template x-if="mode === 'avatar'">
-                        <div>
-                        {{-- The cards' one control, the client's ask: "Sort", top
-                             right, and it puts the children currently in all the way
-                             to the top. Pressed again, the cards go back to the
-                             table's order. The same button is on the door screen. --}}
-                        <div class="flex items-center justify-end px-4 pt-3">
-                            <button type="button" @click="inFirst = ! inFirst" data-card-sort :aria-pressed="inFirst ? 'true' : 'false'"
-                                    :title="inFirst ? 'Children currently in are at the top — press to put them back in order' : 'Put the children currently in at the top'"
-                                    :class="inFirst ? 'border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 dark:border-emerald-400 dark:bg-emerald-500 dark:text-white' : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25'"
-                                    class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition">
-                                <span aria-hidden="true">⇅</span>
-                                <span>Sort</span>
-                            </button>
-                        </div>
                         <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
                             <template x-for="child in filteredChildren" :key="'card-' + child.id">
                                 {{-- Live, a tap steps the child through the day: in,
@@ -591,7 +577,6 @@
                             </template>
                             {{-- No empty-state line of its own: the one under the
                                  layouts says it once, for every one of them. --}}
-                        </div>
                         </div>
                     </template>
 
@@ -1114,8 +1099,6 @@ function attendanceApp() { return {
     // letter, so it is what somebody arrives already holding.
     sortBy: 'lan',
     sortDirection: 'asc',
-    // The cards' Sort button: the children currently in, at the top.
-    inFirst: false,
     view: 'signin',
     recentOpen: false,
     // The card pop-up: the child it is about, whether it is up, and whether
@@ -1714,12 +1697,13 @@ function attendanceApp() { return {
             };
         }
 
-        if (! this.inFirst) return this.filteredCache.rows;
+        // The table reads in its column's order; the cards read in the
+        // client's: in the building first, then gone home, then not yet
+        // arrived, the column's order inside each group. Automatic — a child
+        // clocked in moves to the top as the toast fades. Done outside the
+        // cache because who is in changes with every tap; the sort is stable.
+        if (this.mode !== 'avatar') return this.filteredCache.rows;
 
-        // The client's Sort: in the building first, then gone home, then not
-        // yet arrived. Done outside the cache because who is in changes with
-        // every tap, and the sort is stable, so inside each group the table's
-        // order holds.
         return [...this.filteredCache.rows].sort((a, b) => this.dayRank(a) - this.dayRank(b));
     },
 
