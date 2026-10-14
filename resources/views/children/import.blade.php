@@ -71,27 +71,40 @@
                     :class="drag ? 'border-blue-600 bg-blue-50' : 'border-slate-300 bg-white hover:border-blue-400'"
                     class="block cursor-pointer rounded-xl border-2 border-dashed p-8 transition-colors"
                 >
-                    <input x-ref="file" @change="selectFile($event)" type="file" name="file" accept=".xlsx,.xls,.csv" class="sr-only">
+                    {{-- As many as are dropped on it: a file per room, or per
+                         month, goes in as one job. Each is run on its own, so a
+                         sheet that cannot be read is named and the rest still go in. --}}
+                    <input x-ref="file" @change="selectFile($event)" type="file" name="files[]" multiple accept=".xlsx,.xls,.csv" class="sr-only">
                     <div class="flex flex-col items-center text-center">
                         <div class="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-2xl text-blue-700" aria-hidden="true">↑</div>
-                        <h2 class="mt-4 text-lg font-semibold">Select an Excel file</h2>
-                        <p class="mt-1 text-sm text-slate-500">Drag and drop, or click to browse.</p>
-                        <p class="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">XLSX, XLS, or CSV · maximum 5 MB</p>
+                        <h2 class="mt-4 text-lg font-semibold">Select one or more Excel files</h2>
+                        <p class="mt-1 text-sm text-slate-500">Drag and drop, or click to browse. Add more files any time before importing.</p>
+                        <p class="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">XLSX, XLS, or CSV · maximum 5 MB each · up to 20 files</p>
                     </div>
                 </label>
 
-                <div x-show="filename" x-cloak x-transition class="mt-5 flex items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                    <div class="min-w-0">
-                        <p class="font-semibold text-emerald-800">Ready to import</p>
-                        <p x-text="filename" class="mt-1 truncate text-sm text-slate-700"></p>
-                        <p x-text="filesize" class="text-xs text-slate-500"></p>
+                <div x-show="files.length" x-cloak x-transition class="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4" data-import-files>
+                    <div class="flex items-center justify-between gap-4">
+                        <p class="font-semibold text-emerald-800" x-text="files.length === 1 ? 'Ready to import' : 'Ready to import ' + files.length + ' files'"></p>
+                        <button @click.prevent="clearFiles()" type="button" class="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Remove all</button>
                     </div>
-                    <button @click.prevent="clearFile()" type="button" class="shrink-0 rounded-lg px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Remove</button>
+                    <ul class="mt-2 divide-y divide-emerald-200/70">
+                        <template x-for="(file, index) in files" :key="file.name + file.size">
+                            <li class="flex items-center justify-between gap-4 py-2">
+                                <div class="min-w-0">
+                                    <p x-text="file.name" class="truncate text-sm text-slate-700"></p>
+                                    <p x-text="size(file)" class="text-xs text-slate-500"></p>
+                                </div>
+                                <button @click.prevent="removeFile(index)" type="button" class="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100" :aria-label="'Remove ' + file.name">Remove</button>
+                            </li>
+                        </template>
+                    </ul>
                 </div>
 
                 <p x-show="error" x-cloak x-text="error" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"></p>
 
-                <button :disabled="!filename || error || loading" :class="(!filename || error || loading) ? 'cursor-not-allowed bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'" type="submit" class="mt-7 w-full rounded-xl px-5 py-4 text-lg font-semibold text-white transition-colors">
+                <button :disabled="!files.length || error || loading" :class="(!files.length || error || loading) ? 'cursor-not-allowed bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'" type="submit" class="mt-7 w-full rounded-xl px-5 py-4 text-lg font-semibold text-white transition-colors"
+                        x-text="files.length > 1 ? 'Import children from ' + files.length + ' files' : 'Import children'">
                     Import children
                 </button>
             </form>

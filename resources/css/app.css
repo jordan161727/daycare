@@ -418,6 +418,29 @@
        time on a line that must stay one line in a block half the dialog
        wide. Not pressed, so it does not need a finger's width. */
     .att-chip-xs { min-width: 1.3rem; height: 0.9333rem; padding: 0 0.2rem; font-size: 0.6rem; border-radius: 0.2667rem; cursor: default; vertical-align: 1px; }
+
+    /* A child's photograph while it loads: the circle breathes, and the
+       picture fades in once it has arrived. Sixty photographs are sixty
+       requests, each served by PHP from the private disk, so on a slow
+       connection the roll fills in over a second or two — this says that is
+       what is happening rather than leaving grey holes. A file that fails
+       (the route refused it, the disk lost it) shows the plain silhouette
+       and hides the alt text, which a broken image otherwise prints in the
+       ring. */
+    .child-photo { animation: child-photo-breathe 1.4s ease-in-out infinite; color: transparent; }
+    .child-photo[data-loaded] { animation: child-photo-in 0.3s ease-out; }
+    .child-photo[data-failed] {
+        animation: none;
+        background-color: #a6a6a6;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='40' r='17' fill='%23eef4f3'/%3E%3Cpath d='M18 100c0-22 14-36 32-36s32 14 32 36z' fill='%23eef4f3'/%3E%3C/svg%3E");
+        background-size: cover;
+    }
+    @keyframes child-photo-breathe { 0%, 100% { background-color: rgb(241 245 249); } 50% { background-color: rgb(226 232 240); } }
+    @keyframes child-photo-in { from { opacity: 0.2; } to { opacity: 1; } }
+    .dark .child-photo { animation-name: child-photo-breathe-dark; }
+    .dark .child-photo[data-loaded] { animation-name: child-photo-in; }
+    @keyframes child-photo-breathe-dark { 0%, 100% { background-color: rgb(30 41 59); } 50% { background-color: rgb(51 65 85); } }
+    @media (prefers-reduced-motion: reduce) { .child-photo, .child-photo[data-loaded] { animation: none; } }
     .att-chip-none { border-style: dashed; @apply border-slate-300 text-slate-400 dark:border-white/20 dark:text-slate-500; }
     .att-chip-ok { border-style: solid; @apply border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
     .att-chip-sick { border-style: solid; @apply border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100; }

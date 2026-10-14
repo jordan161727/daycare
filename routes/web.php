@@ -171,6 +171,8 @@ Route::get('/children/import-document', [ChildDocumentController::class, 'create
 Route::post('/children/import-document', [ChildDocumentController::class, 'store'])->name('children.document-import.store');
 Route::get('/children/import-document/{token}/review', [ChildDocumentController::class, 'review'])->name('children.document-import.review');
 Route::get('/children/import-document/{token}/file', [ChildDocumentController::class, 'file'])->name('children.document-import.file');
+Route::post('/children/import-document/{token}/skip', [ChildDocumentController::class, 'skip'])->name('children.document-import.skip');
+Route::post('/children/import-document/clear', [ChildDocumentController::class, 'clear'])->name('children.document-import.clear');
 Route::resource('teachers', TeacherController::class)->parameters(['teachers' => 'teacher']);
 
 // The standing hours of each room and who has it. Read by the children's

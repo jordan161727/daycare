@@ -196,6 +196,15 @@ class ChildController extends Controller
         // The child is on file, so the imported document no longer needs keeping.
         ChildDocumentController::discard($request->input('import_token'));
 
+        // More forms in the pile: straight on to the next one rather than
+        // back to the roll and in again through the import screen.
+        if ($fromDocument && ($next = ChildDocumentController::nextToken())) {
+            $waiting = count(ChildDocumentController::pendingTokens());
+
+            return redirect()->route('children.document-import.review', $next)
+                ->with('success', $child->first_name.' '.$child->last_name.' added. '.$waiting.' form'.($waiting === 1 ? '' : 's').' still to review — next: '.ChildDocumentController::nextName().'.');
+        }
+
         return redirect()->route('children.index')->with('success', 'Child added successfully.');
     }
 
@@ -489,6 +498,43 @@ class ChildController extends Controller
             'photo.max' => 'The photo may not be larger than 4 MB.',
             'photo.image' => 'The photo must be an image file.',
         ]);
+
+        /*
+         * The same child twice.
+         *
+         * A scanned form imported a second time, or typed in by somebody who
+         * did not find the first record, makes a second child with a second
+         * LAN — and two rows on the register for one child, which the roll
+         * count, the export and the billing all get wrong. So a new record
+         * whose name is already on file is refused, naming the record it
+         * matches, unless the person says this really is a different child
+         * (two Ava Smiths do happen) — the "Save anyway" box on the form. A
+         * birth date on both that differs is taken as that answer already.
+         * Editing a record is never a duplicate of itself.
+         */
+        if ($child === null && ! $request->boolean('allow_duplicate')) {
+            $same = Child::whereRaw('LOWER(TRIM(first_name)) = ?', [mb_strtolower(trim($data['first_name']))])
+                ->whereRaw('LOWER(TRIM(last_name)) = ?', [mb_strtolower(trim($data['last_name']))])
+                ->when(filled($data['birth_date'] ?? null), fn ($query) => $query->where(
+                    fn ($query) => $query->whereNull('dob')->orWhereDate('dob', $data['birth_date'])
+                ))
+                ->orderBy('id')
+                ->first();
+
+            if ($same) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'duplicate' => sprintf(
+                        '%s %s is already on file — LAN %s, %s, %s%s. Open that record instead, or tick "Save anyway" if this is a different child.',
+                        $same->first_name,
+                        $same->last_name,
+                        $same->lan,
+                        $same->classroom ?: 'no room yet',
+                        $same->status,
+                        $same->dob ? ', born '.Carbon::parse($same->dob)->format('M j, Y') : '',
+                    ),
+                ]);
+            }
+        }
 
         // The upload is not a column. syncPhoto puts the stored path in.
         unset($data['photo']);

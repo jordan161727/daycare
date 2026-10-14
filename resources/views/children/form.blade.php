@@ -107,6 +107,16 @@
     @if($method !== 'POST') @method($method) @endif
     @isset($importToken)<input type="hidden" name="import_token" value="{{ $importToken }}">@endisset
 
+    @if($errors->has('duplicate'))
+        {{-- The same child twice, refused by name: the record it matches,
+             and the one way past — saying this is a different child. --}}
+        <div class="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100" role="alert" data-duplicate>
+            <p class="font-semibold">Possible duplicate</p>
+            <p class="mt-1">{{ $errors->first('duplicate') }}</p>
+            <label class="mt-2 flex items-center gap-2 font-medium"><input type="checkbox" name="allow_duplicate" value="1" class="rounded border-amber-400"> Save anyway — this is a different child</label>
+        </div>
+    @endif
+
     @if($stepper)
         {{-- The band: who is being edited, and where in the form you are. It
              carries Save as well as the footer does, so a one-field correction

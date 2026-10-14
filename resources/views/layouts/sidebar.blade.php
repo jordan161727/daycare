@@ -55,7 +55,11 @@
         {{-- The door screen, above the register: it is opened every morning
              and every afternoon, and the week sheet is opened to read. --}}
         <a href="{{ route('check-in.index') }}" class="nav-link {{ request()->routeIs('check-in.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg><span x-show="!collapsed">Teacher Attendance</span></a>
+        {{-- The roll is the director's too (15 Oct 2026): a teacher's sidebar
+             is Dashboard and Teacher Attendance. --}}
+        @if(auth()->user()->isAdmin())
         <a href="{{ route('children.index') }}" class="nav-link {{ request()->routeIs('children.index') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-4-4h-1m-4 6H2v-2a4 4 0 014-4h3a4 4 0 014 4v2zm-5-6a4 4 0 100-8 4 4 0 000 8z"/></svg><span x-show="!collapsed">Children</span></a>
+        @endif
         {{-- Jordan's call (14 Oct 2026): the sidebar is Dashboard, Director
              Attendance (director only), Teacher Attendance and Children, and
              nothing else. Everything below is parked, not removed — the

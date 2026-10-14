@@ -435,6 +435,71 @@ class ChildrenFullImportTest extends TestCase
     }
 
     /** Put rows through the real upload path, as a CSV. */
+    /**
+     * Several spreadsheets go in as one job — a file per room, say — each on
+     * its own, so a sheet that cannot be read is named and the others still
+     * go in. The old single `file` field still works.
+     */
+    public function test_several_files_import_together_and_a_bad_one_does_not_stop_the_rest(): void
+    {
+        $infant = UploadedFile::fake()->createWithContent('infant.csv', $this->csv([
+            ['LAN', 'First Name', 'Last Name'],
+            ['20001', 'Ada', 'Infant'],
+        ]));
+        $toddler = UploadedFile::fake()->createWithContent('toddler.csv', $this->csv([
+            ['LAN', 'First Name', 'Last Name'],
+            ['20002', 'Ben', 'Toddler'],
+            ['20003', 'Cleo', 'Toddler'],
+        ]));
+        // No recognised columns at all: this one is reported, not imported.
+        $junk = UploadedFile::fake()->createWithContent('notes.csv', $this->csv([
+            ['Shopping', 'List'],
+            ['milk', 'bread'],
+        ]));
+
+        $response = $this->actingAs($this->admin)
+            ->post(route('children.import'), ['files' => [$infant, $toddler, $junk]]);
+
+        $response->assertSessionHas('success', fn (string $message) => str_contains($message, '3 created'));
+        $this->assertDatabaseHas('children', ['lan' => '20001', 'first_name' => 'Ada']);
+        $this->assertDatabaseHas('children', ['lan' => '20002', 'first_name' => 'Ben']);
+        $this->assertDatabaseHas('children', ['lan' => '20003', 'first_name' => 'Cleo']);
+
+        // The row errors say which file they came from once there is more than one.
+        $errors = implode(' ', session('import_errors'));
+        $this->assertStringContainsString('notes.csv', $errors);
+        $this->assertStringNotContainsString('infant.csv', $errors);
+    }
+
+    public function test_the_single_file_field_still_imports(): void
+    {
+        $file = UploadedFile::fake()->createWithContent('children.csv', $this->csv([
+            ['LAN', 'First Name', 'Last Name'],
+            ['20010', 'Dev', 'Single'],
+        ]));
+
+        $this->actingAs($this->admin)->post(route('children.import'), ['file' => $file])
+            ->assertSessionHas('success', fn (string $message) => str_starts_with($message, 'Import complete: 1 created'));
+        $this->assertDatabaseHas('children', ['lan' => '20010']);
+
+        $this->actingAs($this->admin)->post(route('children.import'), [])
+            ->assertSessionHasErrors(['file' => 'Please select a file.']);
+    }
+
+    /** Rows to CSV text, for a fake upload. */
+    private function csv(array $rows): string
+    {
+        $handle = fopen('php://temp', 'r+');
+        foreach ($rows as $row) {
+            fputcsv($handle, $row);
+        }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return $csv;
+    }
+
     private function import(array $rows): ChildrenImport
     {
         $handle = fopen('php://temp', 'r+');

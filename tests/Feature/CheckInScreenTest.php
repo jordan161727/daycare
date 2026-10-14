@@ -1120,6 +1120,20 @@ class CheckInScreenTest extends TestCase
     }
 
     /**
+     * Before the cards are drawn the panel is not empty: ten breathing
+     * outlines stand in their grid, shown until the component mounts, and
+     * the real grid is cloaked until then so the two never show together.
+     */
+    public function test_the_cards_show_a_loading_grid_until_they_are_drawn(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('<div x-show="false" data-cards-loading aria-hidden="true" class="grid grid-cols-2 gap-3 p-4', $html);
+        $this->assertSame(10, substr_count($html, '<div class="animate-pulse px-2 py-4 text-center">'));
+        $this->assertStringContainsString('<div x-cloak class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">', $html);
+    }
+
+    /**
      * The cards sort themselves: whoever is in the building first, then
      * whoever has gone home, then whoever has not arrived — A–Z inside each
      * group — so a child clocked in moves to the top. No button: the centre

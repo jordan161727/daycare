@@ -89,7 +89,6 @@ class LayoutChromeTest extends TestCase
             $this->actingAs($user)->get(route('dashboard'))->assertOk()
                 ->assertSee($label('Dashboard'), escape: false)
                 ->assertSee($label('Teacher Attendance'), escape: false)
-                ->assertSee($label('Children'), escape: false)
                 ->assertDontSee($label('Reports'), escape: false)
                 ->assertDontSee($label('Timesheets'), escape: false)
                 ->assertDontSee($label('Week Schedule'), escape: false)
@@ -100,8 +99,14 @@ class LayoutChromeTest extends TestCase
                 ->assertDontSee('rounded-full bg-amber-500', escape: false);
         }
 
-        $this->actingAs($admin)->get(route('dashboard'))->assertSee($label('Director Attendance'), escape: false);
-        $this->actingAs($teacher)->get(route('dashboard'))->assertDontSee($label('Director Attendance'), escape: false);
+        // The register and the roll are the director's; a teacher's sidebar
+        // is Dashboard and Teacher Attendance.
+        $this->actingAs($admin)->get(route('dashboard'))
+            ->assertSee($label('Director Attendance'), escape: false)
+            ->assertSee($label('Children'), escape: false);
+        $this->actingAs($teacher)->get(route('dashboard'))
+            ->assertDontSee($label('Director Attendance'), escape: false)
+            ->assertDontSee($label('Children'), escape: false);
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void

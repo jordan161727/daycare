@@ -27,7 +27,15 @@
      is sixty requests, each one served by PHP because these are private
      files; fetched eagerly they compete with the rows nobody has scrolled
      to yet, and the first screen fills in last. --}}
-<img src="{{ $photo }}" alt="{{ $name }}" loading="lazy" decoding="async" {{ $attributes->class([$size, $shape, 'shrink-0 bg-slate-100 object-cover dark:bg-slate-800']) }}>
+    {{-- And seen to be loading: the circle breathes until the photograph
+     arrives, then the picture fades in (see .child-photo in app.css). A
+     file that never arrives falls back to the grey silhouette rather than
+     the name printed in an empty ring, which is what a broken image looks
+     like and what the door screen showed for a room's worth of children
+     when the photo route refused them. --}}
+<img src="{{ $photo }}" alt="{{ $name }}" loading="lazy" decoding="async"
+     onload="this.dataset.loaded = '1'" onerror="this.dataset.failed = '1'"
+     {{ $attributes->class([$size, $shape, 'child-photo shrink-0 bg-slate-100 object-cover dark:bg-slate-800']) }}>
 @else
     @php($portrait = \App\Services\Portrait::pick($child))
 

@@ -408,6 +408,27 @@ class ChildPhotoTest extends TestCase
         $this->get(route('children.photo', $child))->assertRedirect(route('login'));
     }
 
+    /**
+     * A photograph is seen to be loading — the ring breathes until it arrives
+     * and the picture fades in — and a file that never arrives falls back to
+     * the silhouette rather than printing the name in an empty ring.
+     */
+    public function test_a_photo_shows_that_it_is_loading_and_falls_back_if_it_fails(): void
+    {
+        $child = $this->childWithPhoto();
+
+        $html = $this->render($child);
+        $this->assertStringContainsString('class="h-9 w-9 rounded-full child-photo', $html);
+        $this->assertStringContainsString('onload="this.dataset.loaded = \'1\'"', $html);
+        $this->assertStringContainsString('onerror="this.dataset.failed = \'1\'"', $html);
+        $this->assertStringContainsString('loading="lazy" decoding="async"', $html);
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('.child-photo { animation: child-photo-breathe', $css);
+        $this->assertStringContainsString('.child-photo[data-loaded] { animation: child-photo-in', $css);
+        $this->assertStringContainsString('.child-photo[data-failed] {', $css);
+    }
+
     private function assertDrawnFrom(?string $gender, array $expected, bool $atLeastTwo = true): void
     {
         $seen = collect(range(1, 24))->map(function (int $number) use ($gender) {

@@ -15,56 +15,80 @@ window.addEventListener('pageshow', (event) => {
 
 Alpine.data('childrenImport', () => ({
     loading: false,
-    filename: '',
-    filesize: '',
+    files: [],
     drag: false,
     error: '',
 
+    // Choosing again adds to what is there rather than replacing it, so a
+    // file per room can be picked one at a time as well as all at once.
     selectFile(event) {
-        this.setFile(event.target.files[0]);
+        this.addFiles([...event.target.files]);
     },
 
     handleDrop(event) {
-        const file = event.dataTransfer.files[0];
-
-        if (file) {
-            this.$refs.file.files = event.dataTransfer.files;
-            this.setFile(file);
-        }
-
+        this.addFiles([...event.dataTransfer.files]);
         this.drag = false;
     },
 
-    setFile(file) {
-        if (!file) return;
-
-        const extension = file.name.split('.').pop().toLowerCase();
-
-        if (!['xlsx', 'xls', 'csv'].includes(extension)) {
-            this.clearFile();
-            this.error = 'Only Excel (.xlsx, .xls) or CSV files are allowed.';
-            return;
-        }
-
-        if (file.size > 5 * 1024 * 1024) {
-            this.clearFile();
-            this.error = 'The file must not be larger than 5 MB.';
-            return;
-        }
-
+    addFiles(incoming) {
         this.error = '';
-        this.filename = file.name;
-        this.filesize = `${(file.size / 1024).toFixed(1)} KB`;
+
+        for (const file of incoming) {
+            const extension = file.name.split('.').pop().toLowerCase();
+
+            if (!['xlsx', 'xls', 'csv'].includes(extension)) {
+                this.error = `${file.name}: only Excel (.xlsx, .xls) or CSV files are allowed.`;
+                continue;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                this.error = `${file.name}: the file must not be larger than 5 MB.`;
+                continue;
+            }
+
+            if (this.files.some(f => f.name === file.name && f.size === file.size)) continue;
+
+            if (this.files.length >= 20) {
+                this.error = 'Up to 20 files at a time.';
+                break;
+            }
+
+            this.files.push(file);
+        }
+
+        this.syncInput();
     },
 
-    clearFile() {
-        this.$refs.file.value = '';
-        this.filename = '';
-        this.filesize = '';
+    removeFile(index) {
+        this.files.splice(index, 1);
+        this.error = '';
+        this.syncInput();
+    },
+
+    clearFiles() {
+        this.files = [];
+        this.error = '';
+        this.syncInput();
+    },
+
+    // The input is what the form posts, so it is rebuilt from the list every
+    // time the list changes — a DataTransfer is the only way to set it.
+    syncInput() {
+        try {
+            const transfer = new DataTransfer();
+            this.files.forEach(file => transfer.items.add(file));
+            this.$refs.file.files = transfer.files;
+        } catch {
+            if (!this.files.length) this.$refs.file.value = '';
+        }
+    },
+
+    size(file) {
+        return `${(file.size / 1024).toFixed(1)} KB`;
     },
 
     submitForm(event) {
-        if (!this.filename || this.error) {
+        if (!this.files.length || this.error) {
             event.preventDefault();
             this.error = this.error || 'Select a file before importing.';
             return;
@@ -76,30 +100,48 @@ Alpine.data('childrenImport', () => ({
 
 Alpine.data('documentImport', () => ({
     loading: false,
-    filename: '',
-    filesize: '',
+    files: [],
     preview: '',
     drag: false,
     error: '',
-    selectFile(event) { this.setFile(event.target.files[0]); },
-    handleDrop(event) {
-        const file = event.dataTransfer.files[0];
-        if (file) { this.$refs.file.files = event.dataTransfer.files; this.setFile(file); }
-        this.drag = false;
-    },
-    setFile(file) {
-        if (!file) return;
+    selectFile(event) { this.addFiles([...event.target.files]); },
+    handleDrop(event) { this.addFiles([...event.dataTransfer.files]); this.drag = false; },
+    // Choosing again adds to the pile rather than replacing it, so a drawer
+    // of forms can be picked a few at a time.
+    addFiles(incoming) {
+        this.error = '';
         const allowed = ['pdf', 'png', 'jpg', 'jpeg'];
-        const extension = file.name.split('.').pop().toLowerCase();
-        if (!allowed.includes(extension)) return this.invalidate('Only PDF, PNG, and JPG files are allowed.');
-        if (file.size > 10 * 1024 * 1024) return this.invalidate('The file must not be larger than 10 MB.');
-        this.error = ''; this.filename = file.name; this.filesize = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
-        this.preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : '';
+        for (const file of incoming) {
+            const extension = file.name.split('.').pop().toLowerCase();
+            if (!allowed.includes(extension)) { this.error = `${file.name}: only PDF, PNG, and JPG files are allowed.`; continue; }
+            if (file.size > 10 * 1024 * 1024) { this.error = `${file.name}: the file must not be larger than 10 MB.`; continue; }
+            if (this.files.some(f => f.name === file.name && f.size === file.size)) continue;
+            if (this.files.length >= 20) { this.error = 'Up to 20 forms at a time.'; break; }
+            this.files.push(file);
+        }
+        this.refreshPreview();
+        this.syncInput();
     },
-    invalidate(message) { this.clearFile(); this.error = message; },
-    clearFile() { this.$refs.file.value = ''; this.filename = ''; this.filesize = ''; this.preview = ''; },
+    removeFile(index) { this.files.splice(index, 1); this.error = ''; this.refreshPreview(); this.syncInput(); },
+    // The preview is the first image in the pile; a PDF has none to show.
+    refreshPreview() {
+        if (this.preview) URL.revokeObjectURL(this.preview);
+        const image = this.files.find(file => file.type.startsWith('image/'));
+        this.preview = image ? URL.createObjectURL(image) : '';
+    },
+    // The input is what the form posts, so it is rebuilt from the list every
+    // time the list changes — a DataTransfer is the only way to set it.
+    syncInput() {
+        try {
+            const transfer = new DataTransfer();
+            this.files.forEach(file => transfer.items.add(file));
+            this.$refs.file.files = transfer.files;
+        } catch { if (!this.files.length) this.$refs.file.value = ''; }
+    },
+    size(file) { return `${(file.size / 1024 / 1024).toFixed(2)} MB`; },
+    totalSize() { return `${(this.files.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024).toFixed(2)} MB`; },
     submitForm(event) {
-        if (!this.filename || this.error) { event.preventDefault(); this.error = this.error || 'Choose an enrollment form first.'; return; }
+        if (!this.files.length || this.error) { event.preventDefault(); this.error = this.error || 'Choose an enrollment form first.'; return; }
         this.loading = true;
     },
 }));

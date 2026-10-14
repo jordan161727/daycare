@@ -253,9 +253,25 @@
                     </p>
                 </div>
 
+                {{-- What is on screen before the cards are: ten breathing
+                     outlines in the cards' own grid. Plain HTML, shown by
+                     default and hidden the moment the component mounts, so
+                     the first thing a teacher sees on a slow tablet is a room
+                     filling in rather than an empty panel. The real grid is
+                     cloaked until then, so the two never show together. --}}
+                <div x-show="false" data-cards-loading aria-hidden="true" class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
+                    @for($i = 0; $i < 10; $i++)
+                        <div class="animate-pulse px-2 py-4 text-center">
+                            <div class="mx-auto h-24 w-24 rounded-full bg-slate-200 dark:bg-white/10"></div>
+                            <div class="mx-auto mt-4 h-3 w-24 rounded bg-slate-200 dark:bg-white/10"></div>
+                            <div class="mx-auto mt-2 h-2.5 w-14 rounded bg-slate-100 dark:bg-white/5"></div>
+                        </div>
+                    @endfor
+                </div>
+
                 {{-- Five across only on a genuinely wide screen: this theme has
                      no 2xl breakpoint, and `desktop` is its word for one. --}}
-                <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
+                <div x-cloak class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">
                     {{-- `card`, not `child`. The dialog below is opened by writing
                          the component's `child`, and Alpine writes to the nearest
                          scope that owns the name — so a loop variable also called
