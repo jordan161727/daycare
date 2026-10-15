@@ -26,6 +26,11 @@ class CopyRegisterToDoorTest extends TestCase
     {
         parent::setUp();
 
+        // Set aside on 16 Oct 2026: the door reads the register's tables for
+        // now, so there is nothing to copy between them. Lift this with the
+        // skip in SeparateRecordsTest when the split comes back.
+        $this->markTestSkipped("The door reads the register's tables for now (16 Oct 2026).");
+
         $this->maeve = Child::create(['lan' => '10064', 'first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Active', 'classroom' => 'PreK']);
         $this->mark = Child::create(['lan' => '10065', 'first_name' => 'Mark', 'last_name' => 'Bell', 'status' => 'Active', 'classroom' => 'Toddler']);
 
