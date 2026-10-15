@@ -193,6 +193,36 @@ class MonthSheetExportTest extends TestCase
         @unlink($path);
     }
 
+    /**
+     * One sheet per room, named for the room — and the door's record laid
+     * under the register's, so a health check taken at the door shows on
+     * the room's sheet rather than on a second sheet nobody opens.
+     */
+    public function test_the_sheets_are_named_for_the_rooms_and_carry_the_doors_health_checks(): void
+    {
+        $maeve = Child::where('lan', '10064')->sole();
+        \App\Models\DoorAttendance::create(['child_id' => $maeve->id, 'attendance_date' => '2026-09-16', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-16 08:01'), 'health_in_code' => 3]);
+
+        $response = $this->actingAs($this->admin)->get(route('attendance.month-sheet.export', ['month' => 9, 'year' => 2026]))->assertOk();
+        $path = storage_path('app/test-month.xlsx');
+        file_put_contents($path, $response->streamedContent());
+        $book = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+
+        $titles = array_map(fn ($sheet) => $sheet->getTitle(), $book->getAllSheets());
+        $this->assertContains('PreK', $titles);
+        $this->assertEmpty(array_filter($titles, fn ($title) => str_contains($title, 'Register') || str_contains($title, 'Door')));
+
+        // Maeve's health line, in the column for the 16th: the door's code.
+        $prek = $book->getSheetByName('PreK');
+        $rows = $prek->toArray();
+        $nameRow = collect($rows)->search(fn ($row) => ($row[0] ?? null) === 'Adkins, Maeve');
+        $this->assertNotFalse($nameRow);
+        $this->assertSame('health', $rows[$nameRow + 1][1]);
+        $this->assertSame('3', (string) $rows[$nameRow + 1][2 + 15]);
+        $this->assertSame('8:01a', $rows[$nameRow][2 + 15]);
+        @unlink($path);
+    }
+
     private function export(?string $room = null): MonthSheetExport
     {
         $sheet = app(MonthSheetController::class)->month($this->admin, 9, 2026);

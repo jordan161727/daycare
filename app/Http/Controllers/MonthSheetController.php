@@ -77,9 +77,14 @@ class MonthSheetController extends Controller
         $year = (int) ($request->input('year') ?: today()->year);
         $room = trim((string) $request->input('room')) ?: null;
 
-        // Both records, as separate sheets: the register's rooms, then the door's.
+        // One sheet per room, named for the room, as the paper form is kept.
+        // The two records are laid over each other for it: the register's
+        // day where it has one, and the door's filling anything the register
+        // left blank — which for the health lines is nearly everything, since
+        // the door is where the check is taken.
         $sheet = $this->month($request->user(), $month, $year, 'register');
         $door = $this->month($request->user(), $month, $year, 'door');
+        $sheet['rows'] = self::overlay($sheet['rows'], $door['rows']);
 
         $name = 'attendance-'.$sheet['start']->format('Y-m').($room ? '-'.str_replace(' ', '-', strtolower($room)) : '').'.xlsx';
 
@@ -93,9 +98,45 @@ class MonthSheetController extends Controller
             ->get();
 
         return Excel::download(
-            new MonthSheetExport($sheet['rows'], $sheet['days'], $sheet['perDay'], $month, $year, $room, $comments, $door['rows']),
+            new MonthSheetExport($sheet['rows'], $sheet['days'], $sheet['perDay'], $month, $year, $room, $comments),
             $name,
         );
+    }
+
+    /**
+     * The register's rows with the door's laid underneath.
+     *
+     * Both are built from the same children in the same order, so the rows
+     * pair by child id. Day by day, each of the four values keeps what the
+     * register says and takes the door's only where the register has
+     * nothing — a time the register never took, or a health code it never
+     * asked for. A day only the door knows about comes through whole.
+     *
+     * @param  \Illuminate\Support\Collection<int, array>  $register
+     * @param  \Illuminate\Support\Collection<int, array>  $door
+     * @return \Illuminate\Support\Collection<int, array>
+     */
+    public static function overlay($register, $door)
+    {
+        $doorByChild = $door->keyBy('id');
+
+        return $register->map(function (array $row) use ($doorByChild) {
+            $doorDays = $doorByChild[$row['id']]['byDay'] ?? [];
+
+            foreach ($doorDays as $iso => $doorDay) {
+                $day = $row['byDay'][$iso] ?? [];
+
+                foreach (['in', 'in_code', 'out', 'out_code'] as $key) {
+                    if (($day[$key] ?? null) === null && ($doorDay[$key] ?? null) !== null) {
+                        $day[$key] = $doorDay[$key];
+                    }
+                }
+
+                $row['byDay'][$iso] = $day + ['in' => null, 'in_code' => null, 'out' => null, 'out_code' => null];
+            }
+
+            return $row;
+        });
     }
 
     /**
