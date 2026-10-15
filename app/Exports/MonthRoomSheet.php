@@ -36,6 +36,20 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * screen. A code is a number or nothing; nought is printed, because a
  * child who was checked and well is a different fact from one nobody
  * checked, and a blank would say the second.
+ *
+ * A day with more than one entry — the child left and came back, or a room
+ * that books a morning and an afternoon — prints every one of them, and
+ * every one in its own cell. The day widens: it takes as many columns as
+ * the most entries any child in the room had on it. A child with several
+ * entries has each arrival headed "1st", "2nd", "3rd" in its own cell, with
+ * the day's number and weekday spanning them.
+ * Every child keeps four lines; a child with one entry on a wide day
+ * fills the whole day with it, the spare columns merged into that one cell
+ * rather than left blank beside it as if something were missing. Days
+ * nobody came back on stay one column, so an ordinary month looks exactly
+ * like the form.
+ * The paper only ever had one pair of lines, and what it did with a second
+ * arrival was lose it.
  */
 class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidths
 {
@@ -68,14 +82,20 @@ class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidt
         return mb_substr(str_replace(['/', '\\', '?', '*', '[', ']', ':'], '-', $this->room.$this->suffix), 0, 31);
     }
 
+    /** The header rows above the children: title, day number, weekday. */
+    private const HEADER_ROWS = 3;
+
     public function array(): array
     {
         $monthName = Carbon::create($this->year, $this->month, 1)->format('F');
+        $slots = $this->slots();
 
+        // The day number and the weekday sit over the first of a day's
+        // columns and span the rest.
         $rows = [
             ['Month: '.$monthName, 'Year: '.$this->year, 'Room: '.$this->room.($this->suffix ? ' ('.trim($this->suffix, ' ·').')' : '')],
-            ['Student', 'Line', ...$this->days->map(fn (Carbon $day) => $day->day)->all()],
-            ['', '', ...$this->days->map(fn (Carbon $day) => strtoupper($day->format('D')))->all()],
+            ['Student', 'Line', ...$this->spread($slots, fn (Carbon $day, int $slot) => $slot === 0 ? $day->day : '')],
+            ['', '', ...$this->spread($slots, fn (Carbon $day, int $slot) => $slot === 0 ? strtoupper($day->format('D')) : '')],
         ];
 
         foreach ($this->children as $child) {
@@ -87,24 +107,97 @@ class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidt
                     default => '',
                 };
 
-                $rows[] = [$head, $label, ...$this->days->map(function (Carbon $day) use ($child, $key, $isCode) {
-                    $value = $child['byDay'][$day->toDateString()][$key] ?? null;
+                $rows[] = [$head, $label, ...$this->spread($slots, function (Carbon $day, int $slot) use ($child, $key, $index) {
+                    $onDay = $child['byDay'][$day->toDateString()] ?? null;
+                    $entries = $onDay['entries'] ?? [];
 
-                    // Nought is a reading; null is no reading. Keep the difference.
-                    return $isCode ? ($value === null ? '' : (string) $value) : ($value ?? '');
-                })->all()];
+                    // The entry this column is, where the day has it. A day
+                    // with no entries list — rows built before there was
+                    // one — still reads its first column off the day.
+                    $entry = $entries[$slot] ?? ($slot === 0 ? $onDay : null);
+                    $value = self::cell($entry[$key] ?? null);
+
+                    // Which entry it is, on the line above the arrival —
+                    // "1st" over 11:59a, "2nd" over 12:00p — and only for a
+                    // child who has more than one that day. The rest of the
+                    // sheet carries no such label, so a child who came once
+                    // reads as on the form.
+                    if ($index === 0 && $value !== '' && count($entries) > 1) {
+                        $value = self::ordinal($slot + 1)."\n".$value;
+                    }
+
+                    return $value;
+                })];
             }
         }
 
-        // The two totals the form carries, along the foot.
-        $perDay = $this->days->map(fn (Carbon $day) => $this->children
+        // The two totals the form carries, along the foot: a child counts
+        // once a day, however many times the door opened.
+        $perDay = $this->days->mapWithKeys(fn (Carbon $day) => [$day->toDateString() => $this->children
             ->filter(fn (array $child) => ($child['byDay'][$day->toDateString()]['in'] ?? null) !== null)
-            ->count());
+            ->count()]);
 
-        $rows[] = ['Total kids per day', '', ...$perDay->all()];
+        $rows[] = ['Total kids per day', '', ...$this->spread($slots, fn (Carbon $day, int $slot) => $slot === 0 ? $perDay[$day->toDateString()] : '')];
         $rows[] = ['Total kids for month: '.$perDay->sum()];
 
         return $rows;
+    }
+
+    /**
+     * A time or a code as the cell carries it.
+     *
+     * Nought is a reading; null is no reading. Keep the difference: a
+     * code of 0 prints as "0", and only no code at all prints as nothing.
+     */
+    private static function cell(mixed $value): string
+    {
+        return $value === null ? '' : (string) $value;
+    }
+
+    /**
+     * How many columns each day takes: the most entries any child in the
+     * room had on it, and at least one. Keyed by the day's date.
+     *
+     * @return array<string, int>
+     */
+    private function slots(): array
+    {
+        $slots = [];
+
+        foreach ($this->days as $day) {
+            $iso = $day->toDateString();
+            $slots[$iso] = max([1, ...$this->children->map(fn (array $child) => count($child['byDay'][$iso]['entries'] ?? []))->all()]);
+        }
+
+        return $slots;
+    }
+
+    /** One value a column, across every day and each of its columns, in order. */
+    private function spread(array $slots, callable $value): array
+    {
+        $cells = [];
+
+        foreach ($this->days as $day) {
+            foreach (range(0, $slots[$day->toDateString()] - 1) as $slot) {
+                $cells[] = $value($day, $slot);
+            }
+        }
+
+        return $cells;
+    }
+
+    /** "1st", "2nd", "3rd", "4th" … */
+    private static function ordinal(int $n): string
+    {
+        $suffix = match (true) {
+            $n % 100 >= 11 && $n % 100 <= 13 => 'th',
+            $n % 10 === 1 => 'st',
+            $n % 10 === 2 => 'nd',
+            $n % 10 === 3 => 'rd',
+            default => 'th',
+        };
+
+        return $n.$suffix;
     }
 
     public function columnWidths(): array
@@ -113,7 +206,7 @@ class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidt
 
         // A day is a narrow column — a time is six characters — and a month
         // of them has to fit a landscape page the way the form does.
-        foreach (range(0, $this->days->count() - 1) as $offset) {
+        foreach (range(0, array_sum($this->slots()) - 1) as $offset) {
             $widths[self::column($offset + 3)] = 7;
         }
 
@@ -122,22 +215,64 @@ class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidt
 
     public function styles(Worksheet $sheet): array
     {
-        $last = self::column($this->days->count() + 2);
+        $slots = $this->slots();
+        $last = self::column(array_sum($slots) + 2);
+        $first = self::HEADER_ROWS + 1;
         $childRows = $this->children->count() * count(self::LINES);
-        $footer = 4 + $childRows;
+        $footer = $first + $childRows;
 
         // The name and line columns stay put while the month scrolls by.
-        $sheet->freezePane('C4');
+        $sheet->freezePane('C'.$first);
 
         // Ruled both ways, as the paper is: an eye running down a column has
         // to be able to tell which row it is on.
         $sheet->getStyle('A2:'.$last.($footer))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
         $sheet->getStyle('C2:'.$last.($footer))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-        $sheet->getStyle('B4:B'.($footer - 1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        // An arrival headed "1st" is two lines in one cell; wrapped, so Excel
+        // shows the label over the time rather than one long string.
+        $sheet->getStyle('C'.$first.':'.$last.($footer - 1))->getAlignment()->setWrapText(true);
+        $sheet->getStyle('B'.$first.':B'.($footer - 1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        // A day of several columns is headed once: its number and weekday
+        // span them. The children's rows merge only the day's spare columns —
+        // see below — so what a cell says is never split across two.
+        $column = 3;
+        foreach ($this->days as $day) {
+            $width = $slots[$day->toDateString()];
+            if ($width > 1) {
+                $from = self::column($column);
+                $to = self::column($column + $width - 1);
+                $sheet->mergeCells($from.'2:'.$to.'2');
+                $sheet->mergeCells($from.'3:'.$to.'3');
+                // A rule down the day's edges, so its columns read as one day.
+                $sheet->getStyle($from.'2:'.$from.$footer)->getBorders()->getLeft()->setBorderStyle(Border::BORDER_MEDIUM);
+                $sheet->getStyle($to.'2:'.$to.$footer)->getBorders()->getRight()->setBorderStyle(Border::BORDER_MEDIUM);
+
+                // A child with fewer entries than the day is wide gets the
+                // rest of the day as one field: their last entry spans the
+                // columns after it, so a child who came once on a day
+                // somebody else came three times fills the day with one
+                // cell rather than one cell and two blanks that read as
+                // something missing. The foot's count spans the same way.
+                $this->children->each(function (array $child, int $index) use ($sheet, $day, $width, $column, $to) {
+                    $used = max(1, count($child['byDay'][$day->toDateString()]['entries'] ?? []));
+                    if ($used >= $width) {
+                        return;
+                    }
+                    $from = self::column($column + $used - 1);
+                    $top = self::HEADER_ROWS + 1 + $index * count(self::LINES);
+                    foreach (range($top, $top + count(self::LINES) - 1) as $row) {
+                        $sheet->mergeCells($from.$row.':'.$to.$row);
+                    }
+                });
+                $sheet->mergeCells($from.$footer.':'.$to.$footer);
+            }
+            $column += $width;
+        }
 
         // A rule under every child's block, so four lines read as one child.
         foreach (range(0, max(0, $this->children->count() - 1)) as $index) {
-            $bottom = 3 + ($index + 1) * count(self::LINES);
+            $bottom = self::HEADER_ROWS + ($index + 1) * count(self::LINES);
             $sheet->getStyle('A'.$bottom.':'.$last.$bottom)->getBorders()->getBottom()->setBorderStyle(Border::BORDER_MEDIUM);
         }
 

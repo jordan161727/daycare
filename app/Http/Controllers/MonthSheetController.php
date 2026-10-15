@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceComment;
 use App\Models\DoorAttendance;
 use App\Models\Child;
+use App\Models\HealthAudit;
 use App\Models\SymptomCode;
 use App\Models\User;
 use App\Services\ClassroomAssignment;
@@ -23,10 +24,17 @@ use Maatwebsite\Excel\Facades\Excel;
  * the whole value of a printout is that it can be handed to somebody who was
  * not there.
  *
- * One in and one out per child per day, even in a room that books a morning
- * and an afternoon separately: the paper has one pair of lines and so does
- * this. What it shows is the first arrival and the last departure, which is
- * the honest reading of "when was this child here today".
+ * One in and one out per child per day on the screen, even in a room that
+ * books a morning and an afternoon separately: the paper has one pair of
+ * lines and so does this. What it shows is the first arrival and the last
+ * departure, which is the honest reading of "when was this child here today".
+ *
+ * Underneath that, every entry. A child who left for the dentist and came
+ * back, or a School Age child's morning and afternoon, is two clock-ins and
+ * two clock-outs, each with the check taken at it — and the row only keeps
+ * the latest of those checks, the earlier living on in the audit. So each
+ * day also carries its entries in order, each with its own codes, which is
+ * what the export prints: nothing a second arrival overwrote is lost.
  *
  * Read-only. Corrections are made on the screens that record who made them;
  * a month grid somebody could type into is a month grid with no audit behind
@@ -132,7 +140,14 @@ class MonthSheetController extends Controller
                     }
                 }
 
-                $row['byDay'][$iso] = $day + ['in' => null, 'in_code' => null, 'out' => null, 'out_code' => null];
+                // The entries are one record's or the other's, whole: the
+                // register's where it has any, else the door's. Two lists
+                // of the same day interleaved would count every arrival twice.
+                if (empty($day['entries']) && ! empty($doorDay['entries'])) {
+                    $day['entries'] = $doorDay['entries'];
+                }
+
+                $row['byDay'][$iso] = $day + ['in' => null, 'in_code' => null, 'out' => null, 'out_code' => null, 'entries' => []];
             }
 
             return $row;
@@ -165,6 +180,9 @@ class MonthSheetController extends Controller
         $records = ($source === 'door' ? DoorAttendance::query() : Attendance::query())
             ->whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
             ->whereIn('child_id', $children->pluck('id'))
+            // The trips out and back, and the audit, are what the entries
+            // are rebuilt from — see entries().
+            ->with(['returns', 'healthAudits'])
             ->get()
             ->groupBy([
                 fn (Attendance $row) => $row->child_id,
@@ -197,6 +215,9 @@ class MonthSheetController extends Controller
                     'in_code' => $first->health_in_code,
                     'out' => $last ? self::clock($last->signed_out_at, $timezone) : null,
                     'out_code' => $last?->health_out_code,
+                    // Every clock-in and clock-out of the day, in order, each
+                    // with the check taken at it.
+                    'entries' => self::entries($onDay, $timezone),
                 ];
             }
 
@@ -256,6 +277,74 @@ class MonthSheetController extends Controller
         $monthTotal = array_sum($perDay);
 
         return compact('rows', 'days', 'perDay', 'monthTotal', 'start', 'stats', 'roomChips');
+    }
+
+    /**
+     * Every clock-in and clock-out of a child's day, oldest first.
+     *
+     * A row holds the first arrival and the latest departure; its returns
+     * hold each [left, back] between. Read together they are the day's
+     * entries, and a day with two sessions is both rows' entries in turn.
+     *
+     * The codes are the harder part. The row keeps only the latest arrival
+     * check — a child clocked in again is checked again, and that check
+     * replaces the column — and the leaving check comes off when the child
+     * is back in. The earlier ones live in the audit, so each entry's codes
+     * are read from there: the latest change of each direction written
+     * before the next arrival. The last entry's are the row's own columns,
+     * which is what the screen shows and what any later correction edits.
+     *
+     * @param  \Illuminate\Support\Collection<int, Attendance>  $onDay  one child's rows on one day
+     * @return list<array{in: ?string, in_code: ?int, out: ?string, out_code: ?int}>
+     */
+    private static function entries($onDay, string $timezone): array
+    {
+        $entries = [];
+
+        foreach ($onDay->sortBy('signed_in_at') as $row) {
+            if ($row->signed_in_at === null) {
+                continue;
+            }
+
+            $arrivals = [$row->signed_in_at];
+            $departures = [];
+
+            foreach ($row->returns->sortBy('returned_at') as $trip) {
+                $departures[] = $trip->left_at;
+                $arrivals[] = $trip->returned_at;
+            }
+
+            $departures[] = $row->signed_out_at;
+
+            $audits = $row->healthAudits->sortBy('id')->values();
+            $count = count($arrivals);
+
+            foreach ($arrivals as $index => $arrivedAt) {
+                if ($index === $count - 1) {
+                    $inCode = $row->health_in_code;
+                    $outCode = $row->health_out_code;
+                } else {
+                    // The audit lines that belong to this entry: written
+                    // before the next arrival, and — except for the first,
+                    // whose arrival may have been typed in after its check —
+                    // not before this one.
+                    $window = $audits->filter(fn (HealthAudit $audit) => $audit->created_at < $arrivals[$index + 1]
+                        && ($index === 0 || $audit->created_at >= $arrivedAt));
+
+                    $inCode = $window->where('direction', HealthAudit::IN)->last()?->new_code;
+                    $outCode = $window->where('direction', HealthAudit::OUT)->last()?->new_code;
+                }
+
+                $entries[] = [
+                    'in' => self::clock($arrivedAt, $timezone),
+                    'in_code' => $inCode === null ? null : (int) $inCode,
+                    'out' => self::clock($departures[$index], $timezone),
+                    'out_code' => $outCode === null ? null : (int) $outCode,
+                ];
+            }
+        }
+
+        return $entries;
     }
 
     /**

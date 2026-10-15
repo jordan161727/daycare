@@ -198,11 +198,22 @@
                                          — so it is tested against null rather than
                                          for truthiness, or every healthy child
                                          would print an empty box. --}}
-                                    @if($isCode && $value !== null)
-                                        <span class="att-chip {{ $value === 0 ? 'att-chip-ok' : 'att-chip-sick' }}">{{ $value }}</span>
-                                    @elseif(! $isCode && $value !== null)
-                                        <span class="text-slate-600 dark:text-slate-300">{{ $value }}</span>
-                                    @endif
+                                    {{-- A day with several entries — out and back,
+                                         or a morning and an afternoon — stacks them,
+                                         one a line, the same way the export does. --}}
+                                    @php($entries = $entry === null ? [] : (count($entry['entries'] ?? []) > 1 ? $entry['entries'] : [$entry]))
+                                    @foreach($entries as $one)
+                                        @php($value = $one[$key] ?? null)
+                                        <span class="block">
+                                            @if($isCode && $value !== null)
+                                                <span class="att-chip {{ $value === 0 ? 'att-chip-ok' : 'att-chip-sick' }}">{{ $value }}</span>
+                                            @elseif(! $isCode && $value !== null)
+                                                <span class="text-slate-600 dark:text-slate-300">{{ $value }}</span>
+                                            @else
+                                                &nbsp;
+                                            @endif
+                                        </span>
+                                    @endforeach
                                 </td>
                             @endforeach
                         </tr>
