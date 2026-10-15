@@ -163,9 +163,10 @@ class MonthSheetExportTest extends TestCase
         $maeve = Child::where('lan', '10064')->sole();
         $mark = Child::where('lan', '10065')->sole();
         $teacher = User::factory()->create(['role' => 'teacher', 'name' => 'Ms. Alvarez']);
-        // Comments are the door's, so the days they sit on are door rows.
-        $maevesDay = \App\Models\DoorAttendance::create(['child_id' => $maeve->id, 'attendance_date' => '2026-09-09', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-09 08:01')]);
-        $marksDay = \App\Models\DoorAttendance::create(['child_id' => $mark->id, 'attendance_date' => '2026-09-09', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-09 07:50')]);
+        // The door reads the register's rows for now (16 Oct 2026), so the
+        // days the comments sit on are the ones setUp already wrote.
+        $maevesDay = \App\Models\DoorAttendance::where('child_id', $maeve->id)->whereDate('attendance_date', '2026-09-09')->sole();
+        $marksDay = \App\Models\DoorAttendance::where('child_id', $mark->id)->whereDate('attendance_date', '2026-09-09')->sole();
 
         \App\Models\AttendanceComment::create(['attendance_id' => $maevesDay->id, 'child_id' => $maeve->id, 'user_id' => $teacher->id, 'tag' => 'parent_note', 'body' => 'Mom says he slept poorly last night.'])
             ->forceFill(['created_at' => Carbon::parse('2026-09-09 08:02', config('app.timezone'))])->save();

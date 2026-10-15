@@ -73,7 +73,7 @@ class CheckInScreenTest extends TestCase
 
         $this->assertNotNull($attendance->signed_in_at);
         $this->assertSame(0, $attendance->health_in_code);
-        $this->assertDatabaseHas('door_health_audits', [
+        $this->assertDatabaseHas('health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'new_code' => 0,
@@ -536,7 +536,7 @@ class CheckInScreenTest extends TestCase
             ->assertJsonPath('health_in', 4);
 
         $this->assertSame(4, $attendance->fresh()->health_in_code);
-        $this->assertDatabaseHas('door_health_audits', [
+        $this->assertDatabaseHas('health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => 0,
@@ -707,7 +707,7 @@ class CheckInScreenTest extends TestCase
         $this->assertSame(4, $attendance->fresh()->health_in_code);
 
         // And it says who added it and when, like every other change.
-        $this->assertDatabaseHas('door_health_audits', [
+        $this->assertDatabaseHas('health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => null,

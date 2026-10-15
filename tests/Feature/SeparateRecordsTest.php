@@ -35,6 +35,11 @@ class SeparateRecordsTest extends TestCase
     {
         parent::setUp();
 
+        // Set aside on 16 Oct 2026: the centre asked for the door to read the
+        // register's record again for now, so the two are one table and
+        // nothing here holds. Lift this when the split comes back.
+        $this->markTestSkipped("The door reads the register's tables for now (16 Oct 2026).");
+
         $this->travelTo(Carbon::parse('2026-10-16 08:00:00', config('app.timezone')));
         $this->admin = User::factory()->create(['role' => 'admin']);
         $this->child = Child::create(['lan' => '10064', 'first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Active', 'classroom' => 'Infant', 'dob' => '2025-06-01']);
