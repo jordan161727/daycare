@@ -30,6 +30,7 @@ class Child extends Model
     protected $casts = [
         'dob' => 'date',
         'birth_date' => 'date',
+        'archived_at' => 'datetime',
         'enrolled_on' => 'date:Y-m-d',
         'withdrawn_on' => 'date:Y-m-d',
         'classroom_override_from' => 'date:Y-m-d',
@@ -281,7 +282,19 @@ class Child extends Model
      * their record filled in, and they are not Active, so they are not counted
      * as somebody the rooms are staffed for or looked for at sign-in.
      */
-    public const STATUSES = ['Active', 'Pending', 'Inactive'];
+    public const STATUSES = ['Active', 'Pending', 'Inactive', 'Archived'];
+
+    /**
+     * Archived is the one status that takes a child off every list.
+     *
+     * Active, Pending and Inactive are all "on the roll, in some state";
+     * Archived is "off it, record kept". Named here so the roster, the counts
+     * and the export all ask the same question.
+     */
+    public const ARCHIVED = 'Archived';
+
+    /** The statuses the Children page shows and counts. Archived is never one of them. */
+    public const ROLL_STATUSES = ['Active', 'Pending', 'Inactive'];
 
     /**
      * The kinds of alert a record can carry, and how each one reads.
@@ -652,6 +665,80 @@ class Child extends Model
      * in the row are theirs.
      */
     /**
+     * Everybody except the archived.
+     *
+     * The one filter every roster applies. Written once so that a screen
+     * cannot forget it: the Children list, its counts and its export, the
+     * attendance sheet, the teacher's student count and the kiosk's family
+     * screen all read through this. A screen that wants archived children
+     * asks for them by name (see ChildArchiveController and Settings ›
+     * Children) rather than by leaving this off.
+     */
+    public function scopeNotArchived($query)
+    {
+        return $query->where('status', '!=', self::ARCHIVED);
+    }
+
+    /** Only the archived, newest archive first. */
+    public function scopeArchived($query)
+    {
+        return $query->where('status', self::ARCHIVED)->orderByDesc('archived_at');
+    }
+
+    public function isArchived(): bool
+    {
+        return $this->status === self::ARCHIVED;
+    }
+
+    /**
+     * Take the child off every list, keeping what they were.
+     *
+     * The previous status is kept so Undo restores it exactly; archived_by
+     * is whoever is signed in, and null from a seeder or the shell.
+     */
+    public function archive(?User $by = null): void
+    {
+        if ($this->isArchived()) {
+            return;
+        }
+
+        $this->forceFill([
+            'status_before_archive' => $this->status,
+            'status' => self::ARCHIVED,
+            'archived_at' => now(),
+            'archived_by' => $by?->id ?? auth()->id(),
+        ])->save();
+    }
+
+    /**
+     * Put the child back on the Children page.
+     *
+     * Settings › Children restores them as Inactive — nobody should land back
+     * in a room's head count because a record was tidied — while Undo on the
+     * toast asks for the previous status, because Undo means "as it was".
+     */
+    public function unarchive(bool $restorePrevious = false): void
+    {
+        if (! $this->isArchived()) {
+            return;
+        }
+
+        $to = $restorePrevious ? ($this->status_before_archive ?: 'Inactive') : 'Inactive';
+
+        $this->forceFill([
+            'status' => $to,
+            'archived_at' => null,
+            'archived_by' => null,
+            'status_before_archive' => null,
+        ])->save();
+    }
+
+    public function archivedBy()
+    {
+        return $this->belongsTo(User::class, 'archived_by');
+    }
+
+    /**
      * Rooms in the order the centre says them, youngest first, then by the
      * room's name for any room the bands do not know. See
      * ClassroomAssignment::inOrder for why alphabetical is the wrong order.
@@ -665,7 +752,9 @@ class Child extends Model
 
     public function scopeOnRollDuring($query, string $weekStart, string $weekEnd)
     {
-        return $query->where(function ($outer) use ($weekStart, $weekEnd) {
+        // An archived child is off the sheet too, whichever week is open: the
+        // week they attended would otherwise keep listing them.
+        return $query->notArchived()->where(function ($outer) use ($weekStart, $weekEnd) {
             $outer->where('status', 'Active')
                 ->orWhereHas('attendances', fn ($a) => $a->whereBetween('attendance_date', [$weekStart, $weekEnd]))
                 ->orWhere(function ($left) use ($weekStart, $weekEnd) {

@@ -9,6 +9,32 @@
     RewriteRule .* - [E=Cache-Control:no-cache]
 </IfModule>
 
+# The host's own expiry rules, switched off for the app. Seen live on 15 Oct
+# 2026: every response — the roll, the door screen, the month export — came
+# back with the app's "no-store" AND the host's "Cache-Control: max-age=600"
+# plus an Expires ten minutes out, appended by the server's mod_expires. Two
+# answers on one response, and a browser or proxy that reads the second keeps
+# the file for ten minutes: the export is downloaded again and is the one from
+# before the last health check was recorded. A per-directory ExpiresActive
+# Off wins over the server's default, so only the app's headers go out.
+# The built assets carry a hash in their name, so those may be kept for as
+# long as the host likes.
+<IfModule mod_expires.c>
+    ExpiresActive Off
+    <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$">
+        ExpiresActive On
+        ExpiresDefault "access plus 2 days"
+    </FilesMatch>
+</IfModule>
+
+# And the same by header, for a host that sets the expiry some other way:
+# strip what the server added, so the app's Cache-Control is the only one.
+# Only the exact value the host adds is touched; the assets' two-day
+# max-age and anything the app sets itself pass through untouched.
+<IfModule mod_headers.c>
+    Header edit Cache-Control "^max-age=600$" "no-store, private"
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

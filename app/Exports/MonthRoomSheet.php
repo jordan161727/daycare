@@ -57,13 +57,15 @@ class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidt
         private Collection $days,
         private int $month,
         private int $year,
+        // " · Register" or " · Door" when the workbook carries both records.
+        private string $suffix = '',
     ) {}
 
     public function title(): string
     {
         // A sheet name may not carry the characters a room name can, and is
         // capped at 31 — Excel rejects the file outright rather than trimming.
-        return mb_substr(str_replace(['/', '\\', '?', '*', '[', ']', ':'], '-', $this->room), 0, 31);
+        return mb_substr(str_replace(['/', '\\', '?', '*', '[', ']', ':'], '-', $this->room.$this->suffix), 0, 31);
     }
 
     public function array(): array
@@ -71,7 +73,7 @@ class MonthRoomSheet implements FromArray, WithTitle, WithStyles, WithColumnWidt
         $monthName = Carbon::create($this->year, $this->month, 1)->format('F');
 
         $rows = [
-            ['Month: '.$monthName, 'Year: '.$this->year, 'Room: '.$this->room],
+            ['Month: '.$monthName, 'Year: '.$this->year, 'Room: '.$this->room.($this->suffix ? ' ('.trim($this->suffix, ' ·').')' : '')],
             ['Student', 'Line', ...$this->days->map(fn (Carbon $day) => $day->day)->all()],
             ['', '', ...$this->days->map(fn (Carbon $day) => strtoupper($day->format('D')))->all()],
         ];

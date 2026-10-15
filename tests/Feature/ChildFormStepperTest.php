@@ -108,7 +108,8 @@ class ChildFormStepperTest extends TestCase
 
         // Opening on step 1 would leave the error a section out of sight, with
         // nothing on screen to say why the save did not take.
-        $this->assertStringContainsString('x-data="{ index: 1 }"', $html);
+        // The status beside it is what the save buttons read; see the form.
+        $this->assertMatchesRegularExpression('/x-data="\{\s*index: 1,/', $html);
         $this->assertStringContainsString('data-invalid="true"', $html);
     }
 

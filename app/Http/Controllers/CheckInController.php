@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\AttendanceCommentResource;
 use App\Models\Attendance;
+use App\Models\DoorAttendance;
 use App\Models\AttendanceReturn;
 use App\Models\Child;
 use App\Models\HealthAudit;
@@ -15,6 +17,11 @@ use Illuminate\Validation\Rule;
 
 /**
  * The door screen: today's children, one row each, checked in and out.
+ *
+ * On its own record. The door and the register (AttendanceController) used
+ * to share one table; the centre asked for them kept apart, so everything
+ * here reads and writes DoorAttendance — door_attendances and its own
+ * returns, health audits and comments — and nothing crosses to the register.
  *
  * Deliberately not the week sheet. That one is a register — five days wide,
  * read across and scrolled through, and it exists to answer "who was here this
@@ -126,16 +133,18 @@ class CheckInController extends Controller
             ->filter(fn (Child $child) => $child->isEnrolledOn($today))
             ->values();
 
-        $records = Attendance::whereBetween('attendance_date', [
+        $records = DoorAttendance::whereBetween('attendance_date', [
                 $days->first()->toDateString(),
                 $days->last()->toDateString(),
             ])
             ->whereIn('child_id', $children->pluck('id'))
-            ->with('returns')
+            // The notes ride with the row, so the dialog opens on them with
+            // no second request and the card can wear the count.
+            ->with(['returns', 'comments.author', 'healthAudits.user'])
             ->get()
             ->groupBy([
-                fn (Attendance $row) => $row->child_id,
-                fn (Attendance $row) => $row->attendance_date->toDateString(),
+                fn (DoorAttendance $row) => $row->child_id,
+                fn (DoorAttendance $row) => $row->attendance_date->toDateString(),
             ]);
 
         $timezone = config('app.timezone');
@@ -150,7 +159,7 @@ class CheckInController extends Controller
             // The sheet's own clock: "7:42a", "5:25p". Short enough for a
             // column a month wide, and unambiguous, which twenty-four hour
             // was but nobody at a door reads.
-            $slot = fn (Attendance $row) => [
+            $slot = fn (DoorAttendance $row) => [
                 'id' => $row->id,
                 'session' => $row->session ?? 'FULL',
                 'in' => Child::timeShort($row->signed_in_at?->timezone($timezone)),
@@ -164,6 +173,12 @@ class CheckInController extends Controller
                 // and out these are the whole day's clock, and nothing a
                 // second arrival overwrote.
                 'trips' => self::trips($row, $timezone),
+                // The notes on the row, newest first, shaped as the API shapes them.
+                'comments' => AttendanceCommentResource::collection($row->comments)->resolve(),
+                'comments_count' => $row->comments->count(),
+                // Who took the arrival check, and the arrival as the chip says it.
+                'in_by' => self::checkedInBy($row),
+                'in_at_label' => $row->signed_in_at?->timezone($timezone)->format('g:i A'),
             ];
 
             foreach ($days as $day) {
@@ -184,12 +199,13 @@ class CheckInController extends Controller
                 // still open: a child clocked out of the morning and into the
                 // afternoon is on the premises, and the roster says so.
                 $first = $onDay->sortBy('signed_in_at')->first();
-                $open = $onDay->contains(fn (Attendance $row) => $row->signed_out_at === null);
+                $open = $onDay->contains(fn (DoorAttendance $row) => $row->signed_out_at === null);
                 $last = $open ? null : $onDay->sortBy('signed_out_at')->last();
 
                 $byDay[$iso] = [
                     'id' => $first->id,
                     'in' => Child::timeShort($first->signed_in_at?->timezone($timezone)),
+                    'in_at_label' => $first->signed_in_at?->timezone($timezone)->format('g:i A'),
                     'in_code' => $first->health_in_code,
                     'in_note' => $first->health_in_note,
                     'out' => Child::timeShort($last?->signed_out_at?->timezone($timezone)),
@@ -197,7 +213,7 @@ class CheckInController extends Controller
                     'out_note' => $last?->health_out_note,
                     // The trips out and back already on the day, in order:
                     // [[left, back], ...]. First in, last out, and these between.
-                    'trips' => $onDay->flatMap(fn (Attendance $row) => self::trips($row, $timezone))->values()->all(),
+                    'trips' => $onDay->flatMap(fn (DoorAttendance $row) => self::trips($row, $timezone))->values()->all(),
                 ];
             }
 
@@ -324,7 +340,7 @@ class CheckInController extends Controller
         // an arrival behind it.
         $this->screening->validate($data['health_code'], $data['health_note'] ?? null);
 
-        $attendance = Attendance::firstOrCreate(
+        $attendance = DoorAttendance::firstOrCreate(
             ['child_id' => $child->id, 'attendance_date' => $today, 'session' => $data['session']],
             ['signed_in_at' => now()],
         );
@@ -347,7 +363,7 @@ class CheckInController extends Controller
      * the code changed a minute later — a second look, or the first one having
      * been a mis-tap. The change is audited like any other.
      */
-    public function in(Request $request, Attendance $attendance)
+    public function in(Request $request, DoorAttendance $attendance)
     {
         $data = $request->validate([
             'health_code' => ['required', 'integer', 'between:0,255'],
@@ -373,7 +389,7 @@ class CheckInController extends Controller
      * and its do: the person handing the child over is the one who can say how
      * they were.
      */
-    public function out(Request $request, Attendance $attendance)
+    public function out(Request $request, DoorAttendance $attendance)
     {
         $data = $request->validate([
             'health_code' => ['required', 'integer', 'between:0,255'],
@@ -411,7 +427,7 @@ class CheckInController extends Controller
      * front of the child again, and a child back from the dentist at one
      * can be a different child from the one who arrived at eight.
      */
-    public function back(Request $request, Attendance $attendance)
+    public function back(Request $request, DoorAttendance $attendance)
     {
         $data = $request->validate([
             'health_code' => ['required', 'integer', 'between:0,255'],
@@ -458,7 +474,7 @@ class CheckInController extends Controller
     }
 
     /** The row's trips out and back as the screen shows them: [[left, back], ...]. */
-    private static function trips(Attendance $attendance, string $timezone): array
+    private static function trips(DoorAttendance $attendance, string $timezone): array
     {
         return $attendance->returns
             ->sortBy('returned_at')
@@ -477,7 +493,7 @@ class CheckInController extends Controller
      * nobody performed, and corrections belong on the register where they are
      * written to attendance_amendments.
      */
-    private function guard(Request $request, Attendance $attendance): void
+    private function guard(Request $request, DoorAttendance $attendance): void
     {
         abort_unless(Child::whereKey($attendance->child_id)->exists(), 404);
 
@@ -488,7 +504,164 @@ class CheckInController extends Controller
         );
     }
     /** One line of the screen, as it should now read. */
-    private function row(Attendance $attendance)
+    /**
+     * An arrival typed in Edit — a day already gone, or an hour by hand — on
+     * the door's own record. The door used to send these through the
+     * register; now it keeps them, like everything else it writes.
+     */
+    public function signInDay(Request $request)
+    {
+        $validated = $request->validate([
+            'child_id' => 'required|exists:children,id',
+            'attendance_date' => ['required', 'date_format:Y-m-d', function ($attribute, $value, $fail) use ($request) {
+                if ($value > now()->toDateString()) {
+                    $fail(Carbon::parse($value)->format('l, M j').' has not happened yet — '.now()->format('l, M j').' is the last day that can be clocked in.');
+
+                    return;
+                }
+                $child = Child::find($request->input('child_id'));
+                if ($child && ! $child->isEnrolledOn($value)) {
+                    $fail($child->displayName().' was not on the roll on '.Carbon::parse($value)->format('l, M j').'.');
+                }
+            }],
+            'session' => ['nullable', 'in:AM,PM,FULL', function ($attribute, $value, $fail) use ($request) {
+                $child = Child::find($request->input('child_id'));
+                if ($child && ! in_array($value ?? 'FULL', $child->sessions(), true)) {
+                    $fail(count($child->sessions()) > 1 ? $child->classroom.' is clocked in by half day — choose AM or PM.' : $child->classroom.' is clocked in once for the whole day, not by half.');
+                }
+            }],
+            'signed_in_time' => ['nullable', 'date_format:H:i'],
+            'health_code' => ['nullable', 'integer', 'between:0,255'],
+            'health_note' => ['nullable', 'string', 'max:120'],
+        ]);
+        $this->guardDay($request, $validated['attendance_date']);
+
+        $child = Child::findOrFail($validated['child_id']);
+        $session = $validated['session'] ?? 'FULL';
+        $timezone = config('app.timezone');
+        $signedInAt = match (true) {
+            filled($validated['signed_in_time'] ?? null) => Carbon::parse($validated['attendance_date'].' '.$validated['signed_in_time'], $timezone),
+            $validated['attendance_date'] === now()->toDateString() => now(),
+            default => Carbon::parse($validated['attendance_date'].' '.Child::timeInputValue($child->drop_off_time ?: Child::DAY_OPENS_AT), $timezone),
+        };
+
+        $attendance = DoorAttendance::firstOrCreate(
+            ['child_id' => $child->id, 'attendance_date' => $validated['attendance_date'], 'session' => $session],
+            ['signed_in_at' => $signedInAt],
+        );
+
+        if ($attendance->wasRecentlyCreated && $request->filled('health_code')) {
+            $this->screening->record($attendance, HealthAudit::IN, (int) $validated['health_code'], $validated['health_note'] ?? null, $request->user());
+        }
+
+        return response()->json([
+            'success' => true,
+            'created' => $attendance->wasRecentlyCreated,
+            'attendance_id' => $attendance->id,
+            'session' => $attendance->session,
+            'time' => Child::timeShort($attendance->signed_in_at->timezone($timezone)),
+            'health_in_code' => $attendance->health_in_code,
+            'health_in_note' => $attendance->health_in_note,
+        ]);
+    }
+
+    /** The exact hours, typed in Edit: one or both of the arrival and the departure. */
+    public function retime(Request $request)
+    {
+        $validated = $request->validate([
+            'child_id' => 'required|exists:children,id',
+            'attendance_date' => ['required', 'date_format:Y-m-d', function ($attribute, $value, $fail) {
+                if ($value > now()->toDateString()) {
+                    $fail(Carbon::parse($value)->format('l, M j').' has not happened yet, so there is no arrival on it to move.');
+                }
+            }],
+            'session' => 'nullable|in:AM,PM,FULL',
+            'signed_in_time' => ['nullable', 'required_without:signed_out_time', 'date_format:H:i'],
+            'signed_out_time' => ['nullable', 'required_without:signed_in_time', 'date_format:H:i'],
+        ]);
+        $this->guardDay($request, $validated['attendance_date']);
+
+        $child = Child::findOrFail($validated['child_id']);
+        $attendance = DoorAttendance::where('child_id', $child->id)
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->where('session', $validated['session'] ?? 'FULL')
+            ->first();
+
+        if (! $attendance) {
+            return response()->json(['message' => $child->displayName().' has no arrival recorded on '.Carbon::parse($validated['attendance_date'])->format('l, M j').' to move.'], 422);
+        }
+
+        $timezone = config('app.timezone');
+        if (filled($validated['signed_in_time'] ?? null)) {
+            $attendance->signed_in_at = Carbon::parse($validated['attendance_date'].' '.$validated['signed_in_time'], $timezone);
+        }
+        if (filled($validated['signed_out_time'] ?? null)) {
+            $attendance->signed_out_at = Carbon::parse($validated['attendance_date'].' '.$validated['signed_out_time'], $timezone);
+        }
+        if ($attendance->signed_out_at !== null && $attendance->signed_out_at->lt($attendance->signed_in_at->copy()->startOfMinute())) {
+            return response()->json(['message' => 'The leaving time has to be after the arrival — '.Child::timeShort($attendance->signed_in_at->timezone($timezone)).'.'], 422);
+        }
+        $attendance->save();
+
+        return response()->json([
+            'success' => true,
+            'attendance_id' => $attendance->id,
+            'time' => Child::timeShort($attendance->signed_in_at->timezone($timezone)),
+            'out_time' => Child::timeShort($attendance->signed_out_at?->timezone($timezone)),
+        ]);
+    }
+
+    /** Not attending: the arrival comes off the door's record, with everything hung on it. */
+    public function remove(Request $request)
+    {
+        $validated = $request->validate([
+            'child_id' => 'required|exists:children,id',
+            'attendance_date' => ['required', 'date_format:Y-m-d', function ($attribute, $value, $fail) {
+                if ($value > now()->toDateString()) {
+                    $fail(Carbon::parse($value)->format('l, M j').' has not happened yet, so there is nothing on it to take off.');
+                }
+            }],
+            'session' => 'nullable|in:AM,PM,FULL',
+        ]);
+        $this->guardDay($request, $validated['attendance_date']);
+
+        $attendance = DoorAttendance::where('child_id', $validated['child_id'])
+            ->whereDate('attendance_date', $validated['attendance_date'])
+            ->where('session', $validated['session'] ?? 'FULL')
+            ->first();
+        $attendance?->delete();
+
+        return response()->json(['success' => true, 'removed' => $attendance ? 1 : 0]);
+    }
+
+    /** A check set or corrected in Edit, on the door's row. */
+    public function health(Request $request, DoorAttendance $attendance)
+    {
+        $data = $request->validate([
+            'direction' => ['required', Rule::in([HealthAudit::IN, HealthAudit::OUT])],
+            'code' => ['present', 'nullable', 'integer', 'between:0,255'],
+            'note' => ['nullable', 'string', 'max:120'],
+        ]);
+        $this->guardDay($request, $attendance->attendance_date->toDateString());
+
+        $attendance = $this->screening->record($attendance, $data['direction'], $data['code'], $data['note'] ?? null, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'direction' => $data['direction'],
+            'code' => $attendance->healthCode($data['direction']),
+            'note' => $attendance->healthNote($data['direction']),
+            'sick' => $attendance->isSick(),
+        ]);
+    }
+
+    /** Today is everybody's; a day gone by is the director's. */
+    private function guardDay(Request $request, string $date): void
+    {
+        abort_unless($this->screening->mayRecord($request->user(), $date), 403, 'Only an administrator can change a day that has already gone.');
+    }
+
+    private function row(DoorAttendance $attendance)
     {
         $timezone = config('app.timezone');
         $attendance->refresh()->load('returns');
@@ -504,6 +677,19 @@ class CheckInController extends Controller
             'health_out' => $attendance->health_out_code,
             'health_out_note' => $attendance->health_out_note,
             'trips' => self::trips($attendance, $timezone),
+            'comments' => AttendanceCommentResource::collection($attendance->comments()->with('author')->get())->resolve(),
+            'comments_count' => $attendance->comments()->count(),
+            'in_by' => self::checkedInBy($attendance->load('healthAudits.user')),
+            'in_at_label' => $attendance->signed_in_at?->timezone($timezone)->format('g:i A'),
         ]);
+    }
+
+    /** The staff member who took the arrival check — the latest IN audit's author. */
+    private static function checkedInBy(DoorAttendance $attendance): ?string
+    {
+        return $attendance->healthAudits
+            ->where('direction', \App\Models\HealthAudit::IN)
+            ->sortByDesc('id')
+            ->first()?->user?->name;
     }
 }

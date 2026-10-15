@@ -130,6 +130,10 @@ class ChildrenExportTest extends TestCase
             'drop_off_time', 'pick_up_time', // exported together as Hours
             'city', 'zip',                   // exported joined, as Address
             'alerts',                        // exported as Alerts, in words
+            // Archived children are not in the export at all, so the trail of
+            // their archiving — when, who, what they were — would be an empty
+            // column on every row that is.
+            'archived_at', 'archived_by', 'status_before_archive',
         ];
 
         // The contact blocks moved to people and child_people and are on the

@@ -101,7 +101,25 @@
     action="{{ $action }}"
     enctype="multipart/form-data"
     class="cs-form"
-    @if($stepper) x-data="{ index: {{ $initialStep }} }" @endif
+    {{-- index is the stepper's place; status is read by the save buttons,
+         which say "Save and archive" when that is what saving would do. --}}
+    x-data="{
+        index: {{ $initialStep }},
+        status: @js(old('status', $child?->status ?? 'Active')),
+        {{-- What the record said when the form opened. A save that changes it
+             is held for a word first, whichever way it went: moving a child
+             on or off the roll is not an edit to be made by mistake. --}}
+        originalStatus: @js($child?->status),
+        confirmingStatus: false,
+        statusConfirmed: false,
+    }"
+    {{-- The dialog opens the moment a different status is picked, with Save on
+         it, so the change is made and saved from where the hand already is
+         rather than from the top of the page. The submit guard is the second
+         lock: nothing with a changed status posts without the word. --}}
+    x-init="$watch('status', value => { if (originalStatus !== null && value !== originalStatus && ! statusConfirmed) { confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) } })"
+    @submit="if (originalStatus !== null && status !== originalStatus && ! statusConfirmed) { $event.preventDefault(); confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) }"
+    @keydown.escape.window="if (confirmingStatus) { confirmingStatus = false; status = originalStatus }"
 >
     @csrf
     @if($method !== 'POST') @method($method) @endif
@@ -130,7 +148,7 @@
                 </div>
                 <div class="ml-auto flex items-center gap-2">
                     <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain">Cancel</a>
-                    <button class="cs-btn cs-btn-primary">{{ $submit }}</button>
+                    <button class="cs-btn cs-btn-primary" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
                 </div>
             </div>
             <div class="cs-tabs" role="tablist">
@@ -289,67 +307,158 @@
                         </div>
                     </section>
 
+                    @php($statusHelp = [
+                        'Active' => 'Enrolled and attending. Shows on the Children page and in counts.',
+                        'Pending' => 'A place agreed and not yet started. On the Children page, not counted as here.',
+                        'Inactive' => 'Not attending right now. Still shows on the Children page under Inactive.',
+                        'Archived' => 'Hidden from the Children page, search, Export and all counts. Restore anytime from Settings.',
+                    ])
+                    {{-- The dot each status wears, here and on the pill in the card's
+                         head: the roll's colours, so the two screens agree. --}}
+                    @php($statusDot = ['Active' => '#2fb37a', 'Pending' => '#e6a23c', 'Inactive' => '#9aa5a0', 'Archived' => '#b9c2bd'])
+                    @php($statusOptions = auth()->user()?->isAdmin() ? \App\Models\Child::STATUSES : \App\Models\Child::ROLL_STATUSES)
                     <section class="cs-card">
                         <div class="cs-card-head">
                             <h3 class="cs-card-title">Enrollment</h3>
+                            {{-- The status, as the roll draws it, following the control below. --}}
+                            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                                  :class="{
+                                      'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300': status === 'Active',
+                                      'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200': status === 'Pending',
+                                      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300': status === 'Inactive',
+                                      'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200': status === 'Archived',
+                                  }">
+                                <span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true"></span>
+                                <span x-text="status">{{ old('status', $child?->status ?? 'Active') }}</span>
+                            </span>
                             @if($showCounts)<span class="cs-pill">{{ $filledCount($enrollmentFields) }}/{{ count($enrollmentFields) }}</span>@endif
                         </div>
-                        <div class="cs-grid">
-                            @php($automaticRoom = $formBirthDate ? \App\Services\ClassroomAssignment::automaticFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null)
-                            @php($chosenRoom = old('classroom_override', $child?->classroom_override))
-                            <div>
-                                <span class="cs-label">Classroom</span>
-                                <div class="cs-readout">
-                                    <p id="classroom-effective" class="text-[13px] font-semibold">{{ $chosenRoom ?: ($automaticRoom ?? 'Add a date of birth') }}</p>
-                                    <p id="classroom-note" class="cs-help">
-                                        @if($automaticRoom)
-                                            Automatic: {{ $automaticRoom }}
-                                        @elseif($formBirthDate)
-                                            No band covers this date of birth — set the room by hand.
-                                        @else
-                                            Add a date of birth and the room follows it.
-                                        @endif
-                                    </p>
-                                    {{-- What the room this child lands in actually
-                                         runs as. Read only: it is set once for the
-                                         whole room on the Room Schedules page, not
-                                         per child. --}}
-                                    @php($roomSchedule = \App\Models\RoomSchedule::byRoom()[$chosenRoom ?: $automaticRoom] ?? null)
-                                    @if($roomSchedule?->hoursLabel())
-                                        <p class="cs-help">🕘 {{ $roomSchedule->hoursLabel() }}</p>
-                                    @endif
+
+                        {{-- ---- Status ---- --}}
+                        <fieldset class="cs-group">
+                            <legend class="cs-group-label">Status <span class="cs-req">*</span></legend>
+                            {{-- The four words in a row, a dot apiece in the status's
+                                 colour, and what the chosen one means on the line
+                                 under. Archived is offered to the director only; the
+                                 rules refuse it from anybody else either way. --}}
+                            <div class="cs-seg">
+                                @foreach($statusOptions as $option)
+                                    <label>
+                                        <input type="radio" name="status" value="{{ $option }}" x-model="status"
+                                               @checked(old('status', $child?->status ?? 'Active') === $option)
+                                               aria-describedby="status-help">
+                                        <span style="--seg-dot: {{ $statusDot[$option] }}">{{ $option }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            <x-input-error :messages="$errors->get('status')" />
+                            <span id="status-help" class="cs-help" x-text="@js($statusHelp)[status] ?? ''">{{ $statusHelp[old('status', $child?->status ?? 'Active')] ?? '' }}</span>
+                        </fieldset>
+
+                        {{-- The word before a status changes. Save is held until
+                             "Save as …" is pressed here, because the next press
+                             moves the child on or off the Children page — and,
+                             for Archived, off every count the centre keeps. --}}
+                        @php($statusChangeNotice = [
+                            'Active' => ':name will be back on the Children page as Active, counted as attending, and will appear on the attendance sheet from the next week.',
+                            'Pending' => ':name will show on the Children page under Pending — a place held, not counted as here.',
+                            'Inactive' => ':name will show on the Children page under Inactive and will no longer be counted as attending.',
+                            'Archived' => ':name will disappear from the Children page, search, Export and all counts. Their records are kept. To see or restore them, go to Settings › Children.',
+                        ])
+                        @php($statusChangeName = $child?->first_name ?: 'This child')
+                        <div x-show="confirmingStatus" x-cloak
+                             class="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
+                             @click.self="confirmingStatus = false; status = originalStatus">
+                            <div role="dialog" aria-modal="true" aria-labelledby="status-dialog-title" aria-describedby="status-dialog-body"
+                                 class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-slate-900">
+                                <h2 id="status-dialog-title" class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+                                    Change status to <span x-text="status"></span>?
+                                </h2>
+                                <p id="status-dialog-body" class="mt-2 text-sm text-slate-600 dark:text-slate-300"
+                                   x-text="(@js($statusChangeNotice)[status] ?? '').replace(':name', @js($statusChangeName))"></p>
+                                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                    Was <span class="font-semibold" x-text="originalStatus"></span>. The change is recorded in the child's history.
+                                </p>
+                                <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                    {{-- Cancel puts the status back as well as closing: a
+                                         change that was not agreed to is not left sitting
+                                         in the form for the next Save to carry. --}}
+                                    <button type="button" @click="confirmingStatus = false; status = originalStatus"
+                                            class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button>
+                                    <button type="button" x-ref="statusConfirm"
+                                            @click="statusConfirmed = true; confirmingStatus = false; $root.requestSubmit()"
+                                            :class="status === 'Archived' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'"
+                                            class="inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                                            x-text="status === 'Archived' ? 'Save and archive' : 'Save as ' + status">Save</button>
                                 </div>
                             </div>
-                            <label>
-                                <span class="cs-label">Override the classroom</span>
-                                <select name="classroom_override" class="cs-input"><option value="">Use the automatic room</option>@foreach(\App\Services\ClassroomAssignment::rooms() as $room)<option value="{{ $room }}" @selected(old('classroom_override', $child?->classroom_override) === $room)>{{ $room }}</option>@endforeach</select>
-                                <x-input-error :messages="$errors->get('classroom_override')" />
-                                <span class="cs-help">For moving a child up early. It holds until you clear it.</span>
-                            </label>
-                            <label>
-                                <span class="cs-label">Override starts on</span>
-                                <input type="date" name="classroom_override_from" value="{{ old('classroom_override_from', $child?->classroom_override_from?->toDateString()) }}" class="cs-input">
-                                <x-input-error :messages="$errors->get('classroom_override_from')" />
-                                <span class="cs-help">Blank means today. Only used when a room is picked — an earlier date changes the room counts on days already reported.</span>
-                            </label>
-                            <label>
-                                <span class="cs-label">Status <span class="cs-req">*</span></span>
-                                <select name="status" class="cs-input">@foreach(\App\Models\Child::STATUSES as $status)<option value="{{ $status }}" @selected(old('status', $child?->status ?? 'Active') === $status)>{{ $status }}</option>@endforeach</select>
-                                <x-input-error :messages="$errors->get('status')" />
-                                <span class="cs-help">Pending is a place agreed and not yet started: on the roll, not counted as here.</span>
-                            </label>
-                            <label>
-                                <span class="cs-label">Enrolled on{!! $fromDocument('enrolled_on') ? $documentBadge : '' !!}</span>
-                                <input type="date" name="enrolled_on" value="{{ old('enrolled_on', $child?->enrolled_on?->toDateString() ?? ($extracted['enrolled_on'] ?? '')) }}" class="{{ $fieldClass('enrolled_on') }}">
-                                <x-input-error :messages="$errors->get('enrolled_on')" />
-                                <span class="cs-help">Attendance boxes start on this day. Blank if they have always been here.</span>
-                            </label>
-                            <label>
-                                <span class="cs-label">Withdrawn on</span>
-                                <input type="date" name="withdrawn_on" value="{{ old('withdrawn_on', $child?->withdrawn_on?->toDateString()) }}" class="cs-input">
-                                <x-input-error :messages="$errors->get('withdrawn_on')" />
-                                <span class="cs-help">Last day they attend. Blank while they are still enrolled.</span>
-                            </label>
+                        </div>
+
+                        {{-- ---- Classroom ---- --}}
+                        @php($automaticRoom = $formBirthDate ? \App\Services\ClassroomAssignment::automaticFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null)
+                        @php($chosenRoom = old('classroom_override', $child?->classroom_override))
+                        {{-- What the room this child lands in actually runs as. Read
+                             only: it is set once for the whole room on the Room
+                             Schedules page, not per child. --}}
+                        @php($roomSchedule = \App\Models\RoomSchedule::byRoom()[$chosenRoom ?: $automaticRoom] ?? null)
+                        {{-- The override fields open when there is one already, or when
+                             one was refused; otherwise they wait behind the button. --}}
+                        <div class="cs-group" x-data="{ moving: @js(filled($chosenRoom) || $errors->has('classroom_override') || $errors->has('classroom_override_from')), override: @js($chosenRoom ?? '') }">
+                            <span class="cs-group-label">Classroom</span>
+                            <div class="cs-room">
+                                <span class="cs-room-icon"><x-room-icon :room="$chosenRoom ?: ($automaticRoom ?? '')" size="text-lg" /></span>
+                                <div class="cs-room-body">
+                                    <p class="cs-room-name">
+                                        <span id="classroom-effective" class="truncate">{{ $chosenRoom ?: ($automaticRoom ?? 'Add a date of birth') }}</span>
+                                        <span class="cs-tag" x-text="override ? 'Set by hand' : 'Automatic'">{{ $chosenRoom ? 'Set by hand' : 'Automatic' }}</span>
+                                    </p>
+                                    <p class="cs-room-sub">
+                                        <span id="classroom-note">@if($automaticRoom)Automatic: {{ $automaticRoom }}@elseif($formBirthDate)No band covers this date of birth — set the room by hand.@else Add a date of birth and the room follows it.@endif</span>
+                                        @if($roomSchedule?->hoursLabel()) · {{ $roomSchedule->hoursLabel() }}@endif
+                                    </p>
+                                </div>
+                                <button type="button" class="cs-btn cs-btn-ghost" @click="moving = !moving" :aria-expanded="moving" aria-controls="classroom-move"
+                                        x-text="moving ? 'Keep this room' : 'Move to another room'">Move to another room</button>
+                            </div>
+                            <div id="classroom-move" class="cs-room-move cs-two" x-show="moving" @if(! filled($chosenRoom) && ! $errors->has('classroom_override') && ! $errors->has('classroom_override_from')) x-cloak @endif>
+                                <label>
+                                    <span class="cs-label">Room</span>
+                                    <select name="classroom_override" class="cs-input" x-model="override"><option value="">Use the automatic room</option>@foreach(\App\Services\ClassroomAssignment::rooms() as $room)<option value="{{ $room }}" @selected($chosenRoom === $room)>{{ $room }}</option>@endforeach</select>
+                                    <x-input-error :messages="$errors->get('classroom_override')" />
+                                    <span class="cs-help">For moving a child up early. It holds until you set it back to the automatic room.</span>
+                                </label>
+                                <label>
+                                    <span class="cs-label">Starts on</span>
+                                    <input type="date" name="classroom_override_from" value="{{ old('classroom_override_from', $child?->classroom_override_from?->toDateString()) }}" class="cs-input">
+                                    <x-input-error :messages="$errors->get('classroom_override_from')" />
+                                    <span class="cs-help">Blank means today. An earlier date changes the room counts on days already reported.</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {{-- ---- Dates ---- --}}
+                        <div class="cs-group">
+                            <span class="cs-group-label">Dates</span>
+                            <div class="cs-two">
+                                <label>
+                                    <span class="cs-label">Enrolled on{!! $fromDocument('enrolled_on') ? $documentBadge : '' !!}</span>
+                                    <input type="date" name="enrolled_on" value="{{ old('enrolled_on', $child?->enrolled_on?->toDateString() ?? ($extracted['enrolled_on'] ?? '')) }}" class="{{ $fieldClass('enrolled_on') }}">
+                                    <x-input-error :messages="$errors->get('enrolled_on')" />
+                                    <span class="cs-help">Attendance starts on this day. Blank if they've always been here.</span>
+                                </label>
+                                <label>
+                                    <span class="cs-label">Withdrawn on <span class="cs-optional">· optional</span></span>
+                                    <input type="date" name="withdrawn_on" value="{{ old('withdrawn_on', $child?->withdrawn_on?->toDateString()) }}" class="cs-input">
+                                    <x-input-error :messages="$errors->get('withdrawn_on')" />
+                                    <span class="cs-help">Last day attending. Leave blank while they're enrolled.</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {{-- ---- Schedule ---- --}}
+                        <div class="cs-group">
+                        <span class="cs-group-label">Schedule</span>
+                        <div class="cs-grid">
                             {{-- Which days the parent signed up for.
  
                                  The hours below say when in the day a child is
@@ -429,6 +538,7 @@
                                 <x-input-error :messages="$errors->get('pick_up_time')" />
                                 <span class="cs-help">When they normally go home. The centre closes at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_CLOSES_AT) }}.</span>
                             </label>
+                        </div>
                         </div>
                     </section>
                 </div>
@@ -554,11 +664,11 @@
             {{-- Next is a plain button and Save is the submit, so Enter in a text
                  field saves the record rather than skipping a section. --}}
             <button type="button" class="cs-btn cs-btn-primary" x-show="index < {{ $last }}" @click="index++">Next section ›</button>
-            <button class="cs-btn cs-btn-primary" x-show="index === {{ $last }}" x-cloak>{{ $submit }}</button>
+            <button class="cs-btn cs-btn-primary" x-show="index === {{ $last }}" x-cloak x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
             <span class="cs-counter">Section <span x-text="index + 1">{{ $initialStep + 1 }}</span> of {{ count($steps) }}</span>
         @else
             <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain">Cancel</a>
-            <button class="cs-btn cs-btn-primary ml-auto">{{ $submit }}</button>
+            <button class="cs-btn cs-btn-primary ml-auto" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
         @endif
     </div>
 

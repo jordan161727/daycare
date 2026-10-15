@@ -152,6 +152,47 @@ class MonthSheetExportTest extends TestCase
             ->assertSee('Total kids for month:');
     }
 
+    /**
+     * The back of the paper sheet, typed up: when the month is exported from
+     * the page, the comments come as a last sheet — a line a comment, with
+     * the day, the child, who wrote it and when — oldest first. A room's
+     * export carries that room's alone.
+     */
+    public function test_the_comments_come_as_a_last_sheet(): void
+    {
+        $maeve = Child::where('lan', '10064')->sole();
+        $mark = Child::where('lan', '10065')->sole();
+        $teacher = User::factory()->create(['role' => 'teacher', 'name' => 'Ms. Alvarez']);
+        // Comments are the door's, so the days they sit on are door rows.
+        $maevesDay = \App\Models\DoorAttendance::create(['child_id' => $maeve->id, 'attendance_date' => '2026-09-09', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-09 08:01')]);
+        $marksDay = \App\Models\DoorAttendance::create(['child_id' => $mark->id, 'attendance_date' => '2026-09-09', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-09 07:50')]);
+
+        \App\Models\AttendanceComment::create(['attendance_id' => $maevesDay->id, 'child_id' => $maeve->id, 'user_id' => $teacher->id, 'tag' => 'parent_note', 'body' => 'Mom says he slept poorly last night.'])
+            ->forceFill(['created_at' => Carbon::parse('2026-09-09 08:02', config('app.timezone'))])->save();
+        \App\Models\AttendanceComment::create(['attendance_id' => $marksDay->id, 'child_id' => $mark->id, 'user_id' => $teacher->id, 'tag' => 'belongings', 'body' => 'Brought 6 diapers.'])
+            ->forceFill(['created_at' => Carbon::parse('2026-09-09 08:05', config('app.timezone'))])->save();
+
+        // The whole month: both, oldest first, after the room sheets.
+        $response = $this->actingAs($this->admin)->get(route('attendance.month-sheet.export', ['month' => 9, 'year' => 2026]))->assertOk();
+        $path = storage_path('app/test-month.xlsx');
+        file_put_contents($path, $response->streamedContent());
+        $book = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+        $titles = array_map(fn ($sheet) => $sheet->getTitle(), $book->getAllSheets());
+        $this->assertSame('Comments', end($titles));
+        $comments = $book->getSheetByName('Comments');
+        $this->assertSame(['Date', 'Child', 'Room', 'Session', 'Tag', 'Written by', 'Time', 'Comment'], array_map(fn ($c) => $comments->getCell($c.'1')->getValue(), range('A', 'H')));
+        $this->assertSame(['2026-09-09', 'Adkins, Maeve', 'PreK', 'Day', 'Parent note', 'Ms. Alvarez', '8:02 AM', 'Mom says he slept poorly last night.'], array_map(fn ($c) => $comments->getCell($c.'2')->getValue(), range('A', 'H')));
+        $this->assertSame('Brought 6 diapers.', $comments->getCell('H3')->getValue());
+
+        // One room: that room's comments only.
+        $response = $this->actingAs($this->admin)->get(route('attendance.month-sheet.export', ['month' => 9, 'year' => 2026, 'room' => 'Toddler']))->assertOk();
+        file_put_contents($path, $response->streamedContent());
+        $comments = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getSheetByName('Comments');
+        $this->assertSame('Brought 6 diapers.', $comments->getCell('H2')->getValue());
+        $this->assertNull($comments->getCell('H3')->getValue());
+        @unlink($path);
+    }
+
     private function export(?string $room = null): MonthSheetExport
     {
         $sheet = app(MonthSheetController::class)->month($this->admin, 9, 2026);

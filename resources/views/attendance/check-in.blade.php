@@ -20,7 +20,7 @@
 {{-- One click handler on the root for the sheet's four hundred cells, the way
      the register does it, rather than a listener attached in init() — see
      onRootClick(). --}}
-<div x-data="checkInGrid()" @click="onRootClick($event)">
+<div x-data="checkInGrid()" @click="onRootClick($event)" @comment-added.window="onCommentAdded($event.detail)">
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 class="text-xl font-bold tracking-tight">Check in</h1>
@@ -292,6 +292,14 @@
                                       x-html="card.avatar"></span>
                                 <span x-show="isIn(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-500 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked in</span>
                                 <span x-show="isOut(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-400 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked out</span>
+                                {{-- Notes on the day: a count at the shoulder, so a card
+                                     with something written on it is told from one without. --}}
+                                <span x-show="commentCount(card) > 0" x-cloak data-comment-badge
+                                      class="absolute -right-2 -top-1 inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 shadow-sm ring-2 ring-white dark:bg-indigo-500/25 dark:text-indigo-100 dark:ring-night-900"
+                                      :aria-label="commentCount(card) + ' comment' + (commentCount(card) === 1 ? '' : 's') + ' today'">
+                                    <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v8a2.5 2.5 0 01-2.5 2.5H10l-5 4v-4H6.5A2.5 2.5 0 014 13.5v-8z"/></svg>
+                                    <span x-text="commentCount(card)"></span>
+                                </span>
                             </span>
                             <span class="mt-3 block truncate text-[0.9333rem] font-semibold transition" :class="isIn(card) ? '' : 'text-slate-400 dark:text-slate-500'" x-text="card.display"></span>
                             <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" x-text="card.room"></span>
@@ -345,11 +353,15 @@
          bindings inside an x-if on the way to removing them, and against a null
          child every one of them threw. The child stays; the flag closes it. --}}
     <template x-if="dialogOpen && child">
-        <div class="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" :aria-labelledby="'child-name-' + child.id" @keydown.escape.window="closeChild()">
+        <div class="fixed inset-0 z-50 grid place-items-center p-3 sm:p-6" role="dialog" aria-modal="true" :aria-labelledby="'child-name-' + child.id" @keydown.escape.window="closeChild()">
             <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" @click="closeChild()" aria-hidden="true"></div>
 
-            <div class="glass-card relative w-full max-w-sm rounded-3xl p-6 text-center">
-                <button type="button" @click="closeChild()" class="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20" aria-label="Close">×</button>
+            {{-- Sized to the screen: the full width of a phone, 32rem on a tablet
+                 or wider, and never taller than the viewport — the card scrolls
+                 inside itself on a long day (several entries, the composer open,
+                 a few comments) so the Clock out button is always reachable. --}}
+            <div class="glass-card relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-y-auto overscroll-contain rounded-3xl p-5 text-center sm:max-h-[calc(100dvh-3rem)] sm:p-8" data-card-dialog>
+                <button type="button" @click="closeChild()" class="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 sm:right-5 sm:top-5" aria-label="Close">×</button>
 
                 <span class="mx-auto block h-28 w-28 overflow-hidden rounded-full outline outline-[3px]" :class="isIn(child) ? 'outline-emerald-500' : 'outline-slate-200 dark:outline-white/10'" x-html="child.avatar.replace('h-24 w-24', 'h-28 w-28')"></span>
                 <h2 class="mt-4 text-2xl font-bold" :id="'child-name-' + child.id" x-text="child.display"></h2>
@@ -413,9 +425,11 @@
 
                 {{-- One session a day: the one line says it all. --}}
                 <template x-if="sessionsOf(child).length === 1">
-                    <span class="mt-3 block"><span class="inline-block rounded-full px-3 py-1 text-xs font-semibold"
-                          :class="isIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'"
-                          x-text="isIn(child) ? '✓ On premises · in at ' + lastEntry(child)?.in : (isOut(child) ? '○ Left at ' + lastEntry(child)?.out : '○ Currently out')"></span></span>
+                    <span class="mt-3 block"><span class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold"
+                          :class="isIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'" data-status-chip>
+                        <span class="h-2 w-2 rounded-full" :class="isIn(child) ? 'bg-emerald-500' : 'border border-slate-400'" aria-hidden="true"></span>
+                        <span x-text="isIn(child) ? 'In since ' + (dayOf(child)?.in_at_label || lastEntry(child)?.in) : (isOut(child) ? 'Left at ' + lastEntry(child)?.out : 'Currently out')"></span>
+                    </span></span>
                 </template>
 
                 {{-- Correcting the checks. A day already gone, or Edit on a
@@ -513,16 +527,38 @@
                     </div>
                 </template>
 
+                {{-- The notes on the day, for the row on screen. Keyed on the
+                     row, so switching AM to PM, or clocking in, makes it afresh. --}}
+                <template x-if="! correcting(child) && slotOf(child)">
+                    <div>
+                        <template x-for="slot in [slotOf(child)]" :key="'comments-' + slot.id">
+                            <div><x-attendance-comments /></div>
+                        </template>
+                    </div>
+                </template>
+
                 <template x-if="! correcting(child)">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
-                        <label for="ci-code" class="block text-sm font-semibold">Health code</label>
+                        {{-- The child is in: the check they came in with, as a panel —
+                             the code, who took it and when. Read, not retyped: a change
+                             of condition is corrected in Edit. --}}
+                        <template x-if="slotIn(child)">
+                            <div class="mb-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-4 py-3 text-left dark:bg-white/5" data-health-panel>
+                                <div class="flex flex-col gap-0.5">
+                                    <span class="text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Health code</span>
+                                    <span class="text-sm font-semibold" x-text="codeLabel(slotOf(child)?.in_code ?? 0)"></span>
+                                </div>
+                                <span class="text-xs text-slate-500 dark:text-slate-400" x-text="[slotOf(child)?.in_by, slotOf(child)?.in_at_label].filter(Boolean).join(' · ')"></span>
+                            </div>
+                        </template>
+                        <label for="ci-code" class="block text-sm font-semibold" x-show="! slotIn(child)">Health code</label>
                         {{-- Clocking out, the box is the arrival check, read-only: the
                              code the child came in with is the code they leave with
                              — the client's rule — and it is shown here so the teacher
                              sees it, not retyped. A change of condition during the day
                              is put right in Edit, where both checks can be corrected
                              and the change is written down. --}}
-                        <select id="ci-code" x-model.number="code" :disabled="slotIn(child)"
+                        <select id="ci-code" x-model.number="code" :disabled="slotIn(child)" x-show="! slotIn(child)"
                                 class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:font-semibold disabled:text-slate-700 dark:border-white/10 dark:bg-night-800 dark:disabled:bg-white/10 dark:disabled:text-slate-200">
                             <template x-for="entry in codes" :key="entry.code">
                                 {{-- :selected as well as x-model: the options are
@@ -538,14 +574,13 @@
                                       class="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-night-800"></textarea>
                         </div>
 
-                        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"
-                           x-text="slotIn(child) ? 'Carried from check-in. The child leaves with the code they arrived with; a change of condition is corrected in Edit.' : 'Defaults to 0 · Normal. Choose another code when something was seen.'"></p>
+                        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400" x-show="! slotIn(child)">Defaults to 0 · Normal. Choose another code when something was seen.</p>
 
                         <p x-show="error" x-cloak class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300" x-text="error"></p>
 
                         <button type="submit" :disabled="saving"
                                 :class="slotIn(child) ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'"
-                                class="mt-4 w-full rounded-xl py-3 text-sm font-bold text-white transition disabled:opacity-50"
+                                class="mt-5 min-h-[3.25rem] w-full rounded-full text-sm font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
                                 x-text="saving ? 'Saving…' : (slotIn(child) ? 'Clock out' : (slotOut(child) ? 'Clock in again' : 'Clock in')) + (sessionsOf(child).length > 1 ? ' · ' + sessionName(session) : '')"></button>
                     </form>
                 </template>
@@ -660,10 +695,11 @@ function checkInGrid() { return {
     outTime: '',
     was: null,
     session: 'FULL',  // the session the dialog is on: AM, PM, or the whole day
+    // The door's own endpoints: nothing the door writes reaches the register.
     urls: {
-        signIn: @js(route('attendance.signin')),
-        retime: @js(route('attendance.signin.retime')),
-        remove: @js(route('attendance.signin.remove')),
+        signIn: @js(route('check-in.day')),
+        retime: @js(route('check-in.day.retime')),
+        remove: @js(route('check-in.day.remove')),
     },
 
     /** "8:05a" as a time field wants it: "08:05". */
@@ -775,7 +811,7 @@ function checkInGrid() { return {
             if (day.out && (this.codeOut !== day.out_code || (this.noteOut || '') !== (day.out_note || ''))) checks.push(['out', this.codeOut, this.noteOut]);
 
             for (const [direction, code, note] of checks) {
-                const data = await post('/attendance/' + day.id + '/health', { direction, code, note: (note || '').trim() || null });
+                const data = await post('/check-in/' + day.id + '/health', { direction, code, note: (note || '').trim() || null });
                 if (direction === 'out') { day = { ...day, out_code: data.code, out_note: data.note }; }
                 else { day = { ...day, in_code: data.code, in_note: data.note }; }
             }
@@ -1110,6 +1146,16 @@ function checkInGrid() { return {
 
         this.rows = { ...this.rows };
     },
+    /** Today's notes on the child, across the sessions. */
+    commentCount(row) {
+        return Object.values(row?.bySession?.[this.today] ?? {}).reduce((sum, slot) => sum + (slot.comments_count ?? 0), 0);
+    },
+    /** A note saved in the dialog: the card's count follows without a reload. */
+    onCommentAdded(detail) {
+        const row = this.rows[detail.childId];
+        if (! row) return;
+        this.rows = { ...this.rows, [detail.childId]: { ...row } };
+    },
     isIn(row) { const day = this.dayOf(row); return !! (day && day.in && ! day.out); },
     isOut(row) { const day = this.dayOf(row); return !! (day && day.out); },
     stateOf(row) {
@@ -1207,6 +1253,7 @@ function checkInGrid() { return {
                 in: data.in_at, in_code: data.health_in, in_note: data.health_in_note,
                 out: data.out_at, out_code: data.health_out, out_note: data.health_out_note,
                 trips: data.trips ?? [],
+                comments: data.comments ?? [], comments_count: data.comments_count ?? 0,
             });
 
             this.closeChild();
@@ -1427,7 +1474,7 @@ function checkInGrid() { return {
             }
 
             const url = past
-                ? '/attendance/' + day.id + '/health'
+                ? '/check-in/' + day.id + '/health'
                 : (act === 'check-in'
                     ? '/check-in'
                     : '/check-in/' + day.id + (act === 'check-out' || act === 'out_code' ? '/out' : '/in'));

@@ -189,7 +189,9 @@ class SettingsTest extends TestCase
         $nav = substr($html, (int) strpos($html, '<nav'), (int) strpos($html, '</nav>') - (int) strpos($html, '<nav'));
 
         $this->assertStringNotContainsString(route('devices.index'), $nav);
-        $this->assertStringContainsString(route('settings.company'), $nav);
+        // Settings is back on the director's sidebar (16 Oct 2026); Devices
+        // lives under it rather than beside it.
+        $this->assertStringContainsString(route('settings.children'), $nav);
     }
 
     private function teacher(): User

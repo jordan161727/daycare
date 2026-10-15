@@ -99,7 +99,15 @@ class HealthScreening
                 $noteColumn => $code === null ? null : ($note ?: null),
             ])->save();
 
-            HealthAudit::note($attendance, $direction, $old, $code, $code === null ? null : ($note ?: null), $by);
+            // Through the relation, not the model: a door row's audit lands on
+            // the door's audit table, a register row's on the register's.
+            $attendance->healthAudits()->create([
+                'direction' => $direction,
+                'old_code' => $old,
+                'new_code' => $code,
+                'note' => $code === null ? null : ($note ?: null),
+                'user_id' => $by?->id,
+            ]);
         });
 
         return $attendance->refresh();

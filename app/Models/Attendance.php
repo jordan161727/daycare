@@ -50,6 +50,18 @@ class Attendance extends Model
      * The times the child left and came back within this session, oldest
      * first. The row itself holds the first arrival and the latest departure.
      */
+    /** The notes on this day — the back of the paper sheet — newest first. */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(AttendanceComment::class)->latest('created_at')->latest('id');
+    }
+
+    /** Clocked in and not yet out: on the premises, and taking notes. */
+    public function isSignedIn(): bool
+    {
+        return $this->signed_in_at !== null && $this->signed_out_at === null;
+    }
+
     public function returns(): HasMany
     {
         return $this->hasMany(AttendanceReturn::class)->orderBy('returned_at');

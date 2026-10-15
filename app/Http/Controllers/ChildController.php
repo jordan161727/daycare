@@ -59,15 +59,34 @@ class ChildController extends Controller
         // whole roll rather than the filtered view — they are how the filter is
         // chosen, so a count that moved when a chip was pressed would be
         // answering about somewhere else.
+        //
+        // The archived are not on the roll at all: All, Active and Inactive
+        // never include them, whichever tab is open.
         $statusCounts = Child::visibleTo($requestUser)
+            ->notArchived()
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
 
         $rollCount = $statusCounts->sum();
 
-        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount'));
+        // The Archived tab is a setting, off by default: a centre that has
+        // never archived anybody should not be offered an empty drawer. Its
+        // count is separate on purpose — it is not part of the roll.
+        $showArchived = self::showsArchived();
+        $archivedCount = $showArchived ? Child::visibleTo($requestUser)->archived()->count() : 0;
+
+        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount', 'showArchived', 'archivedCount'));
     }
+
+    /** Whether the Children page has an Archived tab. Set in Settings › Children. */
+    public static function showsArchived(): bool
+    {
+        return \App\Models\Setting::bool(self::SHOW_ARCHIVED_SETTING, false);
+    }
+
+    /** The setting that adds the Archived tab. Read here and written in SettingController. */
+    public const SHOW_ARCHIVED_SETTING = 'children.show_archived';
 
     /**
      * The roll as the page is asking for it: filtered, sorted, and narrowed to
@@ -82,7 +101,7 @@ class ChildController extends Controller
      */
     private function roster(): array
     {
-        $allowedSorts = ['lan', 'first_name', 'last_name', 'age', 'classroom', 'status'];
+        $allowedSorts = ['lan', 'first_name', 'last_name', 'dob', 'age', 'classroom', 'schedule', 'alerts', 'status'];
         // The roll opens in LAN order: it is the number on the cabinet, the
         // parent letter and every sheet the centre keeps, so it is what
         // somebody arrives already holding.
@@ -99,8 +118,16 @@ class ChildController extends Controller
         $status = trim((string) request('status'));
         abort_unless($status === '' || in_array($status, Child::STATUSES, true), 404);
 
+        // The archived are reachable from this page only through the Archived
+        // tab, and the tab only exists while the setting is on. With it off
+        // the address is as invented as any other.
+        $wantsArchived = $status === Child::ARCHIVED;
+        abort_if($wantsArchived && ! self::showsArchived(), 404);
+
         $children = Child::query()
             ->visibleTo(request()->user())
+            // Every tab but Archived leaves the archived out — All included.
+            ->when(! $wantsArchived, fn ($query) => $query->notArchived())
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             // Age is shown, not stored, so it sorts by the date it is worked out
             // from — the other way round, since the youngest child is the one
@@ -108,6 +135,34 @@ class ChildController extends Controller
             ->when($sort === 'age', fn ($query) => $query->orderByRaw(
                 'COALESCE(birth_date, dob) '.($direction === 'asc' ? 'desc' : 'asc')
             ))
+            // The date itself, the other way up: earliest birthday first.
+            ->when($sort === 'dob', fn ($query) => $query->orderByRaw('COALESCE(birth_date, dob) '.$direction))
+            /*
+             * Schedule sorts by when the day starts, then when it ends — the
+             * earliest drop-off at the top — with children who have no hours
+             * on record at the foot either way, because "unknown" is not an
+             * hour and should not pass for one.
+             */
+            ->when($sort === 'schedule', fn ($query) => $query
+                // Nothing on record at all — no hours, no days — at the foot either way.
+                ->orderByRaw("CASE WHEN drop_off_time IS NULL AND (schedule_days IS NULL OR schedule_days = '' OR schedule_days = '[]' OR schedule_days = 'null') THEN 1 ELSE 0 END")
+                // Hours before days alone, then by the hour.
+                ->orderByRaw('CASE WHEN drop_off_time IS NULL THEN 1 ELSE 0 END')
+                ->orderByRaw('drop_off_time '.$direction)
+                ->orderByRaw('pick_up_time '.$direction)
+                // Then the fuller week first: the days are a JSON list, and a
+                // longer list is more days.
+                ->orderByRaw('LENGTH(COALESCE(schedule_days, \'\')) '.($direction === 'asc' ? 'desc' : 'asc')))
+            /*
+             * Alerts sorts the children who have one to the top (ascending),
+             * or to the foot (descending): the question the column answers is
+             * "who needs a word before the day starts", and the roll should
+             * be able to put those children together. Within each group, by
+             * the alert text, so like alerts sit beside each other.
+             */
+            ->when($sort === 'alerts', fn ($query) => $query
+                ->orderByRaw("CASE WHEN alerts IS NULL OR alerts = '' OR alerts = '[]' OR alerts = 'null' THEN 1 ELSE 0 END ".($direction === 'asc' ? 'asc' : 'desc'))
+                ->orderByRaw('alerts '.$direction))
             /*
              * A LAN is stored as a string, because a centre's numbering can
              * carry a prefix and storing it as an integer would destroy one
@@ -121,7 +176,9 @@ class ChildController extends Controller
                 ->orderBy('lan', $direction))
             // Rooms sort youngest first, the way the centre says them, not A to Z.
             ->when($sort === 'classroom', fn ($query) => $query->orderByRoom($direction)->orderBy('last_name')->orderBy('first_name'))
-            ->when(! in_array($sort, ['age', 'lan', 'classroom'], true), fn ($query) => $query->orderBy($sort, $direction))
+            ->when(! in_array($sort, ['age', 'dob', 'lan', 'classroom', 'schedule', 'alerts'], true), fn ($query) => $query->orderBy($sort, $direction))
+            // The computed sorts settle ties by name, so the order is the same every load.
+            ->when(in_array($sort, ['schedule', 'alerts'], true), fn ($query) => $query->orderBy('last_name')->orderBy('first_name'))
             ->when($sort === 'last_name', fn ($query) => $query->orderBy('first_name'))
             // The whole roll on one page. It used to page at ten, which put a
             // sixty-child centre six clicks from the child they were looking
@@ -311,7 +368,25 @@ class ChildController extends Controller
 
         $before = $child->scheduleDays();
 
-        $child->update($this->validatedData($request, $child));
+        $data = $this->validatedData($request, $child);
+
+        /*
+         * Archiving from the form is the same act as the Archive button on
+         * the roll, so it leaves the same trail — when, who, and what they
+         * were — and coming back out of Archived clears it. Done here rather
+         * than in a model hook because the hook would also fire on an import
+         * that happens to carry the word, which is not somebody archiving.
+         */
+        $archiving = ($data['status'] ?? null) === Child::ARCHIVED && ! $child->isArchived();
+        $restoring = $child->isArchived() && ($data['status'] ?? null) !== Child::ARCHIVED;
+
+        if ($archiving) {
+            $child->forceFill(['status_before_archive' => $child->status, 'archived_at' => now(), 'archived_by' => $request->user()?->id]);
+        } elseif ($restoring) {
+            $child->forceFill(['status_before_archive' => null, 'archived_at' => null, 'archived_by' => null]);
+        }
+
+        $child->fill($data)->save();
 
         $this->syncPhoto($request, $child);
 
@@ -449,9 +524,12 @@ class ChildController extends Controller
             // Blank means today, the same as it does on the schedule page. It is
             // not a second thing to fill in before a room can be picked.
             'classroom_override_from' => ['nullable', 'date_format:Y-m-d'],
-            // Active, Pending or Inactive — the list lives on the model, so the
-            // form's options and what the form will accept cannot drift apart.
-            'status' => ['required', Rule::in(Child::STATUSES)],
+            // Active, Pending, Inactive or Archived — the list lives on the
+            // model, so the form's options and what the form will accept
+            // cannot drift apart. Archived is the director's alone: a teacher
+            // may mark a child in their room as having left, not take them
+            // off every list the centre keeps.
+            'status' => ['required', Rule::in($request->user()?->isAdmin() ? Child::STATUSES : Child::ROLL_STATUSES)],
 
             // What a room has to know before the day starts. A kind and a line
             // apiece; the kind is what colours the chip on the roll.

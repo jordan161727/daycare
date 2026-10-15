@@ -38,7 +38,7 @@ class TeacherController extends Controller
         $today = today()->toDateString();
 
         $teachers->getCollection()->transform(function (User $teacher) use ($clock, $today) {
-            $teacher->students_count = Child::whereIn('classroom', $teacher->assignedClassrooms())->count();
+            $teacher->students_count = Child::notArchived()->whereIn('classroom', $teacher->assignedClassrooms())->count();
 
             /*
              * Where they stand right now, and what they last did.

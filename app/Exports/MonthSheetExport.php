@@ -35,6 +35,9 @@ class MonthSheetExport implements WithMultipleSheets
         private int $month,
         private int $year,
         private ?string $room = null,
+        private ?Collection $comments = null,
+        // The door's rows, when the workbook carries both records.
+        private ?Collection $doorRows = null,
     ) {}
 
     public function sheets(): array
@@ -47,8 +50,33 @@ class MonthSheetExport implements WithMultipleSheets
 
         // A month with nobody on the roll still opens as a workbook with one
         // empty room sheet rather than as a file Excel refuses.
+        // With the door's rows as well, each record is its own run of room
+        // sheets, the title saying which — "Infant · Register", "Infant · Door".
+        $both = $this->doorRows !== null;
+        $sheets = $this->roomSheets($rooms, $both ? ' · Register' : '');
+
+        if ($both) {
+            $doorRooms = $this->doorRows->groupBy('room')->sortKeys();
+            if ($this->room !== null) {
+                $doorRooms = $doorRooms->only([$this->room]);
+            }
+            $sheets = array_merge($sheets, $this->roomSheets($doorRooms, ' · Door'));
+        }
+
+        // The back of the paper sheet — the comments — as a last sheet, when
+        // the month is exported with them.
+        if ($this->comments !== null) {
+            $sheets[] = new MonthCommentsSheet($this->comments);
+        }
+
+        return $sheets;
+    }
+
+    /** A sheet per room, or one empty sheet rather than a file Excel refuses. */
+    private function roomSheets(Collection $rooms, string $suffix): array
+    {
         if ($rooms->isEmpty()) {
-            return [new MonthRoomSheet($this->room ?? 'Roll', collect(), $this->days, $this->month, $this->year)];
+            return [new MonthRoomSheet($this->room ?? 'Roll', collect(), $this->days, $this->month, $this->year, $suffix)];
         }
 
         return $rooms->map(fn (Collection $children, string $room) => new MonthRoomSheet(
@@ -57,6 +85,7 @@ class MonthSheetExport implements WithMultipleSheets
             $this->days,
             $this->month,
             $this->year,
+            $suffix,
         ))->values()->all();
     }
 }

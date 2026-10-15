@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Attendance;
+use App\Models\DoorAttendance;
 use App\Models\Child;
 use App\Models\HealthAudit;
 use App\Models\User;
@@ -68,11 +69,11 @@ class CheckInScreenTest extends TestCase
             'health_code' => 0,
         ])->assertOk()->assertJsonPath('health_in', 0);
 
-        $attendance = Attendance::firstOrFail();
+        $attendance = DoorAttendance::firstOrFail();
 
         $this->assertNotNull($attendance->signed_in_at);
         $this->assertSame(0, $attendance->health_in_code);
-        $this->assertDatabaseHas('health_audits', [
+        $this->assertDatabaseHas('door_health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'new_code' => 0,
@@ -89,7 +90,7 @@ class CheckInScreenTest extends TestCase
             'session' => 'FULL',
         ])->assertStatus(422)->assertJsonValidationErrors('health_code');
 
-        $this->assertSame(0, Attendance::count());
+        $this->assertSame(0, DoorAttendance::count());
     }
 
     public function test_a_refused_code_leaves_no_arrival_behind_it(): void
@@ -102,12 +103,12 @@ class CheckInScreenTest extends TestCase
             'health_code' => 11,
         ])->assertStatus(422)->assertJsonValidationErrors('health_note');
 
-        $this->assertSame(0, Attendance::count());
+        $this->assertSame(0, DoorAttendance::count());
     }
 
     public function test_checking_out_records_the_departure_and_its_check(): void
     {
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -129,7 +130,7 @@ class CheckInScreenTest extends TestCase
 
     public function test_a_departure_cannot_be_recorded_without_a_check(): void
     {
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -151,7 +152,7 @@ class CheckInScreenTest extends TestCase
      */
     public function test_a_child_clocked_out_can_be_clocked_in_again_and_every_entry_is_kept(): void
     {
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -232,14 +233,14 @@ class CheckInScreenTest extends TestCase
         // 1. Check in (AM). The dialog books the first row for a fresh day.
         $first = $press('07:30', 'check-in.store', ['child_id' => $this->child->id, 'session' => 'AM'])->json('attendance_id');
         // 2. Check out (AM): the school picks them up.
-        $press('08:15', 'check-in.out', [], Attendance::find($first))->assertJsonPath('out_at', '8:15a');
+        $press('08:15', 'check-in.out', [], DoorAttendance::find($first))->assertJsonPath('out_at', '8:15a');
         // 3. Check in (PM): the school brings them back — the second row.
         $second = $press('15:10', 'check-in.store', ['child_id' => $this->child->id, 'session' => 'PM'])->json('attendance_id');
         $this->assertNotSame($first, $second);
         // 4. Check out (PM): they go home.
-        $press('17:30', 'check-in.out', [], Attendance::find($second))->assertJsonPath('out_at', '5:30p');
+        $press('17:30', 'check-in.out', [], DoorAttendance::find($second))->assertJsonPath('out_at', '5:30p');
 
-        $rows = Attendance::where('child_id', $this->child->id)->orderBy('signed_in_at')->get();
+        $rows = DoorAttendance::where('child_id', $this->child->id)->orderBy('signed_in_at')->get();
         $this->assertSame(['AM', 'PM'], $rows->pluck('session')->all());
         $this->assertSame(['07:30', '15:10'], $rows->map(fn ($row) => $row->signed_in_at->format('H:i'))->all());
         $this->assertSame(['08:15', '17:30'], $rows->map(fn ($row) => $row->signed_out_at->format('H:i'))->all());
@@ -259,17 +260,17 @@ class CheckInScreenTest extends TestCase
             });
 
         // 5. Back again after going home: a return on the second row.
-        $press('18:00', 'check-in.back', [], Attendance::find($second))
+        $press('18:00', 'check-in.back', [], DoorAttendance::find($second))
             ->assertJsonPath('out_at', null)
             ->assertJsonPath('trips', [['5:30p', '6:00p']]);
 
-        $this->assertCount(2, Attendance::where('child_id', $this->child->id)->get());
-        $this->assertCount(1, Attendance::find($second)->returns);
+        $this->assertCount(2, DoorAttendance::where('child_id', $this->child->id)->get());
+        $this->assertCount(1, DoorAttendance::find($second)->returns);
     }
 
     public function test_clocking_in_again_needs_a_check_and_a_prior_clock_out(): void
     {
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -298,7 +299,7 @@ class CheckInScreenTest extends TestCase
     {
         // Corrections belong on the week sheet, where they are written to
         // attendance_amendments.
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-21',
             'session' => 'FULL',
@@ -387,15 +388,16 @@ class CheckInScreenTest extends TestCase
          * and the checks through the health endpoint. One record, one trail.
          */
         // @js writes the address single-quoted with its slashes escaped, so
-        // the assertion is on the route's own path in that form.
+        // the assertion is on the route's own path in that form. Since the
+        // split these are the door's own endpoints, not the register's.
         $this->assertStringContainsString("signIn: '", $html);
-        $this->assertStringContainsString('attendance\/sign-in\'', $html);
-        $this->assertStringContainsString('attendance\/sign-in\/retime\'', $html);
-        $this->assertStringContainsString('attendance\/sign-in\/remove\'', $html);
+        $this->assertStringContainsString('check-in\/day\'', $html);
+        $this->assertStringContainsString('check-in\/day\/retime\'', $html);
+        $this->assertStringContainsString('check-in\/day\/remove\'', $html);
         $this->assertStringContainsString("post(this.urls.signIn, {", $html);
         $this->assertStringContainsString("post(this.urls.retime, { ...base, ...times })", $html);
         $this->assertStringContainsString("window.postJson(this.urls.remove,", $html);
-        $this->assertStringContainsString("post('/attendance/' + day.id + '/health', { direction, code, note:", $html);
+        $this->assertStringContainsString("post('/check-in/' + day.id + '/health', { direction, code, note:", $html);
         $this->assertStringContainsString('id="ci-in" type="time"', $html);
         $this->assertStringContainsString('id="ci-out" type="time"', $html);
         $this->assertStringContainsString('Not attending — remove this day', $html);
@@ -491,7 +493,7 @@ class CheckInScreenTest extends TestCase
          * of them takes a press, because on a grid thirty wide the commonest
          * mistake is the column next to the one you meant.
          */
-        Attendance::create([
+        DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-21',
             'session' => 'FULL',
@@ -520,7 +522,7 @@ class CheckInScreenTest extends TestCase
     public function test_the_arrival_check_can_be_corrected_on_the_day(): void
     {
         // A second look, or a mis-tap. The change is audited like any other.
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -534,7 +536,7 @@ class CheckInScreenTest extends TestCase
             ->assertJsonPath('health_in', 4);
 
         $this->assertSame(4, $attendance->fresh()->health_in_code);
-        $this->assertDatabaseHas('health_audits', [
+        $this->assertDatabaseHas('door_health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => 0,
@@ -544,7 +546,7 @@ class CheckInScreenTest extends TestCase
 
     public function test_an_arrival_check_cannot_be_corrected_on_a_day_already_gone(): void
     {
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-21',
             'session' => 'FULL',
@@ -563,7 +565,7 @@ class CheckInScreenTest extends TestCase
     {
         // The cells show the app's short clock, so a reply answering in any
         // other format would put two kinds of time in one column.
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -589,7 +591,7 @@ class CheckInScreenTest extends TestCase
          * "when did this child arrive", and the two would drift the first time
          * somebody corrected one of them.
          */
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -620,9 +622,9 @@ class CheckInScreenTest extends TestCase
             'health_code' => 0,
         ])->assertOk();
 
-        $this->assertSame(1, Attendance::count());
+        $this->assertSame(1, DoorAttendance::count());
 
-        $attendance = Attendance::firstOrFail();
+        $attendance = DoorAttendance::firstOrFail();
 
         $this->assertSame('2026-09-23', $attendance->attendance_date->toDateString());
         $this->assertNotNull($attendance->signed_in_at);
@@ -689,7 +691,7 @@ class CheckInScreenTest extends TestCase
     {
         // The thing Edit exists for: an arrival that was recorded at the time
         // and a health check that was not.
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-21',
             'session' => 'FULL',
@@ -699,13 +701,13 @@ class CheckInScreenTest extends TestCase
         $this->assertNull($attendance->health_in_code);
 
         $this->actingAs($this->admin)
-            ->postJson(route('attendance.health', $attendance), ['direction' => 'in', 'code' => 4])
+            ->postJson('/check-in/'.$attendance->id.'/health', ['direction' => 'in', 'code' => 4])
             ->assertOk();
 
         $this->assertSame(4, $attendance->fresh()->health_in_code);
 
         // And it says who added it and when, like every other change.
-        $this->assertDatabaseHas('health_audits', [
+        $this->assertDatabaseHas('door_health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => null,
@@ -718,7 +720,7 @@ class CheckInScreenTest extends TestCase
     {
         // The switch is not drawn for them, so this is only reachable from a
         // tab left open — which is exactly why it is checked on the server.
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-21',
             'session' => 'FULL',
@@ -726,7 +728,7 @@ class CheckInScreenTest extends TestCase
         ]);
 
         $this->actingAs($this->teacher)
-            ->postJson(route('attendance.health', $attendance), ['direction' => 'in', 'code' => 4])
+            ->postJson('/check-in/'.$attendance->id.'/health', ['direction' => 'in', 'code' => 4])
             ->assertForbidden();
 
         $this->assertNull($attendance->fresh()->health_in_code);
@@ -740,7 +742,7 @@ class CheckInScreenTest extends TestCase
          * attendance_amendments. Edit here adds the check that was missed, and
          * leaves the arrival exactly as it was recorded.
          */
-        $attendance = Attendance::create([
+        $attendance = DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-21',
             'session' => 'FULL',
@@ -749,7 +751,7 @@ class CheckInScreenTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->postJson(route('attendance.health', $attendance), ['direction' => 'out', 'code' => 10])
+            ->postJson('/check-in/'.$attendance->id.'/health', ['direction' => 'out', 'code' => 10])
             ->assertOk();
 
         $attendance->refresh();
@@ -900,7 +902,7 @@ class CheckInScreenTest extends TestCase
             'health_code' => 0,
         ])->assertOk();
 
-        $this->assertSame(1, Attendance::count());
+        $this->assertSame(1, DoorAttendance::count());
     }
 
     public function test_the_awaited_count_is_the_one_somebody_is_chasing(): void
@@ -918,7 +920,7 @@ class CheckInScreenTest extends TestCase
         $this->assertMatchesRegularExpression('/<b>1<\/b> awaited/', $html);
 
         // Once they are in, they are no longer awaited.
-        Attendance::create([
+        DoorAttendance::create([
             'child_id' => $this->child->id,
             'attendance_date' => '2026-09-23',
             'session' => 'FULL',
@@ -983,7 +985,7 @@ class CheckInScreenTest extends TestCase
      */
     public function test_the_saved_health_codes_are_shown_in_the_dialog_only(): void
     {
-        Attendance::create([
+        DoorAttendance::create([
             'child_id' => $this->child->id, 'attendance_date' => '2026-09-23', 'session' => 'FULL',
             'signed_in_at' => Carbon::parse('2026-09-23 07:46'), 'signed_out_at' => Carbon::parse('2026-09-23 15:11'),
             'health_in_code' => 0, 'health_out_code' => 4,
@@ -1029,7 +1031,7 @@ class CheckInScreenTest extends TestCase
         $this->actingAs($this->admin)->postJson(route('check-in.store'), ['child_id' => $this->child->id, 'session' => 'PM', 'health_code' => 4, 'health_note' => 'warm'])
             ->assertOk()->assertJsonPath('health_in', 4);
 
-        $rows = Attendance::where('child_id', $this->child->id)->get()->keyBy('session');
+        $rows = DoorAttendance::where('child_id', $this->child->id)->get()->keyBy('session');
         $this->assertSame([0, 3], [$rows['AM']->health_in_code, $rows['AM']->health_out_code]);
         $this->assertSame([4, null], [$rows['PM']->health_in_code, $rows['PM']->health_out_code]);
 
@@ -1068,7 +1070,7 @@ class CheckInScreenTest extends TestCase
         // And the teacher can clock a child from another room, since they can see them.
         $this->actingAs($this->teacher)->postJson(route('check-in.store'), ['child_id' => $this->child->id, 'session' => 'FULL', 'health_code' => 0])
             ->assertOk();
-        $this->assertSame(1, Attendance::where('child_id', $this->child->id)->count());
+        $this->assertSame(1, DoorAttendance::where('child_id', $this->child->id)->count());
     }
 
     /**
@@ -1091,7 +1093,9 @@ class CheckInScreenTest extends TestCase
         // :selected as well as x-model, or the preset would not show.
         $this->assertStringContainsString('<select id="ci-code" x-model.number="code" :disabled="slotIn(child)"', $html);
         $this->assertStringContainsString(':selected="Number(entry.code) === Number(code)"', $html);
-        $this->assertStringContainsString('Carried from check-in.', $html);
+        // …shown as a panel — the code, who took it and when — not a greyed select.
+        $this->assertStringContainsString('data-health-panel', $html);
+        $this->assertStringContainsString("x-text=\"codeLabel(slotOf(child)?.in_code ?? 0)\"", $html);
     }
 
     /**

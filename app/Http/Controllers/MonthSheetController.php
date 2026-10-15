@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Exports\MonthSheetExport;
 use App\Models\Attendance;
+use App\Models\AttendanceComment;
+use App\Models\DoorAttendance;
 use App\Models\Child;
 use App\Models\SymptomCode;
 use App\Models\User;
@@ -43,12 +45,15 @@ class MonthSheetController extends Controller
 
         $month = (int) ($request->input('month') ?: today()->month);
         $year = (int) ($request->input('year') ?: today()->year);
+        // Which record the page reads: the register (the paper form) or the door.
+        $source = $request->input('source') === 'door' ? 'door' : 'register';
 
-        $sheet = $this->month($user, $month, $year);
+        $sheet = $this->month($user, $month, $year, $source);
 
         return view('attendance.month-sheet', $sheet + [
             'month' => $month,
             'year' => $year,
+            'source' => $source,
             'codes' => SymptomCode::active(),
         ]);
     }
@@ -72,12 +77,23 @@ class MonthSheetController extends Controller
         $year = (int) ($request->input('year') ?: today()->year);
         $room = trim((string) $request->input('room')) ?: null;
 
-        $sheet = $this->month($request->user(), $month, $year);
+        // Both records, as separate sheets: the register's rooms, then the door's.
+        $sheet = $this->month($request->user(), $month, $year, 'register');
+        $door = $this->month($request->user(), $month, $year, 'door');
 
         $name = 'attendance-'.$sheet['start']->format('Y-m').($room ? '-'.str_replace(' ', '-', strtolower($room)) : '').'.xlsx';
 
+        // The month's comments, oldest first, for the Comments sheet — the
+        // room's alone when a room was asked for.
+        $childIds = $sheet['rows']->when($room !== null, fn ($rows) => $rows->where('room', $room))->pluck('id');
+        $comments = AttendanceComment::with(['attendance', 'child', 'author'])
+            ->whereIn('child_id', $childIds)
+            ->whereHas('attendance', fn ($query) => $query->whereBetween('attendance_date', [$sheet['start']->toDateString(), $sheet['start']->copy()->endOfMonth()->toDateString()]))
+            ->orderBy('created_at')
+            ->get();
+
         return Excel::download(
-            new MonthSheetExport($sheet['rows'], $sheet['days'], $sheet['perDay'], $month, $year, $room),
+            new MonthSheetExport($sheet['rows'], $sheet['days'], $sheet['perDay'], $month, $year, $room, $comments, $door['rows']),
             $name,
         );
     }
@@ -89,7 +105,7 @@ class MonthSheetController extends Controller
      *
      * @return array{rows: \Illuminate\Support\Collection, days: \Illuminate\Support\Collection, perDay: array<string, int>, monthTotal: int, start: Carbon, stats: array, roomChips: \Illuminate\Support\Collection}
      */
-    public function month(User $user, int $month, int $year): array
+    public function month(User $user, int $month, int $year, string $source = 'register'): array
     {
         $start = Carbon::create($year, $month, 1)->startOfDay();
         $end = $start->copy()->endOfMonth();
@@ -104,7 +120,9 @@ class MonthSheetController extends Controller
             ->orderBy('first_name')
             ->get();
 
-        $records = Attendance::whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
+        // The register's rows or the door's: two records that do not meet.
+        $records = ($source === 'door' ? DoorAttendance::query() : Attendance::query())
+            ->whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
             ->whereIn('child_id', $children->pluck('id'))
             ->get()
             ->groupBy([

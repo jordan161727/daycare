@@ -95,9 +95,13 @@ class LayoutChromeTest extends TestCase
                 ->assertDontSee($label('My Leave'), escape: false)
                 ->assertDontSee($label('Leave Requests'), escape: false)
                 ->assertDontSee($label('Payroll Prep'), escape: false)
-                ->assertDontSee($label('Settings'), escape: false)
                 ->assertDontSee('rounded-full bg-amber-500', escape: false);
         }
+
+        // Settings came back for the director (16 Oct 2026): it is where
+        // archived children are restored. A teacher still does not see it.
+        $this->actingAs($admin)->get(route('dashboard'))->assertSee($label('Settings'), escape: false);
+        $this->actingAs($teacher)->get(route('dashboard'))->assertDontSee($label('Settings'), escape: false);
 
         // The register and the roll are the director's; a teacher's sidebar
         // is Dashboard and Teacher Attendance.

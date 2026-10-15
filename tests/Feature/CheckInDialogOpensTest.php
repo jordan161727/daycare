@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DoorAttendance;
 use App\Models\Child;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -115,7 +116,7 @@ class CheckInDialogOpensTest extends TestCase
         ]);
 
         // An arrival on the 22nd with no departure: the day the director opens.
-        \App\Models\Attendance::create([
+        \App\Models\DoorAttendance::create([
             'child_id' => $child->id, 'attendance_date' => '2026-09-22', 'session' => 'AM',
             'signed_in_at' => Carbon::parse('2026-09-22 08:05'), 'health_in_code' => 0,
         ]);
@@ -155,12 +156,12 @@ class CheckInDialogOpensTest extends TestCase
          * a departure with no reading would say nobody looked.
          */
         $this->assertCount(2, $result['posted']);
-        $this->assertStringEndsWith('/attendance/sign-in/retime', $result['posted'][0]['url']);
+        $this->assertStringEndsWith('/check-in/day/retime', $result['posted'][0]['url']);
         $this->assertSame(
             ['child_id' => $child->id, 'attendance_date' => '2026-09-22', 'session' => 'AM', 'signed_out_time' => '16:30'],
             $result['posted'][0]['body']
         );
-        $this->assertSame('/attendance/1/health', $result['posted'][1]['url']);
+        $this->assertSame('/check-in/1/health', $result['posted'][1]['url']);
         $this->assertSame(['direction' => 'out', 'code' => 0, 'note' => null], $result['posted'][1]['body']);
 
         // And the card follows the register's answer.
@@ -193,7 +194,7 @@ class CheckInDialogOpensTest extends TestCase
             'classroom' => 'School Age', 'birth_date' => '2018-03-04', 'schedule_days' => [1, 2, 3, 4, 5],
         ]);
 
-        \App\Models\Attendance::create([
+        \App\Models\DoorAttendance::create([
             'child_id' => $child->id, 'attendance_date' => '2026-09-23', 'session' => 'AM',
             'signed_in_at' => Carbon::parse('2026-09-23 08:05'), 'signed_out_at' => Carbon::parse('2026-09-23 11:30'), 'health_in_code' => 0,
         ]);
@@ -268,7 +269,7 @@ class CheckInDialogOpensTest extends TestCase
             'classroom' => 'School Age', 'birth_date' => '2018-03-04', 'schedule_days' => [1, 2, 3, 4, 5],
         ]);
 
-        $attendance = \App\Models\Attendance::create([
+        $attendance = \App\Models\DoorAttendance::create([
             'child_id' => $child->id, 'attendance_date' => '2026-09-23', 'session' => 'AM',
             'signed_in_at' => Carbon::parse('2026-09-23 08:05'), 'signed_out_at' => Carbon::parse('2026-09-23 09:30'), 'health_in_code' => 0,
         ]);

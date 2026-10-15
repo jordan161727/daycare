@@ -2,8 +2,12 @@ import './bootstrap';
 import Alpine from 'alpinejs';
 import 'flatpickr/dist/flatpickr.min.css';
 import { watchDateInputs } from './dates';
+import attendanceComments from './attendance-comments';
 
 window.Alpine = Alpine;
+
+// The notes on a child's day, in the door screen's dialog.
+Alpine.data('attendanceComments', attendanceComments);
 
 // A page the back button brings back from the browser's back/forward cache
 // is the page as it was, not as it is: a roster shown before a child was

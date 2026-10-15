@@ -51,10 +51,16 @@ window.postJson = async (url, body) => {
     return { ok: true, json: async () => ({ success: true, attendance_id: 1, session: 'FULL', in_at: '8:42a', out_at: null, health_in: body.health_code ?? 0, health_in_note: null, health_out: null, health_out_note: null }) };
 };`;
 
+// The comments component lives in the bundle, which is not available here;
+// its module is read and registered the way app.js registers it.
+const comments = fs.readFileSync(require('path').join(__dirname, '../../resources/js/attendance-comments.js'), 'utf8')
+    .replace('export default function attendanceComments', 'function attendanceComments');
+const register = "document.addEventListener('alpine:init', () => Alpine.data('attendanceComments', attendanceComments));";
+
 html = html
     .replace(/<link[^>]+(preload|modulepreload|stylesheet)[^>]*>/g, '')
     .replace(/<script type="module"[^>]*><\/script>/g, '')
-    .replace('</body>', '<script>' + stub + '</script><script>' + alpine + '</script></body>');
+    .replace('</body>', '<script>' + stub + '</script><script>' + comments + '\n' + register + '</script><script>' + alpine + '</script></body>');
 
 // Only errors from our own component matter. The layout's shell (appShell,
 // collapsed, dark…) lives in the bundle that is not loaded here.

@@ -4,7 +4,14 @@
 {{-- The two screens a family stands in front of. See components/kids-background. --}}
 <x-kids-background />
 
-<div x-data="{ search: '' }">
+{{-- The page's own state: the search box, and — for the director — the
+     archive dialog, the toast with Undo on it, and the chip counts, which are
+     corrected in place when a row goes rather than by reloading the roll. --}}
+<div x-data="childrenRoll({
+        csrf: @js(csrf_token()),
+        archivedTab: @js($status === \App\Models\Child::ARCHIVED),
+     })"
+     @keydown.escape.window="confirming = null">
     @php($nextDirection = fn ($column) => $sort === $column && $direction === 'asc' ? 'desc' : 'asc')
     @php($sortUrl = fn ($column) => route('children.index', array_filter(['sort' => $column, 'direction' => $nextDirection($column), 'status' => $status])))
     {{-- The arrow the register uses: quieter than the heading it sits beside,
@@ -36,17 +43,31 @@
             <div class="flex flex-wrap items-center gap-1.5">
                 <a href="{{ route('children.index', array_filter(['sort' => $sort, 'direction' => $direction])) }}"
                    class="{{ $chip }} {{ $status === '' ? $chipOn : $chipOff }}"
+                   data-count="all"
                    @if($status === '') aria-current="true" @endif>
                     All <span class="ml-0.5 opacity-60">{{ $rollCount }}</span>
                 </a>
-                @foreach(\App\Models\Child::STATUSES as $option)
+                {{-- The roll's statuses only. Archived is not on the roll: it
+                     has its own tab below, and only when the setting asks. --}}
+                @foreach(\App\Models\Child::ROLL_STATUSES as $option)
                     @continue(($statusCounts[$option] ?? 0) === 0)
                     <a href="{{ route('children.index', array_filter(['sort' => $sort, 'direction' => $direction, 'status' => $option])) }}"
                        class="{{ $chip }} {{ $status === $option ? $chipOn : $chipOff }}"
+                       data-count="{{ $option }}"
                        @if($status === $option) aria-current="true" @endif>
                         {{ $option }} <span class="ml-0.5 opacity-60">{{ $statusCounts[$option] }}</span>
                     </a>
                 @endforeach
+                @if($showArchived)
+                    {{-- Off the roll, so its count stands apart from the others
+                         and is never added into All. See Settings › Children. --}}
+                    <a href="{{ route('children.index', array_filter(['sort' => $sort, 'direction' => $direction, 'status' => \App\Models\Child::ARCHIVED])) }}"
+                       class="{{ $chip }} {{ $status === \App\Models\Child::ARCHIVED ? $chipOn : $chipOff }}"
+                       data-count="Archived" data-keep
+                       @if($status === \App\Models\Child::ARCHIVED) aria-current="true" @endif>
+                        Archived <span class="ml-0.5 opacity-60">{{ $archivedCount }}</span>
+                    </a>
+                @endif
             </div>
 
             <div class="ml-auto flex items-center gap-1.5">
@@ -74,6 +95,9 @@
                      permission. Adding a child is not. --}}
                 {{-- The timestamp is a cache-buster, never read: a browser that kept an
                      earlier download must see a new address, not a reason to reuse. --}}
+                {{-- Not offered on the Archived tab: the export is the roll, and
+                     the archived are off it. --}}
+                @if($status !== \App\Models\Child::ARCHIVED)
                 <a href="{{ route('children.export', request()->only('sort', 'direction', 'status') + ['t' => now()->timestamp]) }}"
                    class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10"
                    title="Download this list as an Excel file">
@@ -82,6 +106,7 @@
                     </svg>
                     Export
                 </a>
+                @endif
                 @if(auth()->user()->isAdmin())
                     <a href="{{ route('children.create') }}" class="shrink-0 rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-indigo-700">+ Add child</a>
                 @endif
@@ -106,6 +131,14 @@
 
     @if(session('success'))<div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('success') }}</div>@endif
 
+    @if($status === \App\Models\Child::ARCHIVED)
+        {{-- Said once, above the drawer, because the chips a few lines up
+             have just been read and none of them includes these children. --}}
+        <p class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+            Archived children are not counted in All, Active or Inactive and don't appear in search or Export.
+        </p>
+    @endif
+
     {{-- The same table rhythm as the attendance grid: a quiet header row, rows
          two and a half lines tall rather than four, dates in tabular figures so
          a column of them lines up, and the sort arrow on the column it sorts. --}}
@@ -124,20 +157,22 @@
                         <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('classroom') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Classroom{!! $arrow('classroom') !!}</a></th>
                         {{-- Sorting is by date of birth either way, so the arrow sits
                              on the DOB column and the age beside it follows it. --}}
-                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('age') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Date of birth, year/month/day">DOB{!! $arrow('age') !!}</a></th>
-                        <th scope="col" class="{{ $head }}">Age</th>
-                        <th scope="col" class="{{ $head }}">Schedule</th>
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('dob') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Date of birth, month/day/year — earliest first">DOB{!! $arrow('dob') !!}</a></th>
+                        {{-- Age is the date the other way up: youngest first. Two
+                             columns, two sorts, so neither reads backwards. --}}
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('age') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Youngest first">Age{!! $arrow('age') !!}</a></th>
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('schedule') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Earliest drop-off first; no hours on record at the foot">Schedule{!! $arrow('schedule') !!}</a></th>
                         {{-- Before Status, because it is the column that changes
                              what a teacher does this morning and Status is the one
                              that says whether they are here at all. --}}
-                        <th scope="col" class="{{ $head }}">Alerts</th>
+                        <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('alerts') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300" title="Children with an alert first">Alerts{!! $arrow('alerts') !!}</a></th>
                         <th scope="col" class="{{ $head }}"><a href="{{ $sortUrl('status') }}" class="hover:text-indigo-600 dark:hover:text-indigo-300">Status{!! $arrow('status') !!}</a></th>
                         <th scope="col" class="{{ $head }} text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($children as $child)
-                        <tr x-show="@js(strtolower($child->first_name.' '.$child->last_name.' '.$child->classroom.' '.$child->lan)).includes(search.toLowerCase())" class="transition hover:bg-slate-50 dark:hover:bg-white/5">
+                        <tr x-show="!gone.includes(@js($child->lan)) && @js(strtolower($child->first_name.' '.$child->last_name.' '.$child->classroom.' '.$child->lan)).includes(search.toLowerCase())" class="transition hover:bg-slate-50 dark:hover:bg-white/5">
                                                         {{-- Frozen against a sideways scroll: on a tablet the roll is
                                  wider than the screen, and a row read with the name
                                  off-screen is a row about nobody. --}}
@@ -183,6 +218,8 @@
                                 @php($statusClasses = [
                                     'Active' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
                                     'Pending' => 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200',
+                                    // A shade darker than Inactive's grey: off the roll, not merely away.
+                                    'Archived' => 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',
                                 ])
                                 {{-- Pending is amber because it is a place held
                                      rather than a place taken: not here yet, and
@@ -193,15 +230,193 @@
                                 {{-- The roster is already filtered to what this
                                      reader may see, so every row here is one
                                      they may also keep up to date. --}}
-                                <a href="{{ route('children.edit', $child) }}" class="text-xs font-semibold text-indigo-600 transition hover:text-indigo-800 dark:text-indigo-400">Edit</a>
+                                <div class="inline-flex items-center justify-end gap-1">
+                                    <a href="{{ route('children.edit', $child) }}" class="inline-flex min-h-[44px] items-center rounded-lg px-2.5 text-xs font-semibold text-indigo-600 transition hover:text-indigo-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-indigo-400">Edit</a>
+                                    @if(auth()->user()->isAdmin())
+                                        @php($childName = $child->first_name.' '.$child->last_name)
+                                        @if($child->isArchived())
+                                            <button type="button"
+                                                    @click="unarchive({ lan: @js($child->lan), name: @js($childName), url: @js(route('children.unarchive', $child)) })"
+                                                    class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                                                    aria-label="Unarchive {{ $childName }}">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                                                Unarchive
+                                            </button>
+                                        @else
+                                            {{-- Opens the dialog below; nothing is archived
+                                                 until "Archive child" is pressed there. --}}
+                                            <button type="button"
+                                                    @click="confirm({ lan: @js($child->lan), name: @js($childName), url: @js(route('children.archive', $child)), undo: @js(route('children.unarchive', $child)) })"
+                                                    class="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+                                                    aria-label="Archive {{ $childName }}">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7.5V19a2 2 0 01-2 2H6a2 2 0 01-2-2V7.5M3 4h18a0 0 0 010 0v3.5H3V4a0 0 0 010 0zM10 12h4"/></svg>
+                                                Archive
+                                            </button>
+                                        @endif
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="px-3 py-12 text-center text-sm text-slate-500">{{ $status === '' ? 'No children have been added yet.' : 'Nobody on the roll is '.strtolower($status).' right now.' }}</td></tr>
+                        <tr><td colspan="9" class="px-3 py-12 text-center text-sm text-slate-500">{{ $status === '' ? 'No children have been added yet.' : ($status === \App\Models\Child::ARCHIVED ? 'No archived children.' : 'Nobody on the roll is '.strtolower($status).' right now.') }}</td></tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
     </section>
+
+    @if(auth()->user()->isAdmin())
+        {{-- The question before a child goes. Says where they go and that it
+             is reversible, so the one press that hides a record is never the
+             one that is taken on faith. --}}
+        <div x-show="confirming" x-cloak
+             class="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
+             @click.self="confirming = null">
+            <div role="dialog" aria-modal="true" aria-labelledby="archive-dialog-title" aria-describedby="archive-dialog-body"
+                 class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-slate-900"
+                 x-init="$watch('confirming', value => { if (value) $nextTick(() => $refs.archiveConfirm?.focus()) })">
+                <h2 id="archive-dialog-title" class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Archive <span x-text="confirming?.name"></span>?</h2>
+                <p id="archive-dialog-body" class="mt-2 text-sm text-slate-600 dark:text-slate-300">They'll be hidden from the Children list, search, Export and the All / Active / Inactive counts. Their records are kept, and you can restore them anytime from Settings › Children.</p>
+                <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button type="button" @click="confirming = null"
+                            class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button>
+                    <button type="button" x-ref="archiveConfirm" @click="archive()" :disabled="busy"
+                            class="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">Archive child</button>
+                </div>
+            </div>
+        </div>
+
+        {{-- What just happened, and the way back. Stays until dismissed or
+             until it has had a fair while to be read; Undo is on it because
+             a row that vanished is the kind of thing somebody wants to take
+             back in the next few seconds, not from another screen. --}}
+        <div x-show="toast" x-cloak role="status" aria-live="polite"
+             class="fixed bottom-6 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl dark:bg-white dark:text-slate-900">
+            <span class="min-w-0 flex-1" x-text="toast?.message"></span>
+            <button type="button" x-show="toast?.undo" @click="undo()" :disabled="busy"
+                    class="inline-flex min-h-[44px] shrink-0 items-center rounded-lg px-3 text-sm font-bold text-indigo-300 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:opacity-60 dark:text-indigo-600 dark:hover:text-indigo-800">Undo</button>
+            <button type="button" @click="toast = null" aria-label="Dismiss"
+                    class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl leading-none text-white/70 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:text-slate-500 dark:hover:text-slate-900">×</button>
+        </div>
+    @endif
 </div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('childrenRoll', ({ csrf, archivedTab }) => ({
+        search: '',
+        // LANs of rows that have gone since the page loaded — archived, or
+        // unarchived off the Archived tab. Hidden rather than removed, so
+        // Undo can put one straight back.
+        gone: [],
+        confirming: null,
+        toast: null,
+        toastTimer: null,
+        busy: false,
+        archivedTab,
+
+        confirm(child) {
+            this.confirming = child;
+        },
+
+        async post(url, body = {}) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify(body),
+            });
+
+            if (! response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            return response.json();
+        },
+
+        async archive() {
+            const child = this.confirming;
+            if (! child || this.busy) return;
+
+            this.busy = true;
+            try {
+                const data = await this.post(child.url);
+                this.confirming = null;
+                this.gone.push(child.lan);
+                this.applyCounts(data.counts);
+                this.show({ message: data.message, undo: child });
+            } catch (error) {
+                this.confirming = null;
+                this.show({ message: 'Could not archive ' + child.name + '. Please try again.' });
+            } finally {
+                this.busy = false;
+            }
+        },
+
+        // Undo on the toast: back as they were, not merely back as Inactive.
+        async undo() {
+            const child = this.toast?.undo;
+            if (! child || this.busy) return;
+
+            this.busy = true;
+            try {
+                const data = await this.post(child.undo, { to: 'previous' });
+                this.gone = this.gone.filter(lan => lan !== child.lan);
+                this.applyCounts(data.counts);
+                this.show({ message: data.message });
+            } catch (error) {
+                this.show({ message: 'Could not restore ' + child.name + '. Please try again.', undo: child });
+            } finally {
+                this.busy = false;
+            }
+        },
+
+        // Unarchive off the Archived tab: back on the roll as Inactive.
+        async unarchive(child) {
+            if (this.busy) return;
+
+            this.busy = true;
+            try {
+                const data = await this.post(child.url);
+                this.gone.push(child.lan);
+                this.applyCounts(data.counts);
+                this.show({ message: data.message });
+            } catch (error) {
+                this.show({ message: 'Could not unarchive ' + child.name + '. Please try again.' });
+            } finally {
+                this.busy = false;
+            }
+        },
+
+        show(toast) {
+            this.toast = toast;
+            clearTimeout(this.toastTimer);
+            this.toastTimer = setTimeout(() => { this.toast = null; }, 12000);
+        },
+
+        /*
+         * The chips, corrected in place. Each carries data-count naming what
+         * it counts; the number is the span inside it. A roll chip that falls
+         * to nought is hidden, as the server would not have drawn it; the
+         * Archived chip (data-keep) stays, because an empty drawer is still
+         * the way to the drawer.
+         */
+        applyCounts(counts) {
+            if (! counts) return;
+
+            this.$root.querySelectorAll('[data-count]').forEach(chip => {
+                const key = chip.dataset.count;
+                const value = key === 'all' ? counts.all : (key === 'Archived' ? counts.archived : (counts.byStatus?.[key] ?? 0));
+                const number = chip.querySelector('span');
+                if (number) number.textContent = value;
+                if (! chip.hasAttribute('data-keep')) chip.classList.toggle('hidden', value === 0);
+            });
+        },
+    }));
+});
+</script>
 @endsection

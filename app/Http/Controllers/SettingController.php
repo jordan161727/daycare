@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Child;
 use App\Models\LoginEvent;
 use App\Models\Setting;
 use App\Models\StaffDevice;
@@ -69,6 +70,32 @@ class SettingController extends Controller
         Setting::put('kiosk.allow_sleep', $request->boolean('allow_sleep') ? '1' : '0');
 
         return redirect()->route('settings.company')->with('status', 'Settings saved.');
+    }
+
+    /**
+     * The archived children, and whether the Children page shows them.
+     *
+     * The only place an archived child is seen without asking for them: the
+     * Children page leaves them out of everything — the list, the search,
+     * the export and every count — so this is where they are found and put
+     * back. Unarchive restores as Inactive, never Active: a record tidied
+     * here should not land back in a room's head count by surprise.
+     */
+    public function children()
+    {
+        return view('settings.children', [
+            'tab' => 'children',
+            'showArchived' => ChildController::showsArchived(),
+            'archived' => Child::archived()->with('archivedBy')->get(),
+        ]);
+    }
+
+    /** The one toggle on that page. Unticked boxes are not posted, so read off the request. */
+    public function updateChildren(Request $request)
+    {
+        Setting::put(ChildController::SHOW_ARCHIVED_SETTING, $request->boolean('show_archived') ? '1' : '0');
+
+        return redirect()->route('settings.children')->with('status', 'Settings saved.');
     }
 
     /** Who may open the director's screens, and who issued their card. */

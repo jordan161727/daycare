@@ -6,8 +6,10 @@ use App\Http\Controllers\ChildImportController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\ChildrenController;
+use App\Http\Controllers\AttendanceCommentController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\ChildController;
+use App\Http\Controllers\ChildArchiveController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\TeacherController;
@@ -308,9 +310,20 @@ Route::delete('/departments/{department}', [DepartmentController::class, 'destro
  * attendance mode changes how hours are recorded for everybody, which is a
  * bigger act than editing any one person's record.
  */
-Route::get('/settings', [SettingController::class, 'company'])->name('settings.company');
+// Settings opens on Children (16 Oct 2026): the company page is off the tabs
+// but keeps its address, so nothing that saved to it has moved.
+Route::get('/settings', fn () => redirect()->route('settings.children'))->name('settings.index');
+Route::get('/settings/company', [SettingController::class, 'company'])->name('settings.company');
 Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
+Route::get('/settings/children', [SettingController::class, 'children'])->name('settings.children');
+Route::put('/settings/children', [SettingController::class, 'updateChildren'])->name('settings.children.update');
 Route::get('/settings/administrators', [SettingController::class, 'administrators'])->name('settings.administrators');
+
+// Taking a child off every list and putting them back. Director only, like
+// the settings page they are restored from: a teacher may mark a child in
+// their room as Inactive, not hide one from the whole centre.
+Route::post('/children/{child}/archive', [ChildArchiveController::class, 'archive'])->name('children.archive')->whereNumber('child');
+Route::post('/children/{child}/unarchive', [ChildArchiveController::class, 'unarchive'])->name('children.unarchive')->whereNumber('child');
 Route::get('/settings/devices', [SettingController::class, 'devices'])->name('settings.devices');
 Route::get('/settings/login-history', [SettingController::class, 'history'])->name('settings.history');
 
@@ -460,8 +473,18 @@ Route::post('/check-in/{attendance}/out', [CheckInController::class, 'out'])
 // in and out of the day stays on the record.
 Route::post('/check-in/{attendance}/back', [CheckInController::class, 'back'])
     ->name('check-in.back')->whereNumber('attendance');
+// Edit on the door: a typed arrival, the exact hours, a day taken off, a
+// check corrected — all on the door's own record, never the register's.
+Route::post('/check-in/day', [CheckInController::class, 'signInDay'])->name('check-in.day');
+Route::post('/check-in/day/retime', [CheckInController::class, 'retime'])->name('check-in.day.retime');
+Route::post('/check-in/day/remove', [CheckInController::class, 'remove'])->name('check-in.day.remove');
+Route::post('/check-in/{attendance}/health', [CheckInController::class, 'health'])
+    ->name('check-in.health')->whereNumber('attendance');
 
 Route::get('/symptom-codes', [HealthController::class, 'codes'])->name('health.codes');
+// The notes on a child's day, read and written from the door screen's dialog.
+Route::get('/attendances/{attendance}/comments', [AttendanceCommentController::class, 'index'])->name('attendances.comments.index')->whereNumber('attendance');
+Route::post('/attendances/{attendance}/comments', [AttendanceCommentController::class, 'store'])->name('attendances.comments.store')->whereNumber('attendance');
 Route::post('/attendance/{attendance}/health', [HealthController::class, 'update'])
     ->name('attendance.health')->whereNumber('attendance');
 

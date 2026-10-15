@@ -134,7 +134,9 @@ class KioskController extends Controller
     {
         $today = today()->toDateString();
 
-        return $person->children()->orderBy('first_name')->get()->map(function (Child $child) use ($person, $today) {
+        // An archived child is off the family screen too: the parent sees
+        // the children the centre has, not every record it keeps.
+        return $person->children()->notArchived()->orderBy('first_name')->get()->map(function (Child $child) use ($person, $today) {
             $attendance = $child->attendances()
                 ->whereDate('attendance_date', $today)
                 ->orderByDesc('signed_in_at')
