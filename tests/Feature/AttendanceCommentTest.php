@@ -128,7 +128,7 @@ class AttendanceCommentTest extends TestCase
         $this->assertStringContainsString('"in_at_label":"7:58 AM"', $data);
         $this->assertStringNotContainsString('data-health-panel', $html);
         $this->assertStringContainsString("'In since ' + (dayOf(child)?.in_at_label || lastEntry(child)?.in)", $html);
-        $this->assertStringContainsString('placeholder="What should the next teacher or the parent know?"', $html);
+        $this->assertStringContainsString('placeholder="Write a comment…"', $html);
         // …and the roster card wears the count.
         $this->assertStringContainsString('data-comment-badge', $html);
     }

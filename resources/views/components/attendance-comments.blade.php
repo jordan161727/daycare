@@ -34,29 +34,32 @@
     </button>
 
     {{-- Writing, or changing: the same box, open. --}}
-    <div x-show="open" x-cloak class="flex flex-col gap-2 rounded-2xl bg-slate-50 p-4 ring-2 ring-indigo-500 dark:bg-white/5 dark:ring-indigo-400" data-comment-composer>
+    <div x-show="open" x-cloak class="flex flex-col gap-3 rounded-2xl border border-indigo-300 bg-white p-4 dark:border-indigo-400/60 dark:bg-night-800" data-comment-composer>
         <label :for="'comment-body-' + slot.id" class="sr-only">Comment</label>
         <textarea
             :id="'comment-body-' + slot.id"
             x-ref="body"
             x-model="body"
-            rows="3"
+            rows="2"
             maxlength="1000"
-            placeholder="What should the next teacher or the parent know?"
+            placeholder="Write a comment…"
             @keydown.meta.enter.prevent="save()" @keydown.ctrl.enter.prevent="save()" @keydown.escape.prevent="cancel()"
-            class="w-full resize-y rounded-lg border-0 bg-transparent p-0 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0 dark:text-slate-100"
+            class="w-full resize-none rounded-lg border-0 bg-transparent p-0 text-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0 dark:text-slate-100"
         ></textarea>
         <p x-show="error" x-cloak x-text="error" class="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300" role="alert"></p>
-        <div class="flex justify-end gap-2">
-            <button type="button" @click="cancel()"
-                class="min-h-9 rounded-full px-3 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100">
-                Cancel
-            </button>
-            <button type="button" @click="save()" :disabled="!canSave" data-save-comment
-                :class="canSave ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400'"
-                class="min-h-9 rounded-full px-4 text-xs font-semibold transition">
-                <span x-text="saving ? 'Saving…' : 'Save'"></span>
-            </button>
+        <div class="flex items-center justify-between gap-3">
+            <span class="text-sm text-slate-400 dark:text-slate-500">Ctrl+Enter to save · Esc to cancel</span>
+            <span class="flex gap-2">
+                <button type="button" @click="cancel()"
+                    class="min-h-10 rounded-full bg-slate-100 px-5 text-base font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20">
+                    Cancel
+                </button>
+                <button type="button" @click="save()" :disabled="!canSave" data-save-comment
+                    :class="canSave ? 'bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white' : 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400'"
+                    class="min-h-10 rounded-full px-6 text-base font-semibold transition">
+                    <span x-text="saving ? 'Saving…' : 'Save'"></span>
+                </button>
+            </span>
         </div>
     </div>
 

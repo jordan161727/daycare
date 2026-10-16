@@ -550,16 +550,21 @@
                             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                             Add a comment
                         </button>
-                        <div x-show="firstCommentOpen" x-cloak class="flex flex-col gap-2 rounded-2xl bg-slate-50 p-4 ring-2 ring-indigo-500 dark:bg-white/5 dark:ring-indigo-400">
+                        <div x-show="firstCommentOpen" x-cloak class="flex flex-col gap-3 rounded-2xl border border-indigo-300 bg-white p-4 dark:border-indigo-400/60 dark:bg-night-800">
                             <label for="ci-first-comment" class="sr-only">Comment</label>
-                            <textarea id="ci-first-comment" x-ref="firstComment" x-model="firstComment" rows="3" maxlength="1000"
-                                      placeholder="What should the next teacher or the parent know?"
-                                      @keydown.escape.prevent="firstCommentOpen = false"
-                                      class="w-full resize-y rounded-lg border-0 bg-transparent p-0 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0 dark:text-slate-100"></textarea>
+                            <textarea id="ci-first-comment" x-ref="firstComment" x-model="firstCommentDraft" rows="2" maxlength="1000"
+                                      placeholder="Write a comment…"
+                                      @keydown.meta.enter.prevent="saveFirstComment()" @keydown.ctrl.enter.prevent="saveFirstComment()" @keydown.escape.prevent="cancelFirstComment()"
+                                      class="w-full resize-none rounded-lg border-0 bg-transparent p-0 text-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0 dark:text-slate-100"></textarea>
                             <div class="flex items-center justify-between gap-3">
-                                <span class="text-xs text-slate-500 dark:text-slate-400">Saved with the clock-in, under your name.</span>
-                                <button type="button" @click="firstCommentOpen = false"
-                                        class="min-h-9 rounded-full px-3 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100">Done</button>
+                                <span class="text-sm text-slate-400 dark:text-slate-500">Ctrl+Enter to save · Esc to cancel</span>
+                                <span class="flex gap-2">
+                                    <button type="button" @click="cancelFirstComment()"
+                                            class="min-h-10 rounded-full bg-slate-100 px-5 text-base font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20">Cancel</button>
+                                    <button type="button" @click="saveFirstComment()" :disabled="firstCommentDraft.trim() === ''"
+                                            :class="firstCommentDraft.trim() !== '' ? 'bg-slate-800 text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white' : 'cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-white/10 dark:text-slate-400'"
+                                            class="min-h-10 rounded-full px-6 text-base font-semibold transition">Save</button>
+                                </span>
                             </div>
                         </div>
                         <div x-show="! firstCommentOpen && firstComment.trim() !== ''" x-cloak role="button" tabindex="0" @click="openFirstComment()" @keydown.enter.prevent="openFirstComment()" data-first-comment-preview
@@ -720,6 +725,8 @@ function checkInGrid() { return {
     // to put it on; sent with the clock-in — see data-first-comment.
     firstCommentOpen: false,
     firstComment: '',
+    // What is being typed; Save makes it the note, Cancel drops it.
+    firstCommentDraft: '',
     code: 0,
     codeIn: 0,        // the checks being corrected, and what they were
     noteIn: '',
@@ -1238,11 +1245,26 @@ function checkInGrid() { return {
         this.error = '';
         this.firstCommentOpen = false;
         this.firstComment = '';
+        this.firstCommentDraft = '';
     },
 
     openFirstComment() {
+        this.firstCommentDraft = this.firstComment;
         this.firstCommentOpen = true;
         this.$nextTick(() => this.$refs.firstComment?.focus());
+    },
+
+    /** Keep the words for the clock-in and fold the box away. */
+    saveFirstComment() {
+        if (this.firstCommentDraft.trim() === '') return;
+        this.firstComment = this.firstCommentDraft.trim();
+        this.firstCommentOpen = false;
+    },
+
+    /** Drop what was typed since the box opened. */
+    cancelFirstComment() {
+        this.firstCommentDraft = '';
+        this.firstCommentOpen = false;
     },
 
     /**
