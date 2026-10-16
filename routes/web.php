@@ -513,6 +513,7 @@ Route::get('/symptom-codes', [HealthController::class, 'codes'])->name('health.c
 // The notes on a child's day, read and written from the door screen's dialog.
 Route::get('/attendances/{attendance}/comments', [AttendanceCommentController::class, 'index'])->name('attendances.comments.index')->whereNumber('attendance');
 Route::post('/attendances/{attendance}/comments', [AttendanceCommentController::class, 'store'])->name('attendances.comments.store')->whereNumber('attendance');
+Route::patch('/attendances/{attendance}/comments/{comment}', [AttendanceCommentController::class, 'update'])->name('attendances.comments.update')->whereNumber('attendance')->whereNumber('comment')->scopeBindings();
 Route::post('/attendance/{attendance}/health', [HealthController::class, 'update'])
     ->name('attendance.health')->whereNumber('attendance');
 

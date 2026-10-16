@@ -93,11 +93,12 @@ class AttendanceCommentTest extends TestCase
         $this->assertSame($this->child->id, $comment->child_id);
     }
 
+    /** Rows typed before there was one note a day still list newest first. */
     public function test_the_list_is_newest_first(): void
     {
-        $this->actingAs($this->teacher)->postJson(route('attendances.comments.store', $this->attendance), ['tag' => 'parent_note', 'body' => 'First']);
+        $this->comment($this->teacher, 'parent_note', 'First');
         $this->travelTo(now()->addMinutes(3));
-        $this->actingAs($this->teacher)->postJson(route('attendances.comments.store', $this->attendance), ['tag' => 'belongings', 'body' => 'Second']);
+        $this->comment($this->teacher, 'belongings', 'Second');
 
         $this->actingAs($this->teacher)->getJson(route('attendances.comments.index', $this->attendance))
             ->assertOk()
@@ -118,14 +119,14 @@ class AttendanceCommentTest extends TestCase
         $this->assertStringContainsString('"tag_label":"Belongings"', $data);
         $this->assertStringContainsString('Spare outfit in the blue bag.', $data);
         // …the component is in the dialog, its composer offered all day, and the
-        // clock form has its own comment box so a note can go in with the clock…
+        // clock form carries no box of its own (17 Oct 2026): the card is the one place…
         $this->assertStringContainsString('data-attendance-comments', $html);
         $this->assertStringNotContainsString("canAdd: ! slot.out", $html);
-        $this->assertStringContainsString('data-clock-comment', $html);
-        $this->assertStringContainsString('data-add-clock-comment', $html);
-        // The signed-in header: the chip and the health panel, who took the check and when.
+        $this->assertStringNotContainsString('data-clock-comment', $html);
+        $this->assertStringNotContainsString('data-add-clock-comment', $html);
+        // The signed-in header: the chip, with the arrival check on the entries card, not a panel of its own.
         $this->assertStringContainsString('"in_at_label":"7:58 AM"', $data);
-        $this->assertStringContainsString('data-health-panel', $html);
+        $this->assertStringNotContainsString('data-health-panel', $html);
         $this->assertStringContainsString("'In since ' + (dayOf(child)?.in_at_label || lastEntry(child)?.in)", $html);
         $this->assertStringContainsString('placeholder="What should the next teacher or the parent know?"', $html);
         // …and the roster card wears the count.
@@ -136,5 +137,127 @@ class AttendanceCommentTest extends TestCase
     {
         $this->postJson(route('attendances.comments.store', $this->attendance), ['tag' => 'other', 'body' => 'Hi'])->assertUnauthorized();
         $this->getJson(route('attendances.comments.index', $this->attendance))->assertUnauthorized();
+    }
+
+    /** A note the author got wrong is fixed in place, and says it was. */
+    public function test_the_author_can_change_their_own_comment_on_the_day(): void
+    {
+        $comment = $this->comment($this->teacher, 'parent_note', 'Mom says he slept porly.');
+
+        $this->travel(2)->hours();
+        $response = $this->actingAs($this->teacher)->patchJson(route('attendances.comments.update', [$this->attendance, $comment]), [
+            'tag' => 'health',
+            'body' => '  Mom says he slept poorly.  ',
+        ]);
+
+        $response->assertOk()->assertJson([
+            'id' => $comment->id,
+            'tag' => 'health',
+            'tag_label' => 'Health',
+            'body' => 'Mom says he slept poorly.',
+            'author' => 'Ms. Alvarez',
+            // The time stays the time it was written.
+            'time' => '8:02 AM',
+            'edited' => true,
+            'can_edit' => true,
+        ]);
+        $this->assertSame('Mom says he slept poorly.', $comment->fresh()->body);
+    }
+
+    public function test_a_comment_saved_unchanged_is_not_marked_edited(): void
+    {
+        $comment = $this->comment($this->teacher, 'parent_note', 'As written.');
+
+        $this->travel(1)->hour();
+        $this->actingAs($this->teacher)->patchJson(route('attendances.comments.update', [$this->attendance, $comment]), ['tag' => 'parent_note', 'body' => 'As written.'])
+            ->assertOk()->assertJsonPath('edited', false);
+    }
+
+    /** Somebody else's note is not yours to change — unless you are the director. */
+    public function test_only_the_author_or_the_director_may_change_a_comment(): void
+    {
+        $comment = $this->comment($this->teacher, 'other', 'Brought six diapers.');
+        $colleague = User::factory()->create(['role' => 'teacher', 'classroom' => 'Infant']);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($colleague)->patchJson(route('attendances.comments.update', [$this->attendance, $comment]), ['tag' => 'other', 'body' => 'Five.'])->assertForbidden();
+        $this->assertSame('Brought six diapers.', $comment->fresh()->body);
+
+        // The list tells each reader which notes are theirs to press.
+        $this->actingAs($colleague)->getJson(route('attendances.comments.index', $this->attendance))->assertJsonPath('0.can_edit', false);
+        $this->actingAs($this->teacher)->getJson(route('attendances.comments.index', $this->attendance))->assertJsonPath('0.can_edit', true);
+
+        $this->travel(5)->minutes();
+        $this->actingAs($admin)->patchJson(route('attendances.comments.update', [$this->attendance, $comment]), ['tag' => 'belongings', 'body' => 'Brought five diapers.'])
+            ->assertOk()->assertJsonPath('body', 'Brought five diapers.')->assertJsonPath('edited', true);
+    }
+
+    /** Yesterday's note is part of yesterday's record: the author's hands are off it, the director's are not. */
+    public function test_the_author_cannot_change_a_comment_after_the_day(): void
+    {
+        $comment = $this->comment($this->teacher, 'other', 'Left his hat.');
+
+        $this->travelTo(Carbon::parse('2026-10-16 07:30:00', config('app.timezone')));
+        $this->actingAs($this->teacher)->patchJson(route('attendances.comments.update', [$this->attendance, $comment]), ['tag' => 'other', 'body' => 'Found his hat.'])->assertForbidden();
+        $this->actingAs($this->teacher)->getJson(route('attendances.comments.index', $this->attendance))->assertJsonPath('0.can_edit', false);
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)->patchJson(route('attendances.comments.update', [$this->attendance, $comment]), ['tag' => 'other', 'body' => 'Found his hat.'])->assertOk();
+    }
+
+    /** A comment is changed on the row it belongs to, not through some other row's address. */
+    public function test_a_comment_cannot_be_reached_through_another_row(): void
+    {
+        $comment = $this->comment($this->teacher, 'other', 'On this row.');
+        $other = DoorAttendance::create(['child_id' => $this->child->id, 'attendance_date' => '2026-10-14', 'session' => 'FULL', 'signed_in_at' => now()->subDay(), 'health_in_code' => 0]);
+
+        $this->actingAs($this->teacher)->patchJson(route('attendances.comments.update', [$other, $comment]), ['tag' => 'other', 'body' => 'Moved.'])->assertNotFound();
+    }
+
+    public function test_the_dialog_carries_the_edit_affordance(): void
+    {
+        $this->comment($this->teacher, 'other', 'Pressable.');
+
+        $html = $this->actingAs($this->teacher)->get(route('check-in.index'))->assertOk()->getContent();
+        $this->assertStringContainsString('data-edit-comment', $html);
+        $this->assertStringNotContainsString('data-comment-edited', $html);
+        $this->assertStringNotContainsString('Edit comment', $html);
+        // One note, no kinds: the "Add a comment…" line, and no tag chips anywhere.
+        $this->assertStringContainsString('Add a comment', $html);
+        $this->assertStringNotContainsString('data-comment-tag', $html);
+        $this->assertStringNotContainsString('data-clock-comment-tag', $html);
+    }
+
+    /** One note a day: adding to a row that has one changes it rather than adding a second. */
+    public function test_adding_to_a_row_that_already_has_a_note_changes_it(): void
+    {
+        $first = $this->comment($this->teacher, 'other', 'Not feeling well.');
+
+        $this->travel(10)->minutes();
+        $this->actingAs($this->teacher)->postJson(route('attendances.comments.store', $this->attendance), ['body' => 'Not feeling well, picked up early by mom.'])
+            ->assertOk()
+            ->assertJsonPath('id', $first->id)
+            ->assertJsonPath('body', 'Not feeling well, picked up early by mom.')
+            ->assertJsonPath('edited', true);
+
+        $this->assertSame(1, AttendanceComment::count());
+    }
+
+    /** No tag needed any more; one sent is still kept, for the rows typed before. */
+    public function test_a_comment_needs_no_tag(): void
+    {
+        $this->actingAs($this->teacher)->postJson(route('attendances.comments.store', $this->attendance), ['body' => 'Just words.'])
+            ->assertCreated()->assertJsonPath('tag', 'other');
+    }
+
+    private function comment(User $author, string $tag, string $body): AttendanceComment
+    {
+        return AttendanceComment::create([
+            'attendance_id' => $this->attendance->id,
+            'child_id' => $this->child->id,
+            'user_id' => $author->id,
+            'tag' => $tag,
+            'body' => $body,
+        ]);
     }
 }

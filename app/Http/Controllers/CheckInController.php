@@ -514,6 +514,18 @@ class CheckInController extends Controller
             return;
         }
 
+        // One note a day: a clock-out typed over a clock-in's note changes
+        // it, the same as pressing the note in the dialog would.
+        if ($existing = $attendance->comments()->first()) {
+            Gate::authorize('update', $existing);
+            $existing->fill(['body' => $body]);
+            if ($existing->isDirty()) {
+                $existing->save();
+            }
+
+            return;
+        }
+
         Gate::authorize('create', [AttendanceComment::class, $attendance]);
 
         $attendance->comments()->create([

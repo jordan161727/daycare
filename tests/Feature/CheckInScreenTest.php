@@ -146,15 +146,15 @@ class CheckInScreenTest extends TestCase
             'tag' => 'belongings', 'body' => 'Spare outfit in the blue bag.',
         ]);
 
-        // Out, with a note and no tag: filed as "other".
+        // Out, with a note: one note a day, so the morning's is changed, not joined.
         $this->actingAs($this->admin)->postJson(route('check-in.out', $attendance), [
             'health_code' => 0, 'comment_body' => 'Collected by grandma.',
-        ])->assertOk()->assertJsonPath('comments_count', 2)->assertJsonPath('comments.0.tag_label', 'Other');
+        ])->assertOk()->assertJsonPath('comments_count', 1)->assertJsonPath('comments.0.body', 'Collected by grandma.');
 
         // Back in, with the box left empty: a clock and nothing else.
         $this->actingAs($this->admin)->postJson(route('check-in.back', $attendance), [
             'health_code' => 0, 'comment_body' => '   ',
-        ])->assertOk()->assertJsonPath('comments_count', 2);
+        ])->assertOk()->assertJsonPath('comments_count', 1)->assertJsonPath('comments.0.body', 'Collected by grandma.');
 
         // A tag the centre does not use is refused, and the clock with it.
         $this->actingAs($this->admin)->postJson(route('check-in.out', $attendance), [
@@ -1133,9 +1133,9 @@ class CheckInScreenTest extends TestCase
         $this->assertStringNotContainsString(':disabled="slotIn(child)"', $html);
         $this->assertStringContainsString(':selected="Number(entry.code) === Number(code)"', $html);
         $this->assertStringContainsString("x-text=\"slotIn(child) ? 'Leaving check' : 'Health code'\"", $html);
-        // The arrival check still shows as a panel — the code, who took it and when.
-        $this->assertStringContainsString('data-health-panel', $html);
-        $this->assertStringContainsString("x-text=\"codeLabel(slotOf(child)?.in_code ?? 0)\"", $html);
+        // The arrival check is read off the entries card; no second panel repeats it (17 Oct 2026).
+        $this->assertStringNotContainsString('data-health-panel', $html);
+        $this->assertStringContainsString('data-entries', $html);
     }
 
     /**

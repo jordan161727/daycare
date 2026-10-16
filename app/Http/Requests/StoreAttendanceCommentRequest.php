@@ -24,7 +24,7 @@ class StoreAttendanceCommentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tag' => ['required', Rule::enum(CommentTag::class)],
+            'tag' => ['nullable', Rule::enum(CommentTag::class)],
             'body' => ['required', 'string', 'max:1000'],
         ];
     }
@@ -34,7 +34,6 @@ class StoreAttendanceCommentRequest extends FormRequest
         return [
             'body.required' => 'Write the comment first.',
             'body.max' => 'Keep the comment under 1,000 characters.',
-            'tag.required' => 'Pick what kind of note this is.',
         ];
     }
 

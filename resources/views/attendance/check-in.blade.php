@@ -363,7 +363,7 @@
             <div class="glass-card relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-y-auto overscroll-contain rounded-3xl p-5 text-center sm:max-h-[calc(100dvh-3rem)] sm:p-8" data-card-dialog>
                 <button type="button" @click="closeChild()" class="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 sm:right-5 sm:top-5" aria-label="Close">×</button>
 
-                <span class="mx-auto block h-28 w-28 overflow-hidden rounded-full outline outline-[3px]" :class="isIn(child) ? 'outline-emerald-500' : 'outline-slate-200 dark:outline-white/10'" x-html="child.avatar.replace('h-24 w-24', 'h-28 w-28')"></span>
+                <span class="mx-auto block h-28 w-28 shrink-0 overflow-hidden rounded-full outline outline-[3px]" :class="isIn(child) ? 'outline-emerald-500' : 'outline-slate-200 dark:outline-white/10'" x-html="child.avatar.replace('h-24 w-24', 'h-28 w-28')"></span>
                 <h2 class="mt-4 text-2xl font-bold" :id="'child-name-' + child.id" x-text="child.display"></h2>
                 <p class="mt-0.5 text-sm text-slate-500 dark:text-slate-400" x-text="child.room + ' · ' + child.lan"></p>
 
@@ -532,25 +532,16 @@
                 <template x-if="! correcting(child) && slotOf(child)">
                     <div>
                         <template x-for="slot in [slotOf(child)]" :key="'comments-' + slot.id">
-                            <div><x-attendance-comments /></div>
+                            <div class="mt-3"><x-attendance-comments /></div>
                         </template>
                     </div>
                 </template>
 
                 <template x-if="! correcting(child)">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
-                        {{-- The child is in: the check they came in with, as a panel —
-                             the code, who took it and when. Read, not retyped: a change
-                             of condition is corrected in Edit. --}}
-                        <template x-if="slotIn(child)">
-                            <div class="mb-5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-4 py-3 text-left dark:bg-white/5" data-health-panel>
-                                <div class="flex flex-col gap-0.5">
-                                    <span class="text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Health code</span>
-                                    <span class="text-sm font-semibold" x-text="codeLabel(slotOf(child)?.in_code ?? 0)"></span>
-                                </div>
-                                <span class="text-xs text-slate-500 dark:text-slate-400" x-text="[slotOf(child)?.in_by, slotOf(child)?.in_at_label].filter(Boolean).join(' · ')"></span>
-                            </div>
-                        </template>
+                        {{-- The arrival check is read off the entries card above
+                             (17 Oct 2026); a second panel saying the same code was
+                             a repeat. A change of condition is corrected in Edit. --}}
                         <label for="ci-code" class="block text-sm font-semibold" x-text="slotIn(child) ? 'Leaving check' : 'Health code'"></label>
                         {{-- Clocking out, the box opens on the arrival check — the
                              code the child came in with, shown in the panel above
@@ -578,41 +569,9 @@
 
                         <p class="mt-2 text-xs text-slate-500 dark:text-slate-400" x-text="slotIn(child) ? 'Opens on the arrival check. Change it if the child is leaving in a different condition.' : 'Defaults to 0 · Normal. Choose another code when something was seen.'"></p>
 
-                        {{-- A comment with the clock. Folded away until asked for,
-                             so the common case — a clock and nothing to say — is
-                             one press as before. Opened, it is the same note the
-                             dialog's composer writes: a tag and some words, filed
-                             on the row the moment the clock is. --}}
-                        <div class="mt-4" data-clock-comment>
-                            <button type="button" x-show="! commentOpen" @click="openClockComment()"
-                                    class="inline-flex min-h-9 items-center gap-1.5 text-sm font-semibold text-indigo-600 transition hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200" data-add-clock-comment>
-                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                                <span x-text="'Add a comment with the ' + (slotIn(child) ? 'clock-out' : 'clock-in')"></span>
-                            </button>
-
-                            <div x-show="commentOpen" x-cloak class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
-                                <div class="flex items-center justify-between">
-                                    <label for="ci-comment" class="text-sm font-semibold">Comment</label>
-                                    <button type="button" @click="closeClockComment()" class="text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100">Remove</button>
-                                </div>
-                                <div class="flex flex-wrap gap-2" role="group" aria-label="Comment type">
-                                    <template x-for="t in commentTags" :key="'clock-' + t.value">
-                                        <button type="button" @click="commentTag = t.value"
-                                                :aria-pressed="commentTag === t.value ? 'true' : 'false'"
-                                                :data-clock-comment-tag="t.value"
-                                                :class="commentTag === t.value
-                                                    ? 'border-indigo-500 bg-indigo-50 font-semibold text-indigo-700 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-200'
-                                                    : 'border-slate-200 bg-white font-medium text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-night-900 dark:text-slate-200 dark:hover:bg-white/10'"
-                                                class="min-h-9 rounded-full border px-3.5 text-xs transition"
-                                                x-text="t.label"></button>
-                                    </template>
-                                </div>
-                                <textarea id="ci-comment" x-ref="clockComment" x-model="commentBody" rows="3" maxlength="1000"
-                                          placeholder="What should the next teacher or the parent know?"
-                                          class="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-white/15 dark:bg-night-900 dark:text-slate-100"></textarea>
-                                <p class="text-xs text-slate-500 dark:text-slate-400">Saved with the clock, under your name.</p>
-                            </div>
-                        </div>
+                        {{-- The day's comment is the card above the form (17 Oct
+                             2026), written and changed there; the clock form
+                             no longer carries a box of its own. --}}
 
                         <p x-show="error" x-cloak class="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:bg-rose-500/10 dark:text-rose-300" x-text="error"></p>
 
@@ -725,11 +684,6 @@ function checkInGrid() { return {
     child: null,      // the card last opened in the dialog
     dialogOpen: false,
     code: 0,
-    // The comment typed with the clock, if the box was opened — see data-clock-comment.
-    commentOpen: false,
-    commentTag: 'parent_note',
-    commentBody: '',
-    commentTags: @js(\App\Enums\CommentTag::options()),
     codeIn: 0,        // the checks being corrected, and what they were
     noteIn: '',
     codeOut: 0,
@@ -1245,19 +1199,6 @@ function checkInGrid() { return {
         this.dialogOpen = false;
         this.note = '';
         this.error = '';
-        this.closeClockComment();
-    },
-
-    openClockComment() {
-        this.commentOpen = true;
-        this.$nextTick(() => this.$refs.clockComment?.focus());
-    },
-
-    /** Fold the box away and forget what was in it. */
-    closeClockComment() {
-        this.commentOpen = false;
-        this.commentBody = '';
-        this.commentTag = 'parent_note';
     },
 
     /**
@@ -1289,18 +1230,12 @@ function checkInGrid() { return {
         this.saving = true;
         this.error = '';
 
-        // The comment typed with the clock, when the box was opened and
-        // something written in it; filed on the row by the same request.
-        const comment = this.commentOpen && this.commentBody.trim()
-            ? { comment_body: this.commentBody.trim(), comment_tag: this.commentTag }
-            : {};
-
         try {
             const response = await window.postJson(
                 leaving ? '/check-in/' + day.id + '/out' : (returning ? '/check-in/' + day.id + '/back' : '/check-in'),
                 leaving || returning
-                    ? { health_code: code, health_note: this.note.trim() || null, ...comment }
-                    : { child_id: row.id, session: this.session, health_code: code, health_note: this.note.trim() || null, ...comment },
+                    ? { health_code: code, health_note: this.note.trim() || null }
+                    : { child_id: row.id, session: this.session, health_code: code, health_note: this.note.trim() || null },
             );
             const data = await response.json().catch(() => ({}));
 
