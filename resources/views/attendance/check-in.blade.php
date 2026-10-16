@@ -537,6 +537,39 @@
                     </div>
                 </template>
 
+                {{-- Before the first clock-in there is no row yet for a note
+                     to sit on, so the same box holds the words and they go in
+                     with the clock-in (the store route files them on the new
+                     row). Drawn as the box above: COMMENT, then "+ Add a
+                     comment", then the words once typed — press to change. --}}
+                <template x-if="! correcting(child) && ! slotOf(child)">
+                    <div class="mt-5 text-left" data-first-comment>
+                        <p class="mb-2 text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comment</p>
+                        <button type="button" x-show="! firstCommentOpen && firstComment.trim() === ''" @click="openFirstComment()" data-add-first-comment
+                                class="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-slate-50 px-5 text-left text-base text-slate-500 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-white/5 dark:text-slate-400 dark:hover:bg-white/10">
+                            <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            Add a comment
+                        </button>
+                        <div x-show="firstCommentOpen" x-cloak class="flex flex-col gap-2 rounded-2xl bg-slate-50 p-4 ring-2 ring-indigo-500 dark:bg-white/5 dark:ring-indigo-400">
+                            <label for="ci-first-comment" class="sr-only">Comment</label>
+                            <textarea id="ci-first-comment" x-ref="firstComment" x-model="firstComment" rows="3" maxlength="1000"
+                                      placeholder="What should the next teacher or the parent know?"
+                                      @keydown.escape.prevent="firstCommentOpen = false"
+                                      class="w-full resize-y rounded-lg border-0 bg-transparent p-0 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0 dark:text-slate-100"></textarea>
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="text-xs text-slate-500 dark:text-slate-400">Saved with the clock-in, under your name.</span>
+                                <button type="button" @click="firstCommentOpen = false"
+                                        class="min-h-9 rounded-full px-3 text-xs font-semibold text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100">Done</button>
+                            </div>
+                        </div>
+                        <div x-show="! firstCommentOpen && firstComment.trim() !== ''" x-cloak role="button" tabindex="0" @click="openFirstComment()" @keydown.enter.prevent="openFirstComment()" data-first-comment-preview
+                             class="flex min-h-14 w-full cursor-pointer flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-2xl bg-slate-50 px-5 py-3 text-left transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-white/5 dark:hover:bg-white/10">
+                            <p class="min-w-0 flex-1 whitespace-pre-line text-base text-slate-800 dark:text-slate-100" x-text="firstComment"></p>
+                            <span class="shrink-0 text-sm text-slate-500 dark:text-slate-400">Goes in with the clock-in</span>
+                        </div>
+                    </div>
+                </template>
+
                 <template x-if="! correcting(child)">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
                         {{-- The arrival check is read off the entries card above
@@ -683,6 +716,10 @@ function checkInGrid() { return {
     day: @js($date),  // the day the roster is about: today, or the one a director chose
     child: null,      // the card last opened in the dialog
     dialogOpen: false,
+    // The note typed before the first clock-in, when there is no row yet
+    // to put it on; sent with the clock-in — see data-first-comment.
+    firstCommentOpen: false,
+    firstComment: '',
     code: 0,
     codeIn: 0,        // the checks being corrected, and what they were
     noteIn: '',
@@ -1199,6 +1236,13 @@ function checkInGrid() { return {
         this.dialogOpen = false;
         this.note = '';
         this.error = '';
+        this.firstCommentOpen = false;
+        this.firstComment = '';
+    },
+
+    openFirstComment() {
+        this.firstCommentOpen = true;
+        this.$nextTick(() => this.$refs.firstComment?.focus());
     },
 
     /**
@@ -1235,7 +1279,7 @@ function checkInGrid() { return {
                 leaving ? '/check-in/' + day.id + '/out' : (returning ? '/check-in/' + day.id + '/back' : '/check-in'),
                 leaving || returning
                     ? { health_code: code, health_note: this.note.trim() || null }
-                    : { child_id: row.id, session: this.session, health_code: code, health_note: this.note.trim() || null },
+                    : { child_id: row.id, session: this.session, health_code: code, health_note: this.note.trim() || null, comment_body: this.firstComment.trim() || null },
             );
             const data = await response.json().catch(() => ({}));
 

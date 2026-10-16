@@ -224,6 +224,11 @@ class AttendanceCommentTest extends TestCase
         $this->assertStringNotContainsString('Edit comment', $html);
         // One note, no kinds: the "Add a comment…" line, and no tag chips anywhere.
         $this->assertStringContainsString('Add a comment', $html);
+        // Before the first clock-in the same box is offered, and its words ride
+        // with the clock-in request (17 Oct 2026).
+        $this->assertStringContainsString('data-first-comment', $html);
+        $this->assertStringContainsString('data-add-first-comment', $html);
+        $this->assertStringContainsString("comment_body: this.firstComment.trim() || null", $html);
         $this->assertStringNotContainsString('data-comment-tag', $html);
         $this->assertStringNotContainsString('data-clock-comment-tag', $html);
     }
