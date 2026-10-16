@@ -3,7 +3,7 @@
 // new notes, and tells the roster so the card's count follows.
 //
 // `url` is the row's comments endpoint, `initial` its notes newest first,
-// `canAdd` whether the child is still in (no notes once they have gone), and
+// `canAdd` whether the composer is offered at all (it is, all day), and
 // `onAdded` a hook the dialog uses to keep its own copy of the row in step.
 export default function attendanceComments({ url, childId, canAdd = true, initial = [], onAdded = null }) {
     return {

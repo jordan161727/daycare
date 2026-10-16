@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\CommentTag;
 use App\Http\Resources\AttendanceCommentResource;
 use App\Models\Attendance;
+use App\Models\AttendanceComment;
 use App\Models\DoorAttendance;
 use App\Models\AttendanceReturn;
 use App\Models\Child;
@@ -13,6 +15,7 @@ use App\Services\HealthScreening;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 /**
@@ -40,6 +43,20 @@ class CheckInController extends Controller
     public const WEEK = 'week';
 
     public const MONTH = 'month';
+
+    /**
+     * A note typed along with a clock-in or clock-out — "has a cough today",
+     * "nappies in the red bag" — filed as a comment on the row the moment
+     * the row is written, so it reads the same as one added from the
+     * dialog. Optional: a clock without words is still a clock.
+     */
+    private static function commentRules(): array
+    {
+        return [
+            'comment_body' => ['nullable', 'string', 'max:1000'],
+            'comment_tag' => ['nullable', Rule::enum(CommentTag::class)],
+        ];
+    }
 
     public function __construct(private HealthScreening $screening) {}
 
@@ -327,6 +344,7 @@ class CheckInController extends Controller
             'session' => ['required', Rule::in(['AM', 'PM', 'FULL'])],
             'health_code' => ['required', 'integer', 'between:0,255'],
             'health_note' => ['nullable', 'string', 'max:120'],
+            ...self::commentRules(),
         ]);
 
         // Any child on the roll: the door shows the whole floor, so it
@@ -352,6 +370,8 @@ class CheckInController extends Controller
             $data['health_note'] ?? null,
             $request->user(),
         );
+
+        $this->noteComment($request, $attendance, $data);
 
         return $this->row($attendance);
     }
@@ -394,6 +414,7 @@ class CheckInController extends Controller
         $data = $request->validate([
             'health_code' => ['required', 'integer', 'between:0,255'],
             'health_note' => ['nullable', 'string', 'max:120'],
+            ...self::commentRules(),
         ]);
 
         $this->guard($request, $attendance);
@@ -409,6 +430,8 @@ class CheckInController extends Controller
             $data['health_note'] ?? null,
             $request->user(),
         );
+
+        $this->noteComment($request, $attendance, $data);
 
         return $this->row($attendance);
     }
@@ -432,6 +455,7 @@ class CheckInController extends Controller
         $data = $request->validate([
             'health_code' => ['required', 'integer', 'between:0,255'],
             'health_note' => ['nullable', 'string', 'max:120'],
+            ...self::commentRules(),
         ]);
 
         $this->guard($request, $attendance);
@@ -470,7 +494,34 @@ class CheckInController extends Controller
             $request->user(),
         );
 
+        $this->noteComment($request, $attendance, $data);
+
         return $this->row($attendance);
+    }
+
+    /**
+     * File the comment typed with a clock-in or clock-out, if there was one.
+     *
+     * The same shape as one added from the dialog — the row's, the signed-in
+     * user's, tagged — so the two are indistinguishable once written. Only a
+     * body makes a comment; a tag with nothing to say is nothing to file.
+     */
+    private function noteComment(Request $request, DoorAttendance $attendance, array $data): void
+    {
+        $body = trim((string) ($data['comment_body'] ?? ''));
+
+        if ($body === '') {
+            return;
+        }
+
+        Gate::authorize('create', [AttendanceComment::class, $attendance]);
+
+        $attendance->comments()->create([
+            'child_id' => $attendance->child_id,
+            'user_id' => $request->user()->id,
+            'tag' => $data['comment_tag'] ?? CommentTag::Other->value,
+            'body' => $body,
+        ]);
     }
 
     /** The row's trips out and back as the screen shows them: [[left, back], ...]. */

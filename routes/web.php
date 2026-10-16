@@ -43,6 +43,7 @@ use Illuminate\Support\Facades\Schema;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\ClosureDay;
+use App\Models\DoorAttendance;
 
 Route::redirect('/', '/dashboard');
 
@@ -129,7 +130,8 @@ Route::get('/dashboard', function () {
     if (! Schema::hasTable('children') || ! Schema::hasTable('attendances')) {
         return view('dashboard.index', [
             'totalChildren' => 0,
-            'presentToday' => 0,
+            'registerPresent' => 0,
+            'doorPresent' => 0,
             'totalRooms' => 0,
             'recentAttendance' => collect(),
             'upcomingClosures' => $upcomingClosures,
@@ -137,14 +139,40 @@ Route::get('/dashboard', function () {
     }
 
     $user = request()->user();
-    $totalChildren = Child::visibleTo($user)->where('status', 'Active')->count();
-    $presentToday = Attendance::whereDate('attendance_date', today())->whereHas('child', fn ($query) => $query->visibleTo($user))->count();
-    $totalRooms = Child::visibleTo($user)->where('status', 'Active')->distinct('classroom')->count('classroom');
-    $recentAttendance = Attendance::with('child')->whereDate('attendance_date', today())
-        ->whereHas('child', fn ($query) => $query->visibleTo($user))
+
+    // One roll for both counts below: Active, and enrolled as of today — a
+    // child who starts next Monday or left last Friday is on the books but
+    // not on today's floor. Scoped to the reader's rooms, as the rest of the
+    // dashboard is; for the director that is the whole floor.
+    $today = today()->toDateString();
+    $roll = Child::visibleTo($user)->where('status', 'Active')->get()
+        ->filter(fn (Child $child) => $child->isEnrolledOn($today));
+    $totalChildren = $roll->count();
+
+    // Two records, two counts. Director Attendance (the register, Attendance)
+    // and Teacher Attendance (the door, DoorAttendance) are kept separately,
+    // so the dashboard reports each from its own table rather than one number
+    // that is true of neither. Each is a child, not a row: a School Age
+    // child's morning and afternoon are two rows, and a row with no arrival
+    // on it is not a child in the building.
+    $presentOn = fn (string $model) => $model::whereDate('attendance_date', $today)
+        ->whereIn('child_id', $roll->pluck('id'))
+        ->whereNotNull('signed_in_at')
+        ->distinct()
+        ->count('child_id');
+    $registerPresent = $presentOn(Attendance::class);
+    $doorPresent = $presentOn(DoorAttendance::class);
+
+    $totalRooms = $roll->pluck('classroom')->filter()->unique()->count();
+
+    // The latest arrivals as the door clocked them: that is the screen where
+    // a time of day is written as the child walks in.
+    $recentAttendance = DoorAttendance::with('child')->whereDate('attendance_date', $today)
+        ->whereIn('child_id', $roll->pluck('id'))
+        ->whereNotNull('signed_in_at')
         ->latest('signed_in_at')->take(5)->get();
 
-    return view('dashboard.index', compact('totalChildren', 'presentToday', 'totalRooms', 'recentAttendance', 'upcomingClosures'));
+    return view('dashboard.index', compact('totalChildren', 'registerPresent', 'doorPresent', 'totalRooms', 'recentAttendance', 'upcomingClosures'));
 })->name('dashboard');
 
 

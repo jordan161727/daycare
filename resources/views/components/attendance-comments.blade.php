@@ -4,8 +4,8 @@
      on screen (one child, today, one session) and `child` the child; both come
      from the dialog's own scope. It opens on whatever the server sent so the
      list is there without a second request, and posts new notes with fetch.
-     After a clock-out the notes stay readable and the composer is gone: the
-     API refuses new ones too. The Alpine component is resources/js/attendance-comments.js.
+     The composer stays open all day, clocked out or not: a note at six about
+     the way home is still a note on today. The Alpine component is resources/js/attendance-comments.js.
 
      Drawn in the app's own palette — indigo for the action, slate for the
      quiet parts — so it sits with the rest of the dialog rather than beside it. --}}
@@ -13,7 +13,6 @@
     x-data="attendanceComments({
         url: '/attendances/' + slot.id + '/comments',
         childId: child.id,
-        canAdd: ! slot.out,
         initial: slot.comments ?? [],
         onAdded: (comment) => { slot.comments = [comment, ...(slot.comments ?? [])]; slot.comments_count = slot.comments.length; },
     })"

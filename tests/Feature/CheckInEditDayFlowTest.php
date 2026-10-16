@@ -86,8 +86,7 @@ class CheckInEditDayFlowTest extends TestCase
         $this->assertSame(0, $attendance->health_out_code);
         $this->assertSame('16:30', $attendance->signed_out_at->format('H:i'), 'a check never moves a time');
         $this->assertSame(2, DoorHealthAudit::where('attendance_id', $attendance->id)->count(), 'the arrival check and the leaving check, on the door\'s own audit');
-        // One table for now (16 Oct 2026): the register's audit is the same audit.
-        $this->assertSame(2, HealthAudit::count());
+        $this->assertSame(0, HealthAudit::count(), 'and none on the register\'s');
 
         // 4. Not attending after all: the arrival comes off, with its audit.
         $this->actingAs($this->admin)
@@ -109,18 +108,14 @@ class CheckInEditDayFlowTest extends TestCase
         $this->actingAs($teacher)->postJson(route('check-in.day'), $base + ['attendance_date' => now()->toDateString(), 'signed_in_time' => '08:05'])->assertOk();
     }
 
-    /**
-     * The register's amendment log has nothing from any of this.
-     *
-     * The rows themselves are shared for now (16 Oct 2026) — the door reads
-     * and writes attendances — so only the log is asserted untouched.
-     */
+    /** The register — Director Attendance — has nothing from any of this. */
     private function assertRegisterUntouched(): void
     {
-        $this->assertSame(0, AttendanceAmendment::count(), 'the door never writes the register\'s amendment log');
+        $this->assertSame(0, Attendance::count(), 'the door writes none of the register\'s rows');
+        $this->assertSame(0, AttendanceAmendment::count(), 'nor its amendment log');
     }
 
-    public function test_the_same_day_reads_back_on_check_in_and_on_the_register(): void
+    public function test_the_same_day_reads_back_on_check_in_and_not_on_the_register(): void
     {
         $base = ['child_id' => $this->child->id, 'attendance_date' => self::DAY, 'session' => 'FULL'];
 
@@ -133,10 +128,9 @@ class CheckInEditDayFlowTest extends TestCase
         $this->assertStringContainsString($q.'in'.$q.':'.$q.'8:05a'.$q, $checkIn);
         $this->assertStringContainsString($q.'out'.$q.':'.$q.'4:30p'.$q, $checkIn);
 
-        // And the register, that week, shows the same day: one record, for
-        // now (16 Oct 2026), read by both screens.
+        // And the register, that week, knows nothing of it: two records that do not meet.
         $register = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::DAY]))->assertOk()->getContent());
-        $this->assertStringContainsString('"'.$this->child->id.'":{"'.self::DAY.'"', $register, 'the cell on the register for that day');
-        $this->assertSame(1, Attendance::count());
+        $this->assertStringNotContainsString('"'.$this->child->id.'":{"'.self::DAY.'"', $register, 'no cell on the register for that day');
+        $this->assertSame(0, Attendance::count());
     }
 }

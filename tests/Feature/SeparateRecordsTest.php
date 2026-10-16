@@ -35,11 +35,6 @@ class SeparateRecordsTest extends TestCase
     {
         parent::setUp();
 
-        // Set aside on 16 Oct 2026: the centre asked for the door to read the
-        // register's record again for now, so the two are one table and
-        // nothing here holds. Lift this when the split comes back.
-        $this->markTestSkipped("The door reads the register's tables for now (16 Oct 2026).");
-
         $this->travelTo(Carbon::parse('2026-10-16 08:00:00', config('app.timezone')));
         $this->admin = User::factory()->create(['role' => 'admin']);
         $this->child = Child::create(['lan' => '10064', 'first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Active', 'classroom' => 'Infant', 'dob' => '2025-06-01']);
@@ -119,16 +114,21 @@ class SeparateRecordsTest extends TestCase
         $this->actingAs($this->admin)->get(route('attendance.month-sheet', ['month' => 10, 'year' => 2026, 'source' => 'door']))->assertOk()
             ->assertSee('7:46a')->assertDontSee('8:30a');
 
-        // The workbook: a run of room sheets per record, then the comments.
+        // The workbook: one sheet per room, as the paper form is kept, with
+        // the register's day on top and the door's filling what the register
+        // left blank (see MonthSheetController::overlay). A read-time
+        // overlay for the file only — nothing is written from one record to
+        // the other, which the assertions above have already shown.
         $response = $this->actingAs($this->admin)->get(route('attendance.month-sheet.export', ['month' => 10, 'year' => 2026]))->assertOk();
         $path = storage_path('app/test-split.xlsx');
         file_put_contents($path, $response->streamedContent());
         $book = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
         $titles = array_map(fn ($sheet) => $sheet->getTitle(), $book->getAllSheets());
-        $this->assertSame(['Infant · Register', 'Infant · Door', 'Comments'], $titles);
-        $this->assertSame('8:30a', $book->getSheetByName('Infant · Register')->getCell('Q4')->getValue(), 'day 15 is column 2 + 15');
-        $this->assertSame('7:46a', $book->getSheetByName('Infant · Door')->getCell('Q4')->getValue());
-        $this->assertSame('Room: Infant (Door)', $book->getSheetByName('Infant · Door')->getCell('C1')->getValue());
+        $this->assertSame(['Infant', 'Comments'], $titles);
+        $this->assertSame('8:30a', $book->getSheetByName('Infant')->getCell('Q4')->getValue(), 'day 15 is column 2 + 15; the register\'s time wins');
         @unlink($path);
+
+        $this->assertSame(1, Attendance::count(), 'the export wrote nothing onto the register');
+        $this->assertSame(1, DoorAttendance::count(), 'nor onto the door');
     }
 }

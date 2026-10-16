@@ -125,7 +125,7 @@
             <a href="{{ $back }}" class="rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold ring-1 ring-white/25 transition hover:bg-white/20">← Back</a>
             {{-- Whoever may read this record may keep it up to date. A teacher
                  gets the contact details, the pick-up list and the notes; what
-                 decides rooms, enrolment and billing stays the director's, and
+                 decides rooms, enrollment and billing stays the director's, and
                  the form shows those as set rather than offering them. --}}
             <a href="{{ route('children.edit', $child) }}" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-indigo-700 shadow-lg shadow-indigo-900/20 transition hover:-translate-y-0.5">Edit record</a>
         </div>
@@ -366,7 +366,7 @@
         </section>
 
         <section class="glass-card rounded-2xl p-6">
-            <h2 class="card-title"><span class="card-icon">🗓</span> Enrolment</h2>
+            <h2 class="card-title"><span class="card-icon">🗓</span> Enrollment</h2>
             <dl class="mt-4 space-y-3 text-sm">
                 {{-- The subsidy numbers, when there are any. Shown here rather
                      than only on the edit form: billing reads them, and reading

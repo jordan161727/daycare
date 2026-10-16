@@ -38,18 +38,9 @@ class StoreAttendanceCommentRequest extends FormRequest
         ];
     }
 
-    /**
-     * A day that is over takes no more notes. What was written stays
-     * readable; nothing new goes on a child who has gone home.
-     */
-    public function withValidator(Validator $validator): void
-    {
-        $validator->after(function (Validator $validator) {
-            $attendance = $this->route('attendance');
-
-            if ($attendance instanceof Attendance && ! $attendance->isSignedIn()) {
-                $validator->errors()->add('body', 'This child has been clocked out.');
-            }
-        });
-    }
+    // A note can be added at any point in the day — before the child is
+    // clocked out, and after: a parent who rings at six to say the child
+    // was sick on the way home is a note on today, and the row is still
+    // today's. The centre asked for this on 16 Oct 2026; until then a
+    // clocked-out row refused new notes.
 }

@@ -73,7 +73,7 @@ class CheckInScreenTest extends TestCase
 
         $this->assertNotNull($attendance->signed_in_at);
         $this->assertSame(0, $attendance->health_in_code);
-        $this->assertDatabaseHas('health_audits', [
+        $this->assertDatabaseHas('door_health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'new_code' => 0,
@@ -126,6 +126,41 @@ class CheckInScreenTest extends TestCase
         $this->assertNotNull($attendance->signed_out_at);
         $this->assertSame(4, $attendance->health_out_code);
         $this->assertTrue($attendance->isSick());
+    }
+
+    /**
+     * A note can go in with the clock — on the arrival, the departure and
+     * the clock-in again — filed on the row under the signed-in user's name,
+     * the same as one added from the dialog. Without words, nothing is filed.
+     */
+    public function test_a_comment_can_be_filed_with_the_clock_in_and_the_clock_out(): void
+    {
+        $this->actingAs($this->admin)->postJson(route('check-in.store'), [
+            'child_id' => $this->child->id, 'session' => 'FULL', 'health_code' => 0,
+            'comment_tag' => 'belongings', 'comment_body' => '  Spare outfit in the blue bag.  ',
+        ])->assertOk()->assertJsonPath('comments_count', 1)->assertJsonPath('comments.0.body', 'Spare outfit in the blue bag.');
+
+        $attendance = DoorAttendance::firstOrFail();
+        $this->assertDatabaseHas('attendance_comments', [
+            'attendance_id' => $attendance->id, 'child_id' => $this->child->id, 'user_id' => $this->admin->id,
+            'tag' => 'belongings', 'body' => 'Spare outfit in the blue bag.',
+        ]);
+
+        // Out, with a note and no tag: filed as "other".
+        $this->actingAs($this->admin)->postJson(route('check-in.out', $attendance), [
+            'health_code' => 0, 'comment_body' => 'Collected by grandma.',
+        ])->assertOk()->assertJsonPath('comments_count', 2)->assertJsonPath('comments.0.tag_label', 'Other');
+
+        // Back in, with the box left empty: a clock and nothing else.
+        $this->actingAs($this->admin)->postJson(route('check-in.back', $attendance), [
+            'health_code' => 0, 'comment_body' => '   ',
+        ])->assertOk()->assertJsonPath('comments_count', 2);
+
+        // A tag the centre does not use is refused, and the clock with it.
+        $this->actingAs($this->admin)->postJson(route('check-in.out', $attendance), [
+            'health_code' => 0, 'comment_body' => 'Hi', 'comment_tag' => 'gossip',
+        ])->assertStatus(422)->assertJsonValidationErrors('comment_tag');
+        $this->assertNull($attendance->refresh()->signed_out_at);
     }
 
     public function test_a_departure_cannot_be_recorded_without_a_check(): void
@@ -536,7 +571,7 @@ class CheckInScreenTest extends TestCase
             ->assertJsonPath('health_in', 4);
 
         $this->assertSame(4, $attendance->fresh()->health_in_code);
-        $this->assertDatabaseHas('health_audits', [
+        $this->assertDatabaseHas('door_health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => 0,
@@ -707,7 +742,7 @@ class CheckInScreenTest extends TestCase
         $this->assertSame(4, $attendance->fresh()->health_in_code);
 
         // And it says who added it and when, like every other change.
-        $this->assertDatabaseHas('health_audits', [
+        $this->assertDatabaseHas('door_health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => null,
@@ -1077,9 +1112,11 @@ class CheckInScreenTest extends TestCase
      * The leaving check opens on the arrival check. A child checked in with
      * a 3 is offered a 3 at pick-up, not a 0, so the code is confirmed rather
      * than retyped — and cannot fall back to Normal because nobody touched
-     * the box. Clocking in opens on 0, since there is nothing to carry.
+     * the box. It can be changed, though: a child going home in a different
+     * condition leaves with the code seen now. Clocking in opens on 0, since
+     * there is nothing to carry.
      */
-    public function test_clocking_out_carries_the_code_the_child_came_in_with_read_only(): void
+    public function test_clocking_out_opens_on_the_code_the_child_came_in_with_and_can_change_it(): void
     {
         $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
 
@@ -1089,11 +1126,14 @@ class CheckInScreenTest extends TestCase
         $this->assertStringContainsString("this.session = this.nextStep(this.child).session;\n        this.presetCode();", $html);
         $this->assertStringContainsString("this.session = s;\n        this.presetCode();", $html);
 
-        // Clocking out, the box is read-only and says so; the options carry
-        // :selected as well as x-model, or the preset would not show.
-        $this->assertStringContainsString('<select id="ci-code" x-model.number="code" :disabled="slotIn(child)"', $html);
+        // The box is live either way — not disabled, not hidden on the way
+        // out — and the options carry :selected as well as x-model, or the
+        // preset would not show. Labelled for the step it is.
+        $this->assertStringContainsString('<select id="ci-code" x-model.number="code" data-code-select', $html);
+        $this->assertStringNotContainsString(':disabled="slotIn(child)"', $html);
         $this->assertStringContainsString(':selected="Number(entry.code) === Number(code)"', $html);
-        // …shown as a panel — the code, who took it and when — not a greyed select.
+        $this->assertStringContainsString("x-text=\"slotIn(child) ? 'Leaving check' : 'Health code'\"", $html);
+        // The arrival check still shows as a panel — the code, who took it and when.
         $this->assertStringContainsString('data-health-panel', $html);
         $this->assertStringContainsString("x-text=\"codeLabel(slotOf(child)?.in_code ?? 0)\"", $html);
     }

@@ -13,14 +13,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * works on this, which is the point of the inheritance — the door's code
  * reads and writes the door's tables without knowing it.
  */
-/**
- * The door's row. For now (16 Oct 2026) the same table as the register's —
- * attendances and attendance_returns — at the centre's request; the
- * door_* tables stand ready for the day the records are split again.
- */
 class DoorAttendance extends Attendance
 {
-    protected $table = 'attendances';
+    protected $table = 'door_attendances';
 
     public function healthAudits(): HasMany
     {

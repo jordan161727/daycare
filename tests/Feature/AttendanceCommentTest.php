@@ -68,16 +68,15 @@ class AttendanceCommentTest extends TestCase
         $this->assertSame(0, AttendanceComment::count());
     }
 
-    public function test_nothing_can_be_added_once_the_child_has_been_clocked_out(): void
+    /** A note can be added at any point in the day — after the clock-out too. */
+    public function test_a_comment_can_still_be_added_once_the_child_has_been_clocked_out(): void
     {
         $this->attendance->update(['signed_out_at' => now()]);
 
-        $this->actingAs($this->teacher)->postJson(route('attendances.comments.store', $this->attendance), ['tag' => 'other', 'body' => 'Too late'])
-            ->assertUnprocessable()
-            ->assertJsonPath('errors.body.0', 'This child has been clocked out.');
+        $this->actingAs($this->teacher)->postJson(route('attendances.comments.store', $this->attendance), ['tag' => 'other', 'body' => 'Mum rang: sick in the car on the way home.'])
+            ->assertCreated();
 
-        // Still readable, though.
-        $this->actingAs($this->teacher)->getJson(route('attendances.comments.index', $this->attendance))->assertOk();
+        $this->assertSame(1, AttendanceComment::where('attendance_id', $this->attendance->id)->count());
     }
 
     public function test_the_author_and_the_child_come_from_the_server_not_the_request(): void
@@ -118,9 +117,12 @@ class AttendanceCommentTest extends TestCase
         $this->assertStringContainsString('"comments_count":1', $data);
         $this->assertStringContainsString('"tag_label":"Belongings"', $data);
         $this->assertStringContainsString('Spare outfit in the blue bag.', $data);
-        // …the component is in the dialog, the composer hidden once the child is out…
+        // …the component is in the dialog, its composer offered all day, and the
+        // clock form has its own comment box so a note can go in with the clock…
         $this->assertStringContainsString('data-attendance-comments', $html);
-        $this->assertStringContainsString("canAdd: ! slot.out", $html);
+        $this->assertStringNotContainsString("canAdd: ! slot.out", $html);
+        $this->assertStringContainsString('data-clock-comment', $html);
+        $this->assertStringContainsString('data-add-clock-comment', $html);
         // The signed-in header: the chip and the health panel, who took the check and when.
         $this->assertStringContainsString('"in_at_label":"7:58 AM"', $data);
         $this->assertStringContainsString('data-health-panel', $html);
