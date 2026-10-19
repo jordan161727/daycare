@@ -24,7 +24,18 @@
     class="text-left"
     data-attendance-comments
 >
-    <p class="mb-2 text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comment</p>
+    {{-- The label, and on the right the day of the child's latest earlier
+         comment with a way to it: "Last comment: Fri, Oct 16 · View". Read
+         from the dialog's `child`, and absent when there is none. --}}
+    <div class="mb-2 flex items-baseline justify-between gap-3">
+        <p class="text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comment</p>
+        <template x-if="child?.last_comment_on">
+            <p class="text-[13px] leading-[18px] text-[#5F6676] dark:text-slate-400" data-last-comment>
+                Last comment: <span x-text="dayShort(child.last_comment_on)"></span> ·
+                <button type="button" @click="showPast(child.last_comment_on)" class="font-semibold text-[#4C5A9E] underline-offset-2 hover:underline dark:text-indigo-300" data-view-last-comment>View</button>
+            </p>
+        </template>
+    </div>
 
     {{-- No note yet: the box invites one. --}}
     <button type="button" x-show="canAdd && !open && comments.length === 0" @click="openComposer()" data-add-comment data-comments-empty

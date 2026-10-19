@@ -4,20 +4,18 @@ namespace Tests\Feature;
 
 use App\Models\Attendance;
 use App\Models\Child;
-use App\Models\DoorAttendance;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
- * The dashboard's head counts.
+ * The dashboard's numbers are the door's roll and the one attendance record.
  *
- * Director Attendance (the register) and Teacher Attendance (the door) are
- * two records, so the dashboard carries two "present" numbers, each read from
- * its own record and each on the same roll the door's strip counts. Somebody
- * reading the door and then the dashboard, and seeing 89 and 90, stops
- * trusting both.
+ * Total Children is who is on today's floor — Active and enrolled as of
+ * today — and Present Today is how many of them have an arrival on the
+ * record, counted as children rather than rows. The two-tile dashboard of
+ * 16–20 Oct 2026, one tile a record, went when the records were rejoined.
  */
 class DashboardCountsTest extends TestCase
 {
@@ -29,12 +27,11 @@ class DashboardCountsTest extends TestCase
     {
         parent::setUp();
 
-        $this->travelTo(Carbon::parse('2026-10-16 09:00:00'));
-
-        $this->admin = User::factory()->create(['role' => 'admin', 'must_change_password' => false]);
+        $this->travelTo(Carbon::parse('2026-10-16 09:00:00', config('app.timezone')));
+        $this->admin = User::factory()->create(['role' => 'admin']);
     }
 
-    public function test_each_record_is_counted_from_its_own_table_on_the_door_s_roll(): void
+    public function test_present_today_counts_children_on_the_door_s_roll(): void
     {
         $here = Child::create(['lan' => '10001', 'first_name' => 'Ada', 'last_name' => 'Here', 'status' => 'Active', 'classroom' => 'PreK']);
         $twice = Child::create(['lan' => '10002', 'first_name' => 'Ben', 'last_name' => 'Twice', 'status' => 'Active', 'classroom' => 'School Age']);
@@ -44,45 +41,32 @@ class DashboardCountsTest extends TestCase
         Child::create(['lan' => '10005', 'first_name' => 'Ed', 'last_name' => 'Gone', 'status' => 'Active', 'classroom' => 'PreK', 'withdrawn_on' => '2026-10-09']);
         Child::create(['lan' => '10006', 'first_name' => 'Fay', 'last_name' => 'Archived', 'status' => 'Archived', 'classroom' => 'PreK']);
 
-        DoorAttendance::create(['child_id' => $here->id, 'attendance_date' => '2026-10-16', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-10-16 08:12'), 'health_in_code' => 0]);
+        Attendance::create(['child_id' => $here->id, 'attendance_date' => '2026-10-16', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-10-16 08:12'), 'health_in_code' => 0]);
         // Two sessions, one child in the building.
-        DoorAttendance::create(['child_id' => $twice->id, 'attendance_date' => '2026-10-16', 'session' => 'AM', 'signed_in_at' => Carbon::parse('2026-10-16 07:30'), 'signed_out_at' => Carbon::parse('2026-10-16 08:30'), 'health_in_code' => 0]);
-        DoorAttendance::create(['child_id' => $twice->id, 'attendance_date' => '2026-10-16', 'session' => 'PM', 'signed_in_at' => Carbon::parse('2026-10-16 15:10'), 'health_in_code' => 0]);
+        Attendance::create(['child_id' => $twice->id, 'attendance_date' => '2026-10-16', 'session' => 'AM', 'signed_in_at' => Carbon::parse('2026-10-16 07:30'), 'signed_out_at' => Carbon::parse('2026-10-16 08:30'), 'health_in_code' => 0]);
+        Attendance::create(['child_id' => $twice->id, 'attendance_date' => '2026-10-16', 'session' => 'PM', 'signed_in_at' => Carbon::parse('2026-10-16 15:10'), 'health_in_code' => 0]);
 
         $dashboard = $this->actingAs($this->admin)->get(route('dashboard'))->assertOk();
         $door = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk();
 
-        // The roll is the door's roll.
+        // The roll is the door's roll, and the count is the door's count.
         $this->assertSame(3, $door->viewData('stats')['enrolled']);
         $this->assertSame($door->viewData('stats')['enrolled'], $dashboard->viewData('totalChildren'));
+        $this->assertSame(2, $dashboard->viewData('presentToday'));
 
-        // Teacher Attendance is what the door's strip says is in.
-        $this->assertSame(2, $door->viewData('stats')['in']);
-        $this->assertSame($door->viewData('stats')['in'], $dashboard->viewData('doorPresent'));
-
-        // Director Attendance is the register's own record: one child marked
-        // there, a different one, and the two numbers do not meet.
-        Attendance::create(['child_id' => $here->id, 'attendance_date' => '2026-10-16', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-10-16 08:00'), 'health_in_code' => 0]);
-        $dashboard = $this->actingAs($this->admin)->get(route('dashboard'))->assertOk();
-        $this->assertSame(1, $dashboard->viewData('registerPresent'));
-        $this->assertSame(2, $dashboard->viewData('doorPresent'));
-
-        $dashboard->assertSeeInOrder(['Total Children', '3', 'Present · Director', 'Present · Teacher', '2', 'Rooms', '2'])
-            ->assertSee('Director Attendance')
-            ->assertSee('Teacher Attendance')
+        $dashboard->assertSeeInOrder(['Total Children', '3', 'Present Today', '2', 'Absent', '1', 'Rooms', '2'])
             ->assertSee('2 / 3 children present')
-            ->assertSee('1 absent');
+            ->assertSee('1 still to arrive');
     }
 
-    public function test_a_morning_with_nobody_in_yet_reads_as_zero_on_both_records(): void
+    public function test_a_morning_with_nobody_in_yet_reads_as_zero(): void
     {
         Child::create(['lan' => '10001', 'first_name' => 'Ada', 'last_name' => 'Coming', 'status' => 'Active', 'classroom' => 'PreK']);
 
         $this->actingAs($this->admin)->get(route('dashboard'))
             ->assertOk()
             ->assertViewHas('totalChildren', 1)
-            ->assertViewHas('registerPresent', 0)
-            ->assertViewHas('doorPresent', 0)
+            ->assertViewHas('presentToday', 0)
             ->assertSee('No sign-ins yet today.');
     }
 }

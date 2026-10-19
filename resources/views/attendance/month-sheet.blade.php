@@ -49,12 +49,6 @@
         {{-- The same month as a workbook, a sheet per room, laid out as the
              paper form — for the file that gets kept rather than the page
              that gets read. --}}
-        {{-- Which record the page reads. The register is the paper form; the
-             door is what the teachers clocked. The export carries both. --}}
-        <span class="inline-flex rounded-full border border-slate-200 p-0.5 text-xs font-semibold dark:border-white/10" data-source-toggle>
-            <a href="{{ route('attendance.month-sheet', ['month' => $month, 'year' => $year, 'source' => 'register']) }}" class="rounded-full px-3 py-1 {{ $source === 'register' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10' }}" @if($source === 'register') aria-current="page" @endif>Director</a>
-            <a href="{{ route('attendance.month-sheet', ['month' => $month, 'year' => $year, 'source' => 'door']) }}" class="rounded-full px-3 py-1 {{ $source === 'door' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10' }}" @if($source === 'door') aria-current="page" @endif>Teacher</a>
-        </span>
         <a href="{{ route('attendance.month-sheet.export', ['month' => $month, 'year' => $year, 't' => now()->timestamp]) }}"
            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">
             Export Excel

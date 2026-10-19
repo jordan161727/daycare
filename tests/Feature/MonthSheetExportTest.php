@@ -163,9 +163,8 @@ class MonthSheetExportTest extends TestCase
         $maeve = Child::where('lan', '10064')->sole();
         $mark = Child::where('lan', '10065')->sole();
         $teacher = User::factory()->create(['role' => 'teacher', 'name' => 'Ms. Alvarez']);
-        // Comments are the door's, so the days they sit on are door rows.
-        $maevesDay = \App\Models\DoorAttendance::create(['child_id' => $maeve->id, 'attendance_date' => '2026-09-09', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-09 08:01')]);
-        $marksDay = \App\Models\DoorAttendance::create(['child_id' => $mark->id, 'attendance_date' => '2026-09-09', 'session' => 'FULL', 'signed_in_at' => Carbon::parse('2026-09-09 07:50')]);
+        $maevesDay = Attendance::where('child_id', $maeve->id)->where('attendance_date', '2026-09-09')->sole();
+        $marksDay = Attendance::where('child_id', $mark->id)->sole();
 
         \App\Models\AttendanceComment::create(['attendance_id' => $maevesDay->id, 'child_id' => $maeve->id, 'user_id' => $teacher->id, 'tag' => 'parent_note', 'body' => 'Mom says he slept poorly last night.'])
             ->forceFill(['created_at' => Carbon::parse('2026-09-09 08:02', config('app.timezone'))])->save();
@@ -194,9 +193,8 @@ class MonthSheetExportTest extends TestCase
     }
 
     /**
-     * One sheet per room, named for the room — and the door's record laid
-     * under the register's, so a health check taken at the door shows on
-     * the room's sheet rather than on a second sheet nobody opens.
+     * One sheet per room, named for the room — and a health check taken at
+     * the door is on the room's sheet, because the door writes the same row.
      */
     public function test_the_sheets_are_named_for_the_rooms_and_carry_the_doors_health_checks(): void
     {

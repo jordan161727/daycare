@@ -31,6 +31,7 @@ class ExportsAreNeverCachedTest extends TestCase
         'staff.timesheets.export',
         'staff.reports.export',
         'attendance.month-sheet.export',
+        'comments.export',
     ];
 
     public function test_every_export_route_carries_the_middleware(): void
@@ -64,6 +65,7 @@ class ExportsAreNeverCachedTest extends TestCase
         $this->assertNeverCached($this->actingAs($admin)->get(route('staff.timesheets.export', ['from' => '2026-09-21', 'to' => '2026-09-25'])), 'staff timesheets');
         $this->assertNeverCached($this->actingAs($admin)->get(route('staff.reports.export', ['report' => 'daily_summary', 'start' => '2026-09-21', 'end' => '2026-09-25', 'format' => 'csv'])), 'staff reports');
         $this->assertNeverCached($this->actingAs($admin)->get(route('timesheets.export', TimesheetPeriod::forDate('2026-08-17'))), 'timesheets');
+        $this->assertNeverCached($this->actingAs($admin)->get(route('comments.export', ['date' => '2026-09-25'])), 'comments');
     }
 
     private function assertNeverCached(TestResponse $response, string $which): void

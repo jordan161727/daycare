@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** A health check written down on the door's record — see HealthAudit. */
+/**
+ * A health check as the door reads it — the register's own audit table,
+ * since the two records were rejoined on 20 Oct 2026. See HealthAudit.
+ */
 class DoorHealthAudit extends HealthAudit
 {
-    protected $table = 'door_health_audits';
+    protected $table = 'health_audits';
 
     public function attendance(): BelongsTo
     {

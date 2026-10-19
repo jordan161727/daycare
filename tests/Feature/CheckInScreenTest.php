@@ -73,7 +73,7 @@ class CheckInScreenTest extends TestCase
 
         $this->assertNotNull($attendance->signed_in_at);
         $this->assertSame(0, $attendance->health_in_code);
-        $this->assertDatabaseHas('door_health_audits', [
+        $this->assertDatabaseHas('health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'new_code' => 0,
@@ -363,7 +363,9 @@ class CheckInScreenTest extends TestCase
         // reachable by address, but there is no tab to it on the face of the
         // screen — the centre asked for today and nothing else here.
         $this->assertStringContainsString("view: 'today'", $html);
-        $this->assertStringNotContainsString('role="tab"', $html);
+        // Nothing on the page switches to the sheet (the dialog's own
+        // Today / Past comments tabs are another thing).
+        $this->assertStringNotContainsString("view = 'sheet'", $html);
         $this->assertStringContainsString("x-show=\"view === 'sheet'\"", $html);
 
         // The cards carry the child's own avatar and a First Last name. The
@@ -386,7 +388,9 @@ class CheckInScreenTest extends TestCase
 
         // The pills and the panel count off the rows, not a running total.
         $this->assertStringContainsString("tally('').in + '/' + tally('').total", $html);
-        $this->assertStringContainsString('Today at a glance', $html);
+        // "Today at a glance" — or "Friday at a glance" on a day gone.
+        $this->assertStringContainsString("dayWord() + ' at a glance'", $html);
+        $this->assertStringContainsString("if (this.day === this.today) return 'Today';", $html);
         $this->assertStringContainsString('Across all classrooms', $html);
 
         // And the dialog drives the same two endpoints the sheet does.
@@ -408,13 +412,22 @@ class CheckInScreenTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // The roster is about that day, and it opens in Edit.
+        // The roster is about that day. It opens read-only (20 Oct 2026) —
+        // a day gone is for reading its comments first — with the Edit
+        // switch there for the director to throw.
         $this->assertStringContainsString("day: '2026-09-21'", $html);
-        $this->assertStringContainsString('editing: true,', $html);
-        $this->assertStringContainsString('Monday, Sep 21 · editing', $html);
+        $this->assertStringContainsString('editing: false,', $html);
+        $this->assertStringContainsString('Viewing Monday, Sep 21 — read only.', $html);
+        $this->assertStringContainsString('att-switch', $html);
+        $this->assertStringContainsString("(day === today ? 'Live mode' : 'Read only')", $html);
 
-        // The day is chosen from a field that stops at today.
-        $this->assertStringContainsString('type="date" value="2026-09-21" max="'.today()->toDateString().'"', $html);
+        // The day is chosen from a stepper whose calendar stops at today,
+        // and today is one press away.
+        $this->assertStringContainsString('data-day-stepper', $html);
+        // The calendar opens on the day being looked at, and offers nothing past today.
+        $this->assertStringContainsString("current: '2026-09-21'", $html);
+        $this->assertStringContainsString("today: '".today()->toDateString()."'", $html);
+        $this->assertStringContainsString('data-back-to-today', $html);
 
         /*
          * And the day is edited through the register, not beside it: the
@@ -444,8 +457,11 @@ class CheckInScreenTest extends TestCase
 
         $this->assertStringContainsString("day: '".today()->toDateString()."'", $html);
         $this->assertStringContainsString('editing: false,', $html);
-        // The field is there for the director, behind the switch.
-        $this->assertStringContainsString('x-show="editing" x-cloak class="flex items-center gap-1.5', $html);
+        // The day stepper is on the face of the screen for everybody now
+        // (20 Oct 2026); today has no "Back to today" and no read-only bar.
+        $this->assertStringContainsString('data-day-stepper', $html);
+        $this->assertStringNotContainsString('data-back-to-today', $html);
+        $this->assertStringNotContainsString('data-read-only-bar', $html);
     }
 
     public function test_a_day_still_to_come_is_shown_as_today(): void
@@ -458,8 +474,14 @@ class CheckInScreenTest extends TestCase
         $this->assertStringContainsString("day: '".today()->toDateString()."'", $html);
     }
 
-    public function test_only_a_director_can_choose_the_day(): void
+    public function test_a_teacher_can_look_back_at_a_day_but_only_read_it(): void
     {
+        /*
+         * Friday's comments, read on Monday (20 Oct 2026): anybody at the
+         * door can step back to a day gone. It is read-only for them — the
+         * bar says so, there is no Edit switch, and the clock is off — and
+         * the server refuses a write on a past day whoever sends it.
+         */
         $teacher = User::factory()->create(['role' => 'teacher', 'classroom' => 'PreK']);
 
         $html = $this->actingAs($teacher)
@@ -467,8 +489,14 @@ class CheckInScreenTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString("day: '".today()->toDateString()."'", $html);
-        $this->assertStringNotContainsString('type="date"', $html);
+        $this->assertStringContainsString("day: '2026-09-21'", $html);
+        $this->assertStringContainsString('data-read-only-bar', $html);
+        $this->assertStringContainsString('Clock in/out and live mode are off.', $html);
+        $this->assertStringNotContainsString('att-switch', $html);
+        $this->assertStringContainsString('data-back-to-today', $html);
+        // The clock form is gated on readOnly(), which a teacher cannot turn off.
+        $this->assertStringContainsString('x-if="! correcting(child) && ! readOnly()"', $html);
+        $this->assertStringContainsString("return this.day !== this.today && ! (this.canAmend && this.editing);", $html);
     }
 
     public function test_check_in_has_no_view_menu(): void
@@ -571,7 +599,7 @@ class CheckInScreenTest extends TestCase
             ->assertJsonPath('health_in', 4);
 
         $this->assertSame(4, $attendance->fresh()->health_in_code);
-        $this->assertDatabaseHas('door_health_audits', [
+        $this->assertDatabaseHas('health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => 0,
@@ -742,7 +770,7 @@ class CheckInScreenTest extends TestCase
         $this->assertSame(4, $attendance->fresh()->health_in_code);
 
         // And it says who added it and when, like every other change.
-        $this->assertDatabaseHas('door_health_audits', [
+        $this->assertDatabaseHas('health_audits', [
             'attendance_id' => $attendance->id,
             'direction' => HealthAudit::IN,
             'old_code' => null,
@@ -1177,6 +1205,25 @@ class CheckInScreenTest extends TestCase
         $this->assertStringContainsString('<div x-cloak class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 md:grid-cols-4 desktop:grid-cols-5">', $html);
     }
 
+    /**
+     * The day is picked from the calendar the register has — the same month
+     * grid, Sunday first, today underlined — for one day rather than a week,
+     * with nothing after today on offer. One design on both screens.
+     */
+    public function test_the_day_is_picked_from_the_same_calendar_the_register_has(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('x-data="dayPicker()"', $html);
+        $this->assertStringContainsString('aria-label="Pick a day"', $html);
+        $this->assertStringContainsString(">Jump to today</button>", $html);
+        $this->assertStringContainsString("['S','M','T','W','T','F','S']", $html);
+        $this->assertStringContainsString('future: key > this.today,', $html);
+        $this->assertStringContainsString(':disabled="cell.future"', $html);
+        // The browser's own calendar is gone from under the pill.
+        $this->assertStringNotContainsString('data-native-date', $html);
+        $this->assertStringNotContainsString('openDayPicker()', $html);
+    }
     /**
      * The cards sort themselves: whoever is in the building first, then
      * whoever has gone home, then whoever has not arrived — A–Z inside each

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
-/** A trip out and back on the door's record — see AttendanceReturn. */
+/**
+ * A trip out and back as the door reads it — the register's own table, since
+ * the two records were rejoined on 20 Oct 2026. See AttendanceReturn.
+ */
 class DoorAttendanceReturn extends AttendanceReturn
 {
-    protected $table = 'door_attendance_returns';
+    protected $table = 'attendance_returns';
 
     public function attendance()
     {

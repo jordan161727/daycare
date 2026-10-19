@@ -11,6 +11,7 @@ use App\Models\AttendanceReturn;
 use App\Models\Child;
 use App\Models\HealthAudit;
 use App\Services\ClassroomAssignment;
+use App\Services\CommentDays;
 use App\Services\HealthScreening;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -77,13 +78,15 @@ class CheckInController extends Controller
         /*
          * The day the roster is about.
          *
-         * Today, unless a director has asked for a day already gone — the
-         * way the register lets a week be chosen — to put its symptom codes
-         * right. Anybody else is shown today whatever the address says: a
-         * past day here is for correcting, and correcting is the director's.
+         * Today, unless a day already gone was asked for. Anybody at the
+         * door may look back (20 Oct 2026) — Friday's comments, read on
+         * Monday — and a past day opens read-only for everyone: no clock,
+         * no live mode. Putting its symptom codes right is still the
+         * director's, behind the Edit switch, and the server checks that
+         * again on every write.
          */
         $requested = (string) $request->input('date');
-        $date = $user->isAdmin() && preg_match('/^\d{4}-\d{2}-\d{2}$/', $requested) && strtotime($requested) !== false
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $requested) && strtotime($requested) !== false
             ? Carbon::parse($requested)->toDateString()
             : $today;
 
@@ -166,7 +169,11 @@ class CheckInController extends Controller
 
         $timezone = config('app.timezone');
 
-        $rows = $children->map(function (Child $child) use ($records, $days, $timezone) {
+        // The day each child's latest earlier comment is on, so the dialog
+        // can say "Last comment: Fri, Oct 16 · View" without a request.
+        $lastCommentOn = CommentDays::lastCommentDays($children->pluck('id'), $date);
+
+        $rows = $children->map(function (Child $child) use ($records, $days, $timezone, $lastCommentOn) {
             $byDay = [];
             // The same days, a session at a time: what the dialog edits. A
             // School Age child's morning and afternoon are two rows on the
@@ -249,6 +256,8 @@ class CheckInController extends Controller
                 'booked' => $booked,
                 'name' => $child->last_name.', '.$child->first_name,
                 'lan' => $child->lan,
+                // The day of the child's latest comment before this one, or null.
+                'last_comment_on' => $lastCommentOn[$child->id] ?? null,
                 'room' => $child->classroom ?: 'Unassigned',
                 'animal' => ClassroomAssignment::animal($child->classroom),
                 'hours' => $child->scheduleLabel(),
@@ -328,7 +337,46 @@ class CheckInController extends Controller
             // only, worked from a door. The four-line sheet is a tab away for
             // the glance sideways — did she come yesterday, is he in tomorrow.
             'view' => $request->input('view') === 'sheet' ? 'sheet' : 'today',
+            // The day stepper's neighbours: the school day either side,
+            // weekends skipped, and never past today.
+            'prevDay' => self::schoolDayFrom($anchor, -1)->toDateString(),
+            'nextDay' => $date < $today ? min(self::schoolDayFrom($anchor, 1)->toDateString(), $today) : null,
+            // The day's comments, newest first, for the panel beside the cards
+            // and the link to the log.
+            'dayComments' => $this->dayComments($rows, $date),
         ]);
+    }
+
+    /** The next weekday from a day, in either direction. */
+    private static function schoolDayFrom(Carbon $day, int $step): Carbon
+    {
+        $next = $day->copy();
+
+        do {
+            $next->addDays($step);
+        } while ($next->isWeekend());
+
+        return $next;
+    }
+
+    /**
+     * Every comment on the day across every child, newest first, with the
+     * child's name and room on each: the "Latest comments" list beside the
+     * cards reads these, and the count says how many there were.
+     */
+    private function dayComments($rows, string $date): array
+    {
+        return $rows
+            ->flatMap(fn (array $row) => collect($row['bySession'][$date] ?? [])
+                ->flatMap(fn (array $slot) => $slot['comments'] ?? [])
+                ->map(fn (array $comment) => $comment + [
+                    'child_id' => $row['id'],
+                    'child' => $row['display'],
+                    'room' => $row['room'],
+                ]))
+            ->sortByDesc('at')
+            ->values()
+            ->all();
     }
     /**
      * A child arrives.

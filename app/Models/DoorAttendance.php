@@ -5,26 +5,27 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * A child's day as the door recorded it.
+ * A child's day as the door reads it — which is the register's record.
  *
- * The same shape as the register's Attendance, on its own table, with its
- * own returns and health audits: Teacher Attendance and Director Attendance
- * are two records that do not meet. Everything that works on an Attendance
- * works on this, which is the point of the inheritance — the door's code
- * reads and writes the door's tables without knowing it.
+ * Teacher Attendance and Director Attendance are one record (20 Oct 2026):
+ * a clock-in at the door is the arrival on the register, as it was before
+ * the two were split on 16 Oct. This class is kept because the door's code,
+ * the comments and the seeders name it, but it is the attendances table —
+ * the same rows Attendance reads — with the register's returns and audits.
+ * The door_* tables are no longer read or written.
  */
 class DoorAttendance extends Attendance
 {
-    protected $table = 'door_attendances';
+    protected $table = 'attendances';
 
     public function healthAudits(): HasMany
     {
-        return $this->hasMany(DoorHealthAudit::class, 'attendance_id')->latest('id');
+        return $this->hasMany(HealthAudit::class, 'attendance_id')->latest('id');
     }
 
     public function returns(): HasMany
     {
-        return $this->hasMany(DoorAttendanceReturn::class, 'attendance_id')->orderBy('returned_at');
+        return $this->hasMany(AttendanceReturn::class, 'attendance_id')->orderBy('returned_at');
     }
 
     public function comments(): HasMany

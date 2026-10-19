@@ -23,6 +23,16 @@ class AttendanceCommentPolicy
         return $this->worksTheDoor($user);
     }
 
+    /**
+     * Reading notes back by day — a child's earlier comments, or the log of
+     * a whole day — is the same right as reading today's: whoever works
+     * the door. The door shows every room to every teacher, and so do these.
+     */
+    public function read(User $user): bool
+    {
+        return $this->worksTheDoor($user);
+    }
+
     public function create(User $user, Attendance $attendance): bool
     {
         return $this->worksTheDoor($user);

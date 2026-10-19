@@ -60,6 +60,10 @@
         @if(auth()->user()->isAdmin())
         <a href="{{ route('children.index') }}" class="nav-link {{ request()->routeIs('children.index') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-4-4h-1m-4 6H2v-2a4 4 0 014-4h3a4 4 0 014 4v2zm-5-6a4 4 0 100-8 4 4 0 000 8z"/></svg><span x-show="!collapsed">Children</span></a>
         @endif
+        {{-- The comments log (20 Oct 2026), per Jordan's feed design: every
+             note of a day across every child. For whoever works the door,
+             the same as Teacher Attendance. --}}
+        <a href="{{ route('comments.index') }}" class="nav-link {{ request()->routeIs('comments.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v8a2.5 2.5 0 01-2.5 2.5H10l-5 4v-4H6.5A2.5 2.5 0 014 13.5v-8z"/></svg><span x-show="!collapsed">Comments</span></a>
         {{-- Settings, live again at Jordan's request (16 Oct 2026): the
              director's page for the centre, the administrators, the devices
              and Settings > Children, where archived children are restored. --}}

@@ -53,15 +53,11 @@ class MonthSheetController extends Controller
 
         $month = (int) ($request->input('month') ?: today()->month);
         $year = (int) ($request->input('year') ?: today()->year);
-        // Which record the page reads: the register (the paper form) or the door.
-        $source = $request->input('source') === 'door' ? 'door' : 'register';
-
-        $sheet = $this->month($user, $month, $year, $source);
+        $sheet = $this->month($user, $month, $year);
 
         return view('attendance.month-sheet', $sheet + [
             'month' => $month,
             'year' => $year,
-            'source' => $source,
             'codes' => SymptomCode::active(),
         ]);
     }
@@ -86,13 +82,9 @@ class MonthSheetController extends Controller
         $room = trim((string) $request->input('room')) ?: null;
 
         // One sheet per room, named for the room, as the paper form is kept.
-        // The two records are laid over each other for it: the register's
-        // day where it has one, and the door's filling anything the register
-        // left blank — which for the health lines is nearly everything, since
-        // the door is where the check is taken.
-        $sheet = $this->month($request->user(), $month, $year, 'register');
-        $door = $this->month($request->user(), $month, $year, 'door');
-        $sheet['rows'] = self::overlay($sheet['rows'], $door['rows']);
+        // The door and the register are one record again (20 Oct 2026), so
+        // the health checks taken at the door are already on these rows.
+        $sheet = $this->month($request->user(), $month, $year);
 
         $name = 'attendance-'.$sheet['start']->format('Y-m').($room ? '-'.str_replace(' ', '-', strtolower($room)) : '').'.xlsx';
 
@@ -176,8 +168,9 @@ class MonthSheetController extends Controller
             ->orderBy('first_name')
             ->get();
 
-        // The register's rows or the door's: two records that do not meet.
-        $records = ($source === 'door' ? DoorAttendance::query() : Attendance::query())
+        // One record for both screens since 20 Oct 2026; $source is kept for
+        // the callers that still pass it and reads the same rows either way.
+        $records = Attendance::query()
             ->whereBetween('attendance_date', [$start->toDateString(), $end->toDateString()])
             ->whereIn('child_id', $children->pluck('id'))
             // The trips out and back, and the audit, are what the entries

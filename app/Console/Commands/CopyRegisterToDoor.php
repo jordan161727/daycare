@@ -38,6 +38,14 @@ class CopyRegisterToDoor extends Command
 
     public function handle(): int
     {
+        // One record since 20 Oct 2026: the door reads the register's own
+        // table, so there is nothing to copy and copying would double the
+        // rows. Said plainly rather than done.
+        $this->warn('The door and the register are one record now (since 20 Oct 2026): the door reads the attendances table directly. Nothing to copy.');
+
+        return self::SUCCESS;
+
+        // @phpstan-ignore-next-line — kept for the day the split is wanted again.
         $date = Carbon::parse($this->argument('date') ?: today())->toDateString();
         $dry = (bool) $this->option('dry-run');
         $overwrite = (bool) $this->option('overwrite');

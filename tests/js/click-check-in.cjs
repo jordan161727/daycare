@@ -81,6 +81,13 @@ const tick = () => new Promise(resolve => setTimeout(resolve, 50));
     const card = doc.querySelector('button[aria-label*="Open attendance"]');
     const result = { alpine: !! window.Alpine, cards: doc.querySelectorAll('button[aria-label*="Open attendance"]').length, clicked: null, dialog: false, errors };
 
+    // A day already gone opens read-only (20 Oct 2026); correcting it is
+    // behind the director's Edit switch, thrown here before the card.
+    if (scenario === 'edit') {
+        doc.querySelector('.att-switch')?.click();
+        await tick();
+    }
+
     if (card) {
         result.clicked = card.getAttribute('aria-label');
         card.click();

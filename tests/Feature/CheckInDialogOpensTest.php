@@ -84,7 +84,8 @@ class CheckInDialogOpensTest extends TestCase
         $this->assertSame('/check-in', $result['posted'][0]['url']);
         // School Age books a morning and an afternoon; a card at the door
         // books the child's first session, the way the sheet does.
-        $this->assertSame(['child_id' => 1, 'session' => 'AM', 'health_code' => 0, 'health_note' => null], $result['posted'][0]['body']);
+        // The clock-in carries the note typed before it, or null when none was.
+        $this->assertSame(['child_id' => 1, 'session' => 'AM', 'health_code' => 0, 'health_note' => null, 'comment_body' => null], $result['posted'][0]['body']);
 
         // And the card follows the answer: dialog closed, a toast, the card in.
         $this->assertFalse($result['dialogAfter'], 'The dialog should close once the clock-in is saved.');

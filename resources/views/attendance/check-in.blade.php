@@ -25,26 +25,99 @@
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 class="text-xl font-bold tracking-tight">Check in</h1>
 
-        <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $date === $today ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200' }}">
-            {{ \Illuminate\Support\Carbon::parse($date)->format('l, M j') }}{{ $date === $today ? '' : ' · editing' }}
-        </span>
+        @php($isPast = $date !== $today)
+        @php($dayLabel = \Illuminate\Support\Carbon::parse($date)->format('l, M j'))
 
-        @if($canAmend)
-            {{-- The day to look at, as the register lets a week be chosen.
-                 Only in Edit: Live is today at the door and nothing else. A
-                 new day is a new page — the rows are the server's — so the
-                 choice is in the address and a bookmark to it stays put. --}}
-            <label x-show="editing" x-cloak class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                <span class="sr-only">Day to edit</span>
-                <input type="date" value="{{ $date }}" max="{{ $today }}" @change="goTo($event.target.value)"
-                       class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-slate-800">
-            </label>
-            @if($date !== $today)
-                {{-- The way back. A day already gone is a detour; today is where
-                     this screen lives, and it should be one press away. --}}
-                <a href="{{ route('check-in.index') }}" class="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Today</a>
+        {{-- The day, as a stepper: a school day back, the day itself (press
+             it for a calendar), a school day forward, and never past today.
+             Anybody may look back (20 Oct 2026): a day already gone opens
+             read-only, for reading that day's comments — Friday's, on
+             Monday. A new day is a new page, so the choice is in the
+             address and a bookmark to it stays put. --}}
+        {{-- The day, as the register's week control: one joined pill — a day
+             back, the day itself (press it for the calendar), a day forward —
+             and beside it "Today", lit when this is today and the way back
+             when it is not. Drawn SVG arrows, not the ‹ › characters, for the
+             same reason the register has them: the characters come out at
+             whatever weight the tablet's font gives them. --}}
+        <div class="flex items-center gap-2" role="group" aria-label="Day" data-day-stepper>
+            <div class="flex items-center rounded-full border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800">
+                <a href="{{ route('check-in.index', ['date' => $prevDay]) }}" class="grid h-9 w-9 place-items-center rounded-l-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="{{ \Illuminate\Support\Carbon::parse($prevDay)->format('D, M j') }}" aria-label="Previous school day" data-day-prev>
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                </a>
+            <div x-data="dayPicker()" @keydown.escape.window="open = false" @scroll.window="open && place()" @resize.window="open && place()" class="contents" data-day-picker>
+                <button type="button" x-ref="trigger" @click.stop="toggle()" :aria-expanded="open" aria-haspopup="dialog"
+                        class="flex h-9 items-center gap-1.5 border-x border-slate-200 px-3 text-xs font-semibold tabular-nums transition hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10 {{ $isPast ? 'text-sky-700 dark:text-sky-300' : '' }}"
+                        title="Pick a day" data-day-pill>
+                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    {{ $dayLabel }}
+                    <span class="sr-only">Choose a day</span>
+                </button>
+
+                <template x-teleport="body">
+                    <div x-show="open" x-cloak x-transition.opacity.duration.120ms @click.outside="open = false" :style="`top: ${y}px; left: ${x}px`" role="dialog" aria-label="Pick a day" class="fixed z-50 w-[19rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-white/10 dark:bg-slate-900">
+                        <div class="flex items-center justify-between px-1">
+                            <button type="button" @click="step(-1)" class="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Previous month">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                            </button>
+                            <span class="text-sm font-bold text-slate-900 dark:text-white" x-text="monthLabel"></span>
+                            <button type="button" @click="step(1)" class="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Next month">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                        </div>
+
+                        <div class="mt-2 grid grid-cols-7 text-center text-[0.7333rem] font-semibold text-slate-400">
+                            <template x-for="(name, index) in ['S','M','T','W','T','F','S']" :key="index"><span x-text="name" class="py-1"></span></template>
+                        </div>
+
+                        <div class="grid grid-cols-7 gap-y-0.5" @mouseleave="hover = null">
+                            <template x-for="cell in cells" :key="cell.key">
+                                <button type="button"
+                                        :disabled="cell.future"
+                                        @mouseenter="hover = cell.key"
+                                        @focus="hover = cell.key"
+                                        @click="go(cell.key)"
+                                        :class="[
+                                            lit(cell) ? 'bg-sky-100 text-sky-800 dark:bg-sky-400/20 dark:text-sky-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10',
+                                            cell.outside ? 'opacity-40' : '',
+                                            cell.future ? 'cursor-not-allowed opacity-25 hover:bg-transparent' : '',
+                                            cell.today ? 'font-bold underline decoration-2 underline-offset-2' : 'font-semibold',
+                                        ]"
+                                        class="mx-auto h-8 w-8 rounded-full text-xs tabular-nums transition"
+                                        x-text="cell.day"></button>
+                            </template>
+                        </div>
+
+                        <div class="mt-2 flex items-center justify-between border-t border-slate-200/70 pt-2 text-xs dark:border-white/10">
+                            <button type="button" @click="go(today)" class="font-semibold text-sky-700 transition hover:underline dark:text-sky-300">Jump to today</button>
+                            <span class="font-medium text-slate-500 dark:text-slate-400" x-text="label(hover || current)"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+                @if($nextDay)
+                    <a href="{{ route('check-in.index', ['date' => $nextDay]) }}" class="grid h-9 w-9 place-items-center rounded-r-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="{{ \Illuminate\Support\Carbon::parse($nextDay)->format('D, M j') }}" aria-label="Next school day" data-day-next>
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                    </a>
+                @else
+                    {{-- Nothing after today: the arrow stays, so the control keeps its shape, but it is off. --}}
+                    <span class="grid h-9 w-9 place-items-center rounded-r-full text-slate-300 dark:text-slate-600" aria-hidden="true" data-day-next-off>
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                    </span>
+                @endif
+            </div>
+            {{-- Beside the day, always: on a day gone it is the way back, and on
+                 today it is the label that says the day beside it is today rather
+                 than one stepped to and forgotten. --}}
+            @if($isPast)
+                <a href="{{ route('check-in.index') }}" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25" data-back-to-today>
+                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
+                    Today
+                </a>
+            @else
+                <span class="rounded-full bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 dark:bg-sky-400/15 dark:text-sky-300" aria-current="date" data-today-chip>Today</span>
             @endif
-        @endif
+        </div>
 
         {{-- No Week/Month tabs here, at the centre's request: this screen is
              today's roster and nothing else on the face of it. The four-line
@@ -77,18 +150,29 @@
            class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
            title="{{ $exportMonth->format('F Y') }} as the paper sheet — a workbook, a sheet per room">Export</a>
 
+        {{-- The comments log: every note of a day across every child, with
+             its own export. Beside the sheet's export, where the office
+             looks for a file. Opens on the day being looked at. --}}
+        <a href="{{ route('comments.index', $isPast ? ['date' => $date] : []) }}"
+           class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10"
+           data-comments-log-link>
+            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v8a2.5 2.5 0 01-2.5 2.5H10l-5 4v-4H6.5A2.5 2.5 0 014 13.5v-8z"/></svg>
+            Comments
+        </a>
+
 @if($canAmend)
             {{-- Edit unlocks the days already gone, so a check nobody
                  recorded at the time can be put right. A mode rather than a
                  permanent state: the screen somebody stands in front of all
                  day offers today and nothing else, because the commonest
                  mistake on a thirty-column grid is the column next to the
-                 one you meant. --}}
+                 one you meant. On a past day the switch reads "Read only"
+                 until it is thrown — a past day is for reading first. --}}
             <div class="att-mode" :data-edit="editing ? 'true' : 'false'">
-                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : 'Live mode'" @click="editing = ! editing; closePicker()">
+                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : (day === today ? 'Live mode' : 'Read only')" @click="editing = ! editing; closePicker()">
                     <span class="att-knob" x-html="editing ? icons.edit : icons.lock"></span>
                 </button>
-                <span class="att-mode-name" x-text="editing ? 'Edit mode' : 'Live mode'"></span>
+                <span class="att-mode-name" x-text="editing ? 'Edit mode' : (day === today ? 'Live mode' : 'Read only')"></span>
             </div>
         @endif
 
@@ -96,6 +180,16 @@
              cards and nothing else; the week sheet is the register's, under
              Director Attendance. --}}
     </div>
+
+    @if($isPast)
+        {{-- A day already gone is read, not lived: the bar says so, and the
+             clock and live mode are off under it. A director's Edit switch
+             takes the bar away and brings the corrections back. --}}
+        <div x-show="! editing" class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[#E7E9F0] px-4 py-3 text-sm text-[#1C2130] dark:bg-white/10 dark:text-slate-100" role="note" data-read-only-bar>
+            <svg class="size-4 shrink-0 text-[#5F6676] dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+            <span><b>Viewing {{ $dayLabel }} — read only.</b> Clock in/out and live mode are off. Tap a child to read that day's comment.</span>
+        </div>
+    @endif
 
     {{-- The sheet: four lines a child, a column a day. The other tab. It is
          rendered whatever the tab, because the tests and the exports read it
@@ -237,6 +331,16 @@
                     <span class="ml-1.5 opacity-70 tabular-nums" x-text="tally(chip.room).in + '/' + tally(chip.room).total"></span>
                 </button>
             </template>
+
+            {{-- Only the children with something written on the day: the
+                 chip that finds Friday's notes on Monday. --}}
+            <button type="button" @click="withComments = ! withComments" :aria-pressed="withComments ? 'true' : 'false'"
+                    :class="withComments ? 'border-transparent bg-[#DCEBFA] text-[#1B5E91] dark:bg-sky-500/20 dark:text-sky-100' : 'border-[#CFD3DE] bg-white text-[#5F6676] hover:bg-[#F2F4F9] dark:border-white/10 dark:bg-night-900 dark:text-slate-300 dark:hover:bg-white/10'"
+                    class="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition" data-with-comments>
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v8a2.5 2.5 0 01-2.5 2.5H10l-5 4v-4H6.5A2.5 2.5 0 014 13.5v-8z"/></svg>
+                With comments only
+                <span class="opacity-70 tabular-nums" x-text="withCommentsCount()"></span>
+            </button>
         </div>
 
         <div class="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
@@ -248,8 +352,8 @@
                         <span class="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400" x-text="cards.length + ' children'"></span>
                     </h2>
                     <p class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span> On premises</span>
-                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-slate-400" aria-hidden="true"></span> Currently out</span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span> <span x-text="day === today ? 'On premises' : 'Attended'"></span></span>
+                        <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-slate-400" aria-hidden="true"></span> <span x-text="day === today ? 'Currently out' : 'Absent'"></span></span>
                     </p>
                 </div>
 
@@ -295,8 +399,8 @@
                                 {{-- Notes on the day: a count at the shoulder, so a card
                                      with something written on it is told from one without. --}}
                                 <span x-show="commentCount(card) > 0" x-cloak data-comment-badge
-                                      class="absolute -right-2 -top-1 inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700 shadow-sm ring-2 ring-white dark:bg-indigo-500/25 dark:text-indigo-100 dark:ring-night-900"
-                                      :aria-label="commentCount(card) + ' comment' + (commentCount(card) === 1 ? '' : 's') + ' today'">
+                                      class="absolute -right-2 -top-1 inline-flex items-center gap-1 rounded-full bg-[#DCEBFA] px-2 py-0.5 text-xs font-semibold text-[#1B5E91] shadow-sm ring-2 ring-white dark:bg-sky-500/25 dark:text-sky-100 dark:ring-night-900"
+                                      :aria-label="commentCount(card) + ' comment' + (commentCount(card) === 1 ? '' : 's') + (day === today ? ' today' : ' that day')">
                                     <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v8a2.5 2.5 0 01-2.5 2.5H10l-5 4v-4H6.5A2.5 2.5 0 014 13.5v-8z"/></svg>
                                     <span x-text="commentCount(card)"></span>
                                 </span>
@@ -309,29 +413,33 @@
                     <p x-show="cards.length === 0" x-cloak class="col-span-full py-12 text-center text-sm text-slate-500 dark:text-slate-400">No children match.</p>
                 </div>
 
-                <p class="border-t border-slate-200/70 px-5 py-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">Select a child to record a health code and clock them in or out.</p>
+                <p class="border-t border-slate-200/70 px-5 py-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400"
+                   x-text="readOnly() ? 'Tap a child to read that day\'s comments.' : 'Select a child to record a health code and clock them in or out.'"></p>
             </section>
 
             {{-- The day, at a glance. --}}
-            <aside class="glass-card rounded-2xl p-5 lg:sticky lg:top-4" aria-label="Today at a glance">
-                <p class="text-[0.6667rem] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Live overview</p>
-                <h2 class="mt-1 text-lg font-bold" x-text="room === '' ? 'Today at a glance' : room + ' today'"></h2>
+            <aside class="glass-card rounded-2xl p-5 lg:sticky lg:top-4" :aria-label="dayWord() + ' at a glance'">
+                <p class="text-[0.6667rem] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400" x-text="day === today ? 'Live overview' : 'Day in review'"></p>
+                {{-- "Today at a glance", or "Friday at a glance" on a day gone. --}}
+                <h2 class="mt-1 text-lg font-bold" x-text="room === '' ? dayWord() + ' at a glance' : room + (day === today ? ' today' : ' on ' + dayWord())"></h2>
 
+                {{-- On a day gone nobody is "currently" anything: the tiles
+                     say who attended and who did not. --}}
                 <dl class="mt-4 grid grid-cols-2 gap-2.5">
                     <div class="rounded-xl bg-emerald-50 px-3 py-3.5 dark:bg-emerald-500/10">
                         <dd class="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300" x-text="tally(room).in"></dd>
-                        <dt class="mt-0.5 text-xs text-emerald-800/80 dark:text-emerald-200/80">Currently in</dt>
+                        <dt class="mt-0.5 text-xs text-emerald-800/80 dark:text-emerald-200/80" x-text="day === today ? 'Currently in' : 'Attended'"></dt>
                     </div>
                     <div class="rounded-xl bg-slate-100 px-3 py-3.5 dark:bg-white/5">
                         <dd class="text-3xl font-bold tabular-nums" x-text="tally(room).total - tally(room).in"></dd>
-                        <dt class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Currently out</dt>
+                        <dt class="mt-0.5 text-xs text-slate-500 dark:text-slate-400" x-text="day === today ? 'Currently out' : 'Absent'"></dt>
                     </div>
                 </dl>
 
                 <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10" aria-hidden="true">
                     <div class="h-full rounded-full bg-emerald-500 transition-all" :style="'width:' + (tally(room).total ? tally(room).in / tally(room).total * 100 : 0) + '%'"></div>
                 </div>
-                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"><span x-text="tally(room).in"></span> of <span x-text="tally(room).total"></span> children on premises</p>
+                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"><span x-text="tally(room).in"></span> of <span x-text="tally(room).total"></span> children <span x-text="day === today ? 'on premises' : 'attended'"></span></p>
 
                 <div class="mt-5 border-t border-slate-200/70 pt-4 dark:border-white/10">
                     <h3 class="text-sm font-bold">Across all classrooms</h3>
@@ -339,10 +447,38 @@
                         <template x-for="chip in rooms" :key="'sum-' + chip.room">
                             <li class="flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
                                 <span><span x-text="chip.animal" aria-hidden="true"></span> <span class="ml-1" x-text="chip.room"></span></span>
-                                <span class="tabular-nums"><b class="text-slate-900 dark:text-white" x-text="tally(chip.room).in"></b> <span class="text-xs text-slate-400" x-text="'/ ' + tally(chip.room).total + ' in'"></span></span>
+                                <span class="tabular-nums"><b class="text-slate-900 dark:text-white" x-text="tally(chip.room).in"></b> <span class="text-xs text-slate-400" x-text="'/ ' + tally(chip.room).total + (day === today ? ' in' : ' attended')"></span></span>
                             </li>
                         </template>
                     </ul>
+                </div>
+
+                {{-- The day's latest comments, across every child: the five
+                     newest, each a press away from the child's dialog on its
+                     Past comments tab, and a link to the whole log. --}}
+                <div class="mt-5 border-t border-[#E7E9F0] pt-4 dark:border-white/10" data-latest-comments>
+                    <div class="flex items-baseline justify-between gap-3">
+                        <h3 class="text-[17px] font-bold leading-6">Latest comments</h3>
+                        <span class="text-[13px] leading-[18px] text-[#5F6676] dark:text-slate-400" x-text="latestComments().length + (day === today ? ' today' : ' on ' + dayWord())"></span>
+                    </div>
+                    <p x-show="latestComments().length === 0" class="mt-2 text-[13px] leading-[18px] text-[#5F6676] dark:text-slate-400" x-text="day === today ? 'Nothing written yet today.' : 'No comments were written that day.'"></p>
+                    <ul class="mt-2.5 space-y-2" x-show="latestComments().length > 0">
+                        <template x-for="c in latestComments().slice(0, 5)" :key="'latest-' + c.id">
+                            <li>
+                                <button type="button" @click="openPast(c.child_id, c.date, c.id)"
+                                        class="block w-full rounded-xl border border-[#E7E9F0] bg-white px-3 py-2.5 text-left transition hover:bg-[#F2F4F9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B5E91] dark:border-white/10 dark:bg-night-800 dark:hover:bg-white/10" data-latest-comment>
+                                    <span class="flex items-baseline justify-between gap-3">
+                                        <span class="truncate text-[15px] font-semibold leading-[22px] text-[#4C5A9E] dark:text-indigo-300" x-text="c.child"></span>
+                                        <span class="shrink-0 text-[13px] leading-[18px] tabular-nums text-[#5F6676] dark:text-slate-400" x-text="c.time"></span>
+                                    </span>
+                                    <span class="mt-0.5 line-clamp-2 block text-[13px] leading-[18px] text-[#1C2130] dark:text-slate-200" x-text="c.body"></span>
+                                </button>
+                            </li>
+                        </template>
+                    </ul>
+                    <a x-show="latestComments().length > 0" :href="logUrl + '?date=' + day"
+                       class="mt-3 inline-flex min-h-11 items-center text-[15px] font-semibold leading-[22px] text-[#4C5A9E] hover:underline dark:text-indigo-300" data-see-all-comments
+                       x-text="'See all ' + latestComments().length + ' comment' + (latestComments().length === 1 ? '' : 's') + ' from ' + dayWord() + ' →'"></a>
                 </div>
             </aside>
         </div>
@@ -353,14 +489,15 @@
          bindings inside an x-if on the way to removing them, and against a null
          child every one of them threw. The child stays; the flag closes it. --}}
     <template x-if="dialogOpen && child">
-        <div class="fixed inset-0 z-50 grid place-items-center p-3 sm:p-6" role="dialog" aria-modal="true" :aria-labelledby="'child-name-' + child.id" @keydown.escape.window="closeChild()">
+        <div class="fixed inset-0 z-50 grid place-items-center sm:p-6" role="dialog" aria-modal="true" :aria-labelledby="'child-name-' + child.id" @keydown.escape.window="closeChild()">
             <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" @click="closeChild()" aria-hidden="true"></div>
 
-            {{-- Sized to the screen: the full width of a phone, 32rem on a tablet
-                 or wider, and never taller than the viewport — the card scrolls
-                 inside itself on a long day (several entries, the composer open,
-                 a few comments) so the Clock out button is always reachable. --}}
-            <div class="glass-card relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-y-auto overscroll-contain rounded-3xl p-5 text-center sm:max-h-[calc(100dvh-3rem)] sm:p-8" data-card-dialog>
+            {{-- Sized to the screen: a full-screen sheet on a phone, 560px on
+                 a tablet or wider, and never taller than the viewport — the
+                 card scrolls inside itself on a long day (several entries,
+                 the composer open, a few comments) so the Clock out button
+                 is always reachable. --}}
+            <div class="glass-card relative flex h-dvh max-h-dvh w-full max-w-none flex-col overflow-y-auto overscroll-contain rounded-none p-5 pt-6 text-center sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:max-w-[560px] sm:rounded-[20px] sm:p-8" data-card-dialog x-ref="cardDialog">
                 <button type="button" @click="closeChild()" class="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-lg text-slate-500 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 sm:right-5 sm:top-5" aria-label="Close">×</button>
 
                 <span class="mx-auto block h-28 w-28 shrink-0 overflow-hidden rounded-full outline outline-[3px]" :class="isIn(child) ? 'outline-emerald-500' : 'outline-slate-200 dark:outline-white/10'" x-html="child.avatar.replace('h-24 w-24', 'h-28 w-28')"></span>
@@ -431,6 +568,22 @@
                         <span x-text="isIn(child) ? 'In since ' + (dayOf(child)?.in_at_label || lastEntry(child)?.in) : (isOut(child) ? 'Left at ' + lastEntry(child)?.out : 'Currently out')"></span>
                     </span></span>
                 </template>
+
+                {{-- Today, or the day's earlier comments: a segmented pill
+                     under the status. The first segment is named for the day
+                     when the day is not today. --}}
+                <div class="mx-auto mt-4 inline-flex rounded-full bg-[#F2F4F9] p-1 dark:bg-white/10" role="tablist" aria-label="Today or past comments" data-dialog-tabs>
+                    <button type="button" role="tab" :aria-selected="tab === 'today' ? 'true' : 'false'" @click="tab = 'today'"
+                            :class="tab === 'today' ? 'bg-white text-[#1C2130] shadow-[0_1px_2px_rgba(20,24,40,.08),0_2px_6px_rgba(20,24,40,.06)] dark:bg-night-800 dark:text-white' : 'text-[#5F6676] hover:text-[#1C2130] dark:text-slate-300 dark:hover:text-white'"
+                            class="min-h-10 rounded-full px-4 text-sm font-semibold transition" data-tab-today
+                            x-text="day === today ? 'Today' : dayShort(day)"></button>
+                    <button type="button" role="tab" :aria-selected="tab === 'past' ? 'true' : 'false'" @click="showPast()"
+                            :class="tab === 'past' ? 'bg-white text-[#1C2130] shadow-[0_1px_2px_rgba(20,24,40,.08),0_2px_6px_rgba(20,24,40,.06)] dark:bg-night-800 dark:text-white' : 'text-[#5F6676] hover:text-[#1C2130] dark:text-slate-300 dark:hover:text-white'"
+                            class="min-h-10 rounded-full px-4 text-sm font-semibold transition" data-tab-past>Past comments</button>
+                </div>
+
+                {{-- The day: what the dialog has always shown. --}}
+                <div x-show="tab === 'today'" data-tab-panel-today>
 
                 {{-- Correcting the checks. A day already gone, or Edit on a
                      child who is already in today: the arrival check, and
@@ -544,7 +697,15 @@
                      comment", then the words once typed — press to change. --}}
                 <template x-if="! correcting(child) && ! slotOf(child)">
                     <div class="mt-5 text-left" data-first-comment>
-                        <p class="mb-2 text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comment</p>
+                        <div class="mb-2 flex items-baseline justify-between gap-3">
+                            <p class="text-[0.6667rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Comment</p>
+                            <template x-if="child?.last_comment_on">
+                                <p class="text-[13px] leading-[18px] text-[#5F6676] dark:text-slate-400" data-last-comment>
+                                    Last comment: <span x-text="dayShort(child.last_comment_on)"></span> ·
+                                    <button type="button" @click="showPast(child.last_comment_on)" class="font-semibold text-[#4C5A9E] underline-offset-2 hover:underline dark:text-indigo-300" data-view-last-comment>View</button>
+                                </p>
+                            </template>
+                        </div>
                         <button type="button" x-show="! firstCommentOpen && firstComment.trim() === ''" @click="openFirstComment()" data-add-first-comment
                                 class="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-slate-50 px-5 text-left text-base text-slate-500 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-white/5 dark:text-slate-400 dark:hover:bg-white/10">
                             <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -575,7 +736,19 @@
                     </div>
                 </template>
 
-                <template x-if="! correcting(child)">
+                </div>
+
+                {{-- The child's earlier comments, by day. Fetched when the
+                     tab opens; the partial is the same one the comments log
+                     opens a child on. --}}
+                <div x-show="tab === 'past'" x-cloak data-tab-panel-past>
+                    @include('attendance.partials.past-comments')
+                </div>
+
+                {{-- The clock: on today only. A day gone is read, not lived,
+                     unless the director has Edit on — and then it is the
+                     correcting form above, not this. --}}
+                <template x-if="! correcting(child) && ! readOnly()">
                     <form class="mt-5 text-left" @submit.prevent="clockChild()">
                         {{-- The arrival check is read off the entries card above
                              (17 Oct 2026); a second panel saying the same code was
@@ -620,7 +793,7 @@
                     </form>
                 </template>
 
-                <template x-if="! correcting(child) && slotOut(child)">
+                <template x-if="! correcting(child) && ! readOnly() && slotOut(child)">
                     <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
                         Clocking in again keeps the <b x-text="slotOf(child).out"></b> clock-out on the record.
                         @if($canAmend) Switch <b>Edit mode</b> on to correct the checks. @endif
@@ -673,6 +846,96 @@
     </template>
 </div>
 
+{{-- The earlier comments' state and fetching, shared with the comments log. --}}
+@include('attendance.partials.past-comments-js')
+
+<script>
+// The day picker: the register's week picker, for one day. Same month grid,
+// same lit cell and underline for today, same footer — but a day is chosen,
+// not a Monday, and nothing after today can be.
+function dayPicker() { return {
+    open: false,
+    x: 0,
+    y: 0,
+    hover: null,
+    current: @js($date),
+    today: @js($today),
+    cursor: @js($date),
+
+    iso(date) {
+        return date.getFullYear() + '-'
+            + String(date.getMonth() + 1).padStart(2, '0') + '-'
+            + String(date.getDate()).padStart(2, '0');
+    },
+
+    get monthLabel() {
+        return new Date(this.cursor + 'T00:00:00')
+            .toLocaleDateString(undefined, {month: 'long', year: 'numeric'});
+    },
+
+    get cells() {
+        const base = new Date(this.cursor + 'T00:00:00');
+        const first = new Date(base.getFullYear(), base.getMonth(), 1);
+        const start = new Date(base.getFullYear(), base.getMonth(), 1 - first.getDay());
+        const out = [];
+
+        for (let i = 0; i < 42; i++) {
+            const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+
+            // A last row lying entirely in the next month is a row of nothing.
+            if (i >= 35 && day.getMonth() !== base.getMonth()) { break; }
+
+            const key = this.iso(day);
+            out.push({
+                key,
+                day: day.getDate(),
+                outside: day.getMonth() !== base.getMonth(),
+                today: key === this.today,
+                future: key > this.today,
+            });
+        }
+
+        return out;
+    },
+
+    /** Lit as a circle: the day being pointed at, or the one being looked at. */
+    lit(cell) {
+        return cell.key === (this.hover || this.current);
+    },
+
+    label(day) {
+        return new Date(day + 'T00:00:00')
+            .toLocaleDateString(undefined, {weekday: 'short', month: 'short', day: 'numeric'});
+    },
+
+    step(months) {
+        const base = new Date(this.cursor + 'T00:00:00');
+        this.cursor = this.iso(new Date(base.getFullYear(), base.getMonth() + months, 1));
+    },
+
+    place() {
+        const box = this.$refs.trigger.getBoundingClientRect();
+        // Held off both edges, so it never opens half off-screen.
+        this.x = Math.max(12, Math.min(box.left + box.width / 2 - 152, window.innerWidth - 316));
+        this.y = box.bottom + 8;
+    },
+
+    toggle() {
+        if (this.open) { this.open = false; return; }
+        // Opens on the day being looked at, not on whatever month was left
+        // showing the last time it was used.
+        this.cursor = this.current;
+        this.hover = null;
+        this.place();
+        this.open = true;
+    },
+
+    go(day) {
+        if (! day || day > this.today) return;
+        window.location.assign(day === this.today ? @js(route('check-in.index')) : @js(route('check-in.index')) + '?date=' + day);
+    },
+}; }
+</script>
 <script>
 function checkInGrid() { return {
     rows: @js($rows->keyBy('id')),
@@ -685,9 +948,10 @@ function checkInGrid() { return {
     // entries' "so far" read the same timezone the times on screen are in.
     timezone: @js(config('app.timezone')),
     canAmend: @js($canAmend),
-    // A day already gone is only ever here to be edited, so the switch
-    // starts on for one. Today opens Live, at the door.
-    editing: @js($date !== $today && $canAmend),
+    // Off until it is thrown, today or any day: a day already gone opens
+    // read-only (20 Oct 2026), for reading its comments, and the director
+    // switches Edit on to correct it.
+    editing: false,
     icons: {
         lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
         edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
@@ -727,6 +991,15 @@ function checkInGrid() { return {
     firstComment: '',
     // What is being typed; Save makes it the note, Cancel drops it.
     firstCommentDraft: '',
+    // Only the cards with a comment on the day — the chip beside the rooms.
+    withComments: false,
+    // The day's comments across every child, newest first, for the panel.
+    dayComments: @js($dayComments),
+    logUrl: @js(route('comments.index')),
+    // The dialog's tab: the day, or the child's earlier comments.
+    tab: 'today',
+    // The earlier comments, as pastCommentsMixin() keeps them.
+    ...pastCommentsMixin({ childrenUrl: @js(url('/children')), today: @js($today) }),
     code: 0,
     codeIn: 0,        // the checks being corrected, and what they were
     noteIn: '',
@@ -770,8 +1043,14 @@ function checkInGrid() { return {
      * card at the door is for.
      */
     correcting(row) {
-        if (this.day !== this.today) return true;
+        // A day gone is corrected only with Edit on; otherwise it is read.
+        if (this.day !== this.today) return this.canAmend && this.editing;
         return this.editing && !! this.slotOf(row);
+    },
+
+    /** A day already gone with Edit off: nothing on it takes a press. */
+    readOnly() {
+        return this.day !== this.today && ! (this.canAmend && this.editing);
     },
 
     /** Whether anything in the form differs from what the day holds. */
@@ -916,6 +1195,7 @@ function checkInGrid() { return {
         const term = this.search.trim().toLowerCase();
         return Object.values(this.rows)
             .filter(row => this.room === '' || row.room === this.room)
+            .filter(row => ! this.withComments || this.commentCount(row) > 0)
             .filter(row => term === '' || (row.display + ' ' + row.lan).toLowerCase().includes(term))
             .sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.display.localeCompare(b.display));
     },
@@ -1187,24 +1467,65 @@ function checkInGrid() { return {
 
         this.rows = { ...this.rows };
     },
-    /** Today's notes on the child, across the sessions. */
+    /** The day's notes on the child, across the sessions. */
     commentCount(row) {
-        return Object.values(row?.bySession?.[this.today] ?? {}).reduce((sum, slot) => sum + (slot.comments_count ?? 0), 0);
+        return Object.values(row?.bySession?.[this.day] ?? {}).reduce((sum, slot) => sum + (slot.comments_count ?? 0), 0);
+    },
+    /** How many cards in the room have a comment on the day. */
+    withCommentsCount() {
+        return Object.values(this.rows)
+            .filter(row => this.room === '' || row.room === this.room)
+            .filter(row => this.commentCount(row) > 0)
+            .length;
     },
     /** A note saved in the dialog: the card's count follows without a reload. */
     onCommentAdded(detail) {
         const row = this.rows[detail.childId];
         if (! row) return;
         this.rows = { ...this.rows, [detail.childId]: { ...row } };
+        // The panel's list follows too: the row's notes are the source.
+        this.dayComments = this.collectDayComments();
+    },
+    /**
+     * Every comment on the day across the rows, newest first — the panel's
+     * list. Read off the rows (which a save keeps in step) rather than the
+     * list the server sent, so a note written a moment ago is at the top.
+     */
+    collectDayComments() {
+        return Object.values(this.rows)
+            .flatMap(row => Object.values(row.bySession?.[this.day] ?? {})
+                .flatMap(slot => slot.comments ?? [])
+                .map(c => ({ ...c, child_id: row.id, child: row.display, room: row.room })))
+            .sort((a, b) => (b.at || '').localeCompare(a.at || '') || b.id - a.id);
+    },
+    /** The day's comments, in the room chosen. */
+    latestComments() {
+        return this.dayComments.filter(c => this.room === '' || c.room === this.room);
+    },
+    /** "Today", or "Friday" for a day gone — the word the panel uses. */
+    dayWord() {
+        if (this.day === this.today) return 'Today';
+        return new Date(this.day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+    },
+    /** "Fri, Oct 16". */
+    dayShort(iso) {
+        return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    },
+    /** The pill's calendar, opened by the press on the pill. */
+    /** A press on the panel's list, or the log: the child, on their past comments, at that day. */
+    openPast(childId, date, commentId = null) {
+        this.openChild(childId);
+        if (! this.child) return;
+        this.showPast(date, commentId);
     },
     isIn(row) { const day = this.dayOf(row); return !! (day && day.in && ! day.out); },
     isOut(row) { const day = this.dayOf(row); return !! (day && day.out); },
     stateOf(row) {
         const day = this.dayOf(row);
         if (this.day !== this.today) {
-            // A day gone is read, not lived: what happened, with its codes.
+            // A day gone is read, not lived: what happened. "In 7:50a · Out 2:05p".
             if (! day) return 'No arrival';
-            return 'In ' + day.in + (day.out ? ' · Out ' + day.out : '') + ' · code ' + (day.in_code ?? '—');
+            return 'In ' + day.in + (day.out ? ' · Out ' + day.out : ' · no clock-out');
         }
         // The latest in or out, and how many times today when more than
         // once: a child back from an appointment reads "In · 1:05p · 2nd
@@ -1220,13 +1541,21 @@ function checkInGrid() { return {
     /** In over enrolled, for one room or ('') the whole roll. */
     tally(room) {
         const rows = Object.values(this.rows).filter(row => room === '' || row.room === room);
-        return {total: rows.length, in: rows.filter(row => this.isIn(row)).length};
+        // Today, who is in now; on a day gone, who attended at all.
+        const counted = this.day === this.today ? row => this.isIn(row) : row => !! this.dayOf(row)?.in;
+        return {total: rows.length, in: rows.filter(counted).length};
     },
 
     openChild(id) {
         this.child = this.rows[id] ?? null;
         this.dialogOpen = this.child !== null;
         this.error = '';
+        // Fresh every time: the day's tab, and the earlier comments
+        // fetched again for this child when their tab is opened. A day
+        // already gone opens on the comments — that is what it is for.
+        this.resetPast();
+        this.tab = 'today';
+        if (this.child && this.readOnly()) this.showPast(this.day);
 
         // The register row the next press lands on. For a whole-day room,
         // the day; in Edit mode the cards above can switch it.
@@ -1246,6 +1575,8 @@ function checkInGrid() { return {
         this.firstCommentOpen = false;
         this.firstComment = '';
         this.firstCommentDraft = '';
+        this.tab = 'today';
+        this.resetPast();
     },
 
     openFirstComment() {

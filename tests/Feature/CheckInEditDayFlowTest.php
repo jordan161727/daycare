@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Attendance;
 use App\Models\DoorAttendance;
-use App\Models\DoorHealthAudit;
 use App\Models\AttendanceAmendment;
 use App\Models\Child;
 use App\Models\HealthAudit;
@@ -19,10 +18,9 @@ use Tests\TestCase;
  *
  * This one walks the sequence a director actually performs — record the
  * arrival with its check, put the times right, change the leaving check,
- * and finally take the day off — on the door's record. The point since the
- * split: none of it reaches the register. The door and Director Attendance
- * are two records that do not meet, so the register's rows and its amendment
- * log are checked to be empty after every step.
+ * and finally take the day off. The door and Director Attendance are one
+ * record again (20 Oct 2026), so the row the door writes is the row the
+ * register shows; the door writes no amendment log, which is checked too.
  */
 class CheckInEditDayFlowTest extends TestCase
 {
@@ -62,7 +60,7 @@ class CheckInEditDayFlowTest extends TestCase
         $attendance = DoorAttendance::find($made['attendance_id']);
         $this->assertSame('08:05', $attendance->signed_in_at->format('H:i'));
         $this->assertSame(4, $attendance->health_in_code);
-        $this->assertRegisterUntouched();
+        $this->assertNoAmendments();
 
         // 2. The times, as typed: the arrival moved and a departure added.
         $moved = $this->actingAs($this->admin)
@@ -75,7 +73,7 @@ class CheckInEditDayFlowTest extends TestCase
         $this->assertSame('16:30', $attendance->signed_out_at->format('H:i'));
         $this->assertSame('7:55a', $moved['time']);
         $this->assertSame('4:30p', $moved['out_time']);
-        $this->assertRegisterUntouched();
+        $this->assertNoAmendments();
 
         // 3. The leaving check, through the health endpoint — codes only.
         $this->actingAs($this->admin)
@@ -85,8 +83,7 @@ class CheckInEditDayFlowTest extends TestCase
         $attendance->refresh();
         $this->assertSame(0, $attendance->health_out_code);
         $this->assertSame('16:30', $attendance->signed_out_at->format('H:i'), 'a check never moves a time');
-        $this->assertSame(2, DoorHealthAudit::where('attendance_id', $attendance->id)->count(), 'the arrival check and the leaving check, on the door\'s own audit');
-        $this->assertSame(0, HealthAudit::count(), 'and none on the register\'s');
+        $this->assertSame(2, HealthAudit::where('attendance_id', $attendance->id)->count(), 'the arrival check and the leaving check');
 
         // 4. Not attending after all: the arrival comes off, with its audit.
         $this->actingAs($this->admin)
@@ -94,9 +91,9 @@ class CheckInEditDayFlowTest extends TestCase
             ->assertOk()
             ->assertJson(['removed' => 1]);
 
-        $this->assertSame(0, DoorAttendance::count());
-        $this->assertSame(0, DoorHealthAudit::count(), 'the audit went with the row');
-        $this->assertRegisterUntouched();
+        $this->assertSame(0, Attendance::count());
+        $this->assertSame(0, HealthAudit::count(), 'the audit went with the row');
+        $this->assertNoAmendments();
     }
 
     public function test_a_teacher_may_edit_today_but_not_a_day_already_gone(): void
@@ -108,14 +105,13 @@ class CheckInEditDayFlowTest extends TestCase
         $this->actingAs($teacher)->postJson(route('check-in.day'), $base + ['attendance_date' => now()->toDateString(), 'signed_in_time' => '08:05'])->assertOk();
     }
 
-    /** The register — Director Attendance — has nothing from any of this. */
-    private function assertRegisterUntouched(): void
+    /** The door's edits write the row and its audits, not the register's amendment log. */
+    private function assertNoAmendments(): void
     {
-        $this->assertSame(0, Attendance::count(), 'the door writes none of the register\'s rows');
-        $this->assertSame(0, AttendanceAmendment::count(), 'nor its amendment log');
+        $this->assertSame(0, AttendanceAmendment::count(), 'the door keeps no amendment log');
     }
 
-    public function test_the_same_day_reads_back_on_check_in_and_not_on_the_register(): void
+    public function test_the_same_day_reads_back_on_check_in_and_on_the_register(): void
     {
         $base = ['child_id' => $this->child->id, 'attendance_date' => self::DAY, 'session' => 'FULL'];
 
@@ -128,9 +124,9 @@ class CheckInEditDayFlowTest extends TestCase
         $this->assertStringContainsString($q.'in'.$q.':'.$q.'8:05a'.$q, $checkIn);
         $this->assertStringContainsString($q.'out'.$q.':'.$q.'4:30p'.$q, $checkIn);
 
-        // And the register, that week, knows nothing of it: two records that do not meet.
+        // And the register, that week, shows the same arrival: one record.
         $register = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::DAY]))->assertOk()->getContent());
-        $this->assertStringNotContainsString('"'.$this->child->id.'":{"'.self::DAY.'"', $register, 'no cell on the register for that day');
-        $this->assertSame(0, Attendance::count());
+        $this->assertStringContainsString('"'.$this->child->id.'":{"'.self::DAY.'":{"FULL":"8:05a"', $register, 'the cell on the register for that day');
+        $this->assertSame(1, Attendance::count());
     }
 }
