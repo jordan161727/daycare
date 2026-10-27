@@ -16,9 +16,13 @@ class DssDayMark extends Model
 
     public const NONE = 'none';
 
-    protected $fillable = ['child_id', 'marked_on', 'mark', 'created_by'];
+    /**
+     * 'kept': the rows an Absent mark took off the day — [{session, in, out}]
+     * as ISO datetimes — so a tap back to Coming can put them back (27 Oct 2026).
+     */
+    protected $fillable = ['child_id', 'marked_on', 'mark', 'created_by', 'kept'];
 
-    protected $casts = ['marked_on' => 'date:Y-m-d'];
+    protected $casts = ['marked_on' => 'date:Y-m-d', 'kept' => 'array'];
 
     public function child()
     {

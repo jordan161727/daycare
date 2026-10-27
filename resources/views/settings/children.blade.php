@@ -13,11 +13,56 @@
     <div class="min-w-0 flex-1"
          x-data="archivedChildren({ csrf: @js(csrf_token()), count: {{ $archived->count() }} })">
         <h1 class="text-2xl font-bold tracking-tight">Children</h1>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Archived children, and whether the Children page shows them.</p>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">How names read, archived children, and whether the Children page shows them.</p>
 
         @if(session('status'))
             <p class="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('status') }}</p>
         @endif
+
+        {{-- Names: one choice for the centre, moved here from the register's
+             ⋯ menu (Jordan, 27 Oct 2026). Two cards, each the thing it does:
+             a name the way it will read, and a line on who reads it that way. --}}
+        @php($nameFormat = auth()->user()->nameFormat())
+        <form method="POST" action="{{ route('settings.names.update') }}" class="mt-6" x-data="{ pick: @js($nameFormat), saved: @js($nameFormat) }" data-names-setting>
+            @csrf
+            @method('PUT')
+            <section class="glass-card rounded-2xl p-6">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h2 class="text-sm font-semibold">Names</h2>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">How a child's name reads on every screen and sheet: the register, the roster, the reports. The order of the lists does not change — a roll is still found by surname.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Show names as">
+                    @foreach([
+                        'first_last' => ['First name first', 'What a child answers to — the room reads it this way.', 'John', 'Smith'],
+                        'last_first' => ['Surname first', 'How the paper file is ordered — the office reads it this way.', 'Smith,', 'John'],
+                    ] as $value => [$title, $why, $a, $b])
+                        <label class="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 transition"
+                               :class="pick === @js($value) ? 'border-indigo-500 bg-indigo-50/60 dark:border-indigo-400 dark:bg-indigo-500/10' : 'border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20'"
+                               data-name-option="{{ $value }}">
+                            <input type="radio" name="name_format" value="{{ $value }}" x-model="pick" class="sr-only" @checked($nameFormat === $value)>
+                            <span class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition"
+                                  :class="pick === @js($value) ? 'border-indigo-500 bg-indigo-500 text-white dark:border-indigo-400 dark:bg-indigo-400' : 'border-slate-300 dark:border-white/20'" aria-hidden="true">
+                                <svg x-show="pick === @js($value)" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-xl font-bold tracking-tight tabular-nums"><span class="text-slate-900 dark:text-white">{{ $a }}</span> <span class="text-slate-400 dark:text-slate-500">{{ $b }}</span></span>
+                                <span class="mt-1 block text-sm font-semibold">{{ $title }}</span>
+                                <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{{ $why }}</span>
+                            </span>
+                        </label>
+                    @endforeach
+                </div>
+
+                <div class="mt-4 flex items-center justify-between gap-3">
+                    <span class="text-xs text-slate-500 dark:text-slate-400" x-show="pick !== saved" x-cloak>Not saved yet.</span>
+                    <span class="text-xs text-slate-500 dark:text-slate-400" x-show="pick === saved">Reads this way for everyone now.</span>
+                    <button class="inline-flex min-h-[44px] items-center rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-default disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200" :disabled="pick === saved">Save</button>
+                </div>
+            </section>
+        </form>
 
         {{-- The switch, and the word before it is saved. Flicking it opens the
              dialog, which says what the Children page will do and carries Save;

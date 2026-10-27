@@ -90,6 +90,18 @@ class SettingController extends Controller
         ]);
     }
 
+    /**
+     * Settings → Children → Names: how a child's name reads, for everyone.
+     * Moved here from the register's ⋯ menu (Jordan, 27 Oct 2026).
+     */
+    public function updateNames(Request $request)
+    {
+        $data = $request->validate(['name_format' => ['required', Rule::in(array_keys(User::NAME_FORMATS))]]);
+        Setting::put(User::NAME_FORMAT_SETTING, $data['name_format']);
+
+        return redirect()->route('settings.children')->with('status', 'Names now read as '.User::NAME_FORMATS[$data['name_format']].'.');
+    }
+
     /** The one toggle on that page. Unticked boxes are not posted, so read off the request. */
     public function updateChildren(Request $request)
     {

@@ -5,6 +5,11 @@
     .ch .inp.round { border-radius: 999px; min-height: 36px; padding: 8px 12px; font-size: 13px; }
     .ch .btn.sky { background: #e4eefa; border-color: #e4eefa; color: #1b5e91; }
     .ch .tbl.att th { padding: 10px 6px; }
+    /* The LAN and Student headers are buttons: same look as the header, a hand and a lit arrow when in charge. */
+    .ch .tbl.att th .sortb { font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; background: none; border: 0; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .ch .tbl.att th .sortb span { color: #b5bac6; font-size: 11px; }
+    .ch .tbl.att th .sortb.on span { color: #1b5e91; }
+    .ch .tbl.att th .sortb:hover span { color: #1b5e91; }
     .ch .tbl.att th.day { text-align: center; }
     .ch .tbl.att th.today { background: #d8ecfb; color: #1b5e91; }
     .ch .tbl.att td { padding: 6px 6px; }

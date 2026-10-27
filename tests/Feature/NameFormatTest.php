@@ -56,25 +56,52 @@ class NameFormatTest extends TestCase
         }
     }
 
-    public function test_the_setting_is_offered_on_the_attendance_sheet(): void
+    public function test_the_setting_lives_in_settings_now_not_on_the_sheet(): void
     {
+        // Moved from the register's ⋯ menu to Settings → Children → Names (Jordan, 27 Oct 2026).
         $this->makeChild();
+        $admin = User::factory()->create(['role' => 'admin']);
 
-        $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.classic'))
-            ->assertOk()
-            ->assertSee('Show names as')
-            // The choice is shown as the thing it does, not as a label to decode.
-            ->assertSee('John Smith')
-            ->assertSee('Smith, John')
-            ->assertSee(route('profile.name-format'), false)
-            // Teleported out of the toolbar. The card carries a backdrop-blur
-            // and clips what hangs out of it, which sliced the panel off just
-            // under the date field and left this setting unreachable.
-            ->assertSee('x-teleport="body"', false);
+        $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()
+            ->assertDontSee('Show names as')
+            ->assertDontSee(route('profile.name-format'), false);
+
+        $this->actingAs($admin)->get(route('settings.children'))->assertOk()
+            ->assertSee('data-names-setting', false)
+            ->assertSee('data-name-option="first_last"', false)
+            ->assertSee('data-name-option="last_first"', false)
+            ->assertSee('First name first')
+            ->assertSee('Surname first')
+            ->assertSee(route('settings.names.update'), false);
     }
 
-    public function test_choosing_a_format_changes_only_that_readers_screens(): void
+    public function test_the_centres_choice_reads_for_everyone_and_only_the_director_sets_it(): void
+    {
+        $this->makeChild();
+        $admin = User::factory()->create(['role' => 'admin', 'name_format' => 'first_last']);
+        $teacher = User::factory()->create(['role' => 'teacher', 'classroom' => 'Toddler', 'classrooms' => ['Toddler'], 'name_format' => 'first_last']);
+
+        $this->actingAs($admin)->put(route('settings.names.update'), ['name_format' => 'last_first'])
+            ->assertRedirect(route('settings.children'))
+            ->assertSessionHas('status', 'Names now read as Smith, John.');
+
+        // Both read surname first now, whatever their own old choice said.
+        $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->assertSee('Lovelace, Ada');
+        $this->actingAs($teacher);
+        $this->assertSame('Lovelace, Ada', Child::first()->displayName(), 'the teacher reads it the same way, whatever their own old choice said');
+
+        // A teacher cannot set it; a shape nobody offers is refused.
+        $this->actingAs($teacher)->put(route('settings.names.update'), ['name_format' => 'first_last'])->assertForbidden();
+        $this->actingAs($admin)->put(route('settings.names.update'), ['name_format' => 'initials'])->assertSessionHasErrors('name_format');
+        $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->assertSee('Lovelace, Ada');
+
+        // Back to first name first.
+        $this->actingAs($admin)->put(route('settings.names.update'), ['name_format' => 'first_last'])->assertRedirect();
+        $this->actingAs($teacher);
+        $this->assertSame('Ada Lovelace', Child::first()->displayName());
+    }
+
+    public function test_the_old_per_reader_endpoint_still_answers_where_the_centre_has_not_chosen(): void
     {
         $mine = User::factory()->create(['role' => 'admin']);
         $theirs = User::factory()->create(['role' => 'admin', 'name_format' => 'first_last']);

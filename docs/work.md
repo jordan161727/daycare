@@ -171,6 +171,7 @@ Notes (24 Oct 2026): existing office pages the mock-up does not list (Staff repo
 
 ### 1.2 Settings → Rooms & hours
 - [x] Tabs: Children · Rooms & hours · Login history (plus Administrators and Devices, which this app already had; Company parked again 27 Oct 2026 at Jordan's request — the link sits in a comment in settings/tabs.blade.php, the page still answers at /settings/company)
+- [x] **Names** on the Children tab (Jordan, 27 Oct 2026: "move that into setting, redesign"): "Show names as" left the classic register's ⋯ menu (parked in an `@if(false)` in attendance/index.blade.php) and is one setting for the centre — `settings` key `names.format`, `PUT /settings/names`, two radio cards with the name as it will read. `User::nameFormat()` reads the centre's choice first and falls back to the old per-user column, so `profile.name-format` still answers where the centre has not chosen. Note: the choice shapes the classic register, Comments and Payroll (the screens that print through `displayName()`); the Children page and the new Director Attendance print "Last, First" by design.
 - [x] Rooms table: Room, Ages, Staff : children ratio, Capacity, NY max group, Room open hours, Check
 - [x] NY max group shown per age (18 NYCRR 418-1.8) — `daycare.ny_max_group`
 - [x] Warning when capacity is above the group limit
@@ -253,9 +254,17 @@ Notes (26 Oct 2026): `AttendanceController::week()` + `App\Services\AttendanceWe
 
 Week control (Jordan, 26 Oct 2026): the ‹ label › and "This week" button are now the same pill Teacher Attendance has — a week back, the week with a calendar icon (press it for the calendar; any day opens its week, weeks ahead included), a week forward — and **Today** beside it, lit on this week and the way back otherwise. `attendance/partials/week-picker.blade.php` (Alpine `weekPicker`), used by the register only; Teacher Attendance's own `dayPicker` is untouched.
 
+Fixed 27 Oct 2026 (Jordan: "the classroom is not clickable"): the register's `$link` merged the page's values over a chip's own (`[...] + $extra`), so the room chips and the week arrows pointed back at the page. Now `$extra + [...]`. Same fault, same fix as Reports. Added at the same time: LAN and Student header buttons sort the grid on the page (`sort` / `dir` in `attendanceWeek()`, LAN compared numerically), asc then desc on a second press.
+
+Tap cycle, 27 Oct 2026 (Jordan: "if I tap again, back to the time before, not really remove"): time → dot (Not scheduled: the times stay on show) → Absent (the row comes off, and the mark remembers it in `dss_day_marks.kept`, migration `absent_mark_keeps_times`) → Coming puts the same times back, with an Added amendment for a day gone by. Typed times win over the remembered ones. The cell's `back` and its tip say what will come back ("Tap: absent → coming (8:05a–4:10p back)"). `DssAttendance::apply()` writes `kept` for any Absent mark, so the DSS page's own Absent remembers too; only the register's tap puts times back.
+
 Fixed 26 Oct 2026 (found by the CRUD check): on a week already gone the ticks are frozen, so a tap to **Not scheduled** on a past day did nothing and the cell came back as Coming. It is now kept as the DSS page's "not scheduled" mark (`dss_day_marks` none), which the register reads ahead of the tick; times on the day stay, as before. Test: `a day in a week already gone can still be marked not scheduled`.
 
 ---
+
+## Staging demo in one command (27 Oct 2026)
+
+`php artisan db:seed --class=StagingDemoSeeder --force` — `StagingDemoSeeder` runs every demo seeder in dependency order: DatabaseSeeder (accounts, rooms, hours) → DemoScenarioSeeder (the mock-ups' children, this week ticked) → ChildRecordDemoSeeder → RoomCoverSeeder (staff sized to the roll) → KioskDemoSeeder (guardians) → FloorPlanDemoSeeder (its staff, first pass) → StaffDemoSeeder + StaffAvatarSeeder → this week's schedule generated and published → FloorPlanDemoSeeder again (today's floor over the published week) → StaffAttendanceDemoSeeder → ChildAttendanceDemoSeeder. Re-runnable: a second run changes no counts (checked: 20 children, 24 staff, 226 shifts, 521 punches, 473 sign-ins twice over). For staging, never live. LeaveDemoSeeder and TimesheetDemoSeeder are left out on purpose: they rework a published week and a pay period.
 
 ## Phase 4 — Dashboard + Floor plan (Dashboard MODIFY, Floor plan NEW)
 

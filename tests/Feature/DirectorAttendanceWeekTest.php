@@ -128,10 +128,46 @@ class DirectorAttendanceWeekTest extends TestCase
 
         $json = $post('abs')->assertOk()->json();
         $this->assertSame('abs', $cell($json)['st']);
+        $this->assertNull($cell($json)['in'], 'absent: the times are off the register');
+        $this->assertSame('8:05a–4:10p', $cell($json)['back'], 'but the mark remembers them');
+        $this->assertStringContainsString('(8:05a–4:10p back)', $cell($json)['tip']);
 
+        // → coming: the times come back as they were, with an amendment for the day gone by.
         $json = $post('pres')->assertOk()->json();
         $this->assertSame('pres', $cell($json)['st']);
         $this->assertSame(0, DssDayMark::count());
+        $this->assertSame(['8:05a', '4:10p'], [$cell($json)['in'], $cell($json)['out']]);
+        $this->assertSame(AttendanceAmendment::ADDED, AttendanceAmendment::where('child_id', $this->ava->id)->latest('id')->first()->action);
+    }
+
+    public function test_absent_then_coming_puts_this_weeks_times_back_too(): void
+    {
+        // Yesterday, this week: 7:50a–5:20p on the register.
+        $post = fn (string $state, array $extra = []) => $this->actingAs($this->admin)->postJson(route('attendance.week.cell'), ['child_id' => $this->ava->id, 'date' => '2026-10-14', 'session' => 'FULL', 'state' => $state] + $extra);
+        $cell = fn (array $json) => collect($json['rows'])->firstWhere('id', $this->ava->id)['cells'][2]['parts'][0];
+
+        $json = $post('pres', ['in' => '7:50a', 'out' => '5:20p'])->assertOk()->json();
+        $this->assertSame('7:50a', $cell($json)['in']);
+
+        // time → dot: the times stay on show (still billable).
+        $json = $post('none')->assertOk()->json();
+        $this->assertSame(['none', '7:50a'], [$cell($json)['st'], $cell($json)['in']]);
+
+        // dot → absent: the row goes, the mark keeps it.
+        $json = $post('abs')->assertOk()->json();
+        $this->assertSame(0, Attendance::where('child_id', $this->ava->id)->count());
+        $this->assertSame('7:50a–5:20p', $cell($json)['back']);
+
+        // absent → coming: the same times, not a bare day.
+        $json = $post('pres')->assertOk()->json();
+        $this->assertSame(['pres', '7:50a', '5:20p'], [$cell($json)['st'], $cell($json)['in'], $cell($json)['out']]);
+        $this->assertNull($cell($json)['back']);
+
+        // Typed times win over the remembered ones.
+        $post('abs')->assertOk();
+        $json = $post('pres', ['in' => '8:30a'])->assertOk()->json();
+        $this->assertSame(['8:30a', null], [$cell($json)['in'], $cell($json)['out']]);
+        $this->assertSame(1, Attendance::where('child_id', $this->ava->id)->count());
     }
 
     public function test_times_typed_in_the_cell_land_on_the_register_row_with_an_amendment(): void
@@ -185,6 +221,17 @@ class DirectorAttendanceWeekTest extends TestCase
         $this->assertSame(['Cruz, Ava'], array_column($w['rows'], 'name'));
         $this->assertSame(2, $w['total']);
         $this->assertStringContainsString(route('attendance.classic', ['date' => today()->toDateString()]), $html);
+
+        // Each chip points at its own room, and the arrows at their own weeks
+        // (the links kept the page's own values until 27 Oct 2026, so a chip
+        // on a filtered page went nowhere).
+        $this->assertStringContainsString(e(route('attendance.index', ['room' => 'School Age', 'date' => today()->toDateString()])), $html);
+        $this->assertStringContainsString(e(route('attendance.index', ['date' => '2026-10-05', 'room' => 'Toddler'])), $html, 'the previous-week arrow keeps the room');
+        $this->assertStringContainsString(e(route('attendance.index', ['date' => today()->toDateString()])), $html, 'All drops the room');
+
+        // The LAN and Student headers sort the rows on the page.
+        $this->assertStringContainsString('data-sort-lan', $html);
+        $this->assertStringContainsString('data-sort-name', $html);
 
         // The old address by room still works: ?toddler.
         $w = $this->actingAs($this->admin)->get(route('attendance.index').'?toddler')->assertOk()->viewData('w');

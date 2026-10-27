@@ -14,7 +14,10 @@
 <x-kids-background />
 
 @php
-    $link = fn (array $extra = []) => route('attendance.index', array_filter(['date' => $date, 'room' => $room, 'q' => $q] + $extra, fn ($v) => $v !== null && $v !== ''));
+    // $extra first: a chip's or an arrow's own value must win over the page's
+    // current one. It was the other way round until 27 Oct 2026, so a room
+    // chip and the week arrows pointed back at the page they were on.
+    $link = fn (array $extra = []) => route('attendance.index', array_filter($extra + ['date' => $date, 'room' => $room, 'q' => $q], fn ($v) => $v !== null && $v !== ''));
 @endphp
 
 <div class="ch" x-data="attendanceWeek(@js(['w' => $w, 'room' => $room, 'q' => $q, 'url' => route('attendance.week.cell')]))" @keydown.escape.window="edit = null" style="display: flex; flex-direction: column; gap: 14px;">
@@ -80,7 +83,10 @@
         <div style="overflow-x: auto;">
             <table class="tbl att" data-week-grid>
                 <thead><tr>
-                    <th style="padding-left: 14px;">LAN</th><th>Student</th><th>Classroom</th><th>DOB · Age</th><th>Hours</th>
+                    {{-- LAN and Student sort the rows; press again to turn them round. --}}
+                    <th style="padding-left: 14px;"><button type="button" class="sortb" :class="sort === 'lan' ? 'on' : ''" @click="sortBy('lan')" :aria-sort="sort === 'lan' ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'" title="Sort by LAN" data-sort-lan>LAN <span x-text="sort === 'lan' ? (dir === 'asc' ? '↑' : '↓') : '↕'"></span></button></th>
+                    <th><button type="button" class="sortb" :class="sort === 'name' ? 'on' : ''" @click="sortBy('name')" :aria-sort="sort === 'name' ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'" title="Sort by name" data-sort-name>Student <span x-text="sort === 'name' ? (dir === 'asc' ? '↑' : '↓') : '↕'"></span></button></th>
+                    <th>Classroom</th><th>DOB · Age</th><th>Hours</th>
                     <template x-for="d in w.days" :key="d.date"><th class="day" :class="d.today ? 'today' : ''"><span x-text="d.dow"></span><br><span style="font-size: 12.5px; letter-spacing: 0; text-transform: none; color: #1c2130;" x-text="d.label"></span><span x-show="d.closed" style="display: block; font-size: 10px; text-transform: none; letter-spacing: 0;" class="faint" x-text="d.closed"></span></th></template>
                 </tr></thead>
                 <tbody>
@@ -147,9 +153,22 @@ function attendanceWeek(opts) { return {
     error: '',
     lastChange: 'Changes save as you tap',
 
+    // Sort: by name (the roll's order) or by LAN, either way up (27 Oct 2026).
+    sort: 'name',
+    dir: 'asc',
+    sortBy(key) {
+        this.dir = this.sort === key && this.dir === 'asc' ? 'desc' : 'asc';
+        this.sort = key;
+    },
     shown() {
         const q = this.search.toLowerCase();
-        return this.w.rows.filter(c => ! q || c.search.includes(q));
+        const rows = this.w.rows.filter(c => ! q || c.search.includes(q));
+        if (this.sort === 'lan') {
+            rows.sort((a, b) => String(a.lan).localeCompare(String(b.lan), undefined, {numeric: true}) * (this.dir === 'asc' ? 1 : -1));
+        } else if (this.dir === 'desc') {
+            rows.reverse();
+        }
+        return rows;
     },
     isEditing(childId, date, session) {
         return this.edit && this.edit.childId === childId && this.edit.date === date && this.edit.session === session;
@@ -179,7 +198,8 @@ function attendanceWeek(opts) { return {
     tap(c, date, p) {
         if (! p.tappable || this.busy) return;
         const names = {none: 'not scheduled', abs: 'absent', pres: 'coming'};
-        const kept = p.next === 'pres' && p.in ? ' (kept ' + p.in + (p.out ? '–' + p.out : '') + ')' : '';
+        // Coming from Absent puts the remembered times back; from Not scheduled the times were never off.
+        const kept = p.next === 'pres' && p.back ? ' (' + p.back + ' back)' : (p.next === 'pres' && p.in ? ' (kept ' + p.in + (p.out ? '–' + p.out : '') + ')' : '');
         this.edit = null;
         this.send({child_id: c.id, date, session: p.session, state: p.next}, 'Last change: ' + this.label(c, date, p) + ' → ' + names[p.next] + kept);
     },

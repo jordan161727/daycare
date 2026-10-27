@@ -231,9 +231,25 @@ class User extends Authenticatable
 
     public const NAME_FORMAT_DEFAULT = 'first_last';
 
-    /** How this person reads a child's name, always one of NAME_FORMATS. */
+    /** The centre-wide setting's key (Settings → Children → Names, 27 Oct 2026). */
+    public const NAME_FORMAT_SETTING = 'names.format';
+
+    /**
+     * How a child's name reads, always one of NAME_FORMATS.
+     *
+     * The centre's setting (Settings → Children) decides for everyone since
+     * 27 Oct 2026 (Jordan: "move that into setting"); before that each
+     * reader chose from the register's ⋯ menu, and that per-person column is
+     * still honoured where the centre has not chosen.
+     */
     public function nameFormat(): string
     {
+        $centre = rescue(fn () => Setting::get(self::NAME_FORMAT_SETTING), null, false);
+
+        if (is_string($centre) && array_key_exists($centre, self::NAME_FORMATS)) {
+            return $centre;
+        }
+
         return array_key_exists($this->name_format, self::NAME_FORMATS)
             ? $this->name_format
             : self::NAME_FORMAT_DEFAULT;

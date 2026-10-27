@@ -383,6 +383,8 @@ Route::get('/settings/children', [SettingController::class, 'children'])->name('
 Route::get('/settings/rooms', [SettingController::class, 'rooms'])->name('settings.rooms');
 Route::put('/settings/rooms', [SettingController::class, 'updateRooms'])->name('settings.rooms.update');
 Route::put('/settings/children', [SettingController::class, 'updateChildren'])->name('settings.children.update');
+// Settings → Children → Names: how a child's name reads, for the whole centre (27 Oct 2026).
+Route::put('/settings/names', [SettingController::class, 'updateNames'])->name('settings.names.update');
 Route::get('/settings/administrators', [SettingController::class, 'administrators'])->name('settings.administrators');
 
 // Taking a child off every list and putting them back. Director only, like

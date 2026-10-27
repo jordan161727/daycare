@@ -182,6 +182,13 @@ class AttendanceWeek
         $names = ['none' => 'not scheduled', 'abs' => 'absent', 'pres' => 'coming'];
         $next = ['none' => 'abs', 'abs' => 'pres', 'pres' => 'none'][$st];
 
+        // An Absent day that remembers its times says so: the next tap puts them back.
+        $back = null;
+        if ($st === 'abs' && ! empty($mark?->kept)) {
+            $was = collect($mark->kept)->firstWhere('session', $session) ?? $mark->kept[0];
+            $back = Child::timeShort(Carbon::parse($was['in'])->timezone($this->tz)).(isset($was['out']) ? '–'.Child::timeShort(Carbon::parse($was['out'])->timezone($this->tz)) : '');
+        }
+
         return [
             'session' => $session,
             'lbl' => count($sessions) > 1 ? $session : '',
@@ -197,7 +204,8 @@ class AttendanceWeek
             'tappable' => $enrolled && ! $closedDay,
             'editable' => $enrolled && ! $closedDay && ! $future,
             'next' => $next,
-            'tip' => $closedDay ? $closed[$iso] : (! $enrolled ? 'Not enrolled' : 'Tap: '.$names[$st].' → '.$names[$next]),
+            'back' => $back,
+            'tip' => $closedDay ? $closed[$iso] : (! $enrolled ? 'Not enrolled' : 'Tap: '.$names[$st].' → '.$names[$next].($back ? ' ('.$back.' back)' : '')),
             'placeholder' => $planned,
         ];
     }
@@ -266,8 +274,16 @@ class AttendanceWeek
             return;
         }
 
-        DssDayMark::where('child_id', $child->id)->whereDate('marked_on', $date)->delete();
+        $mark = DssDayMark::where('child_id', $child->id)->whereDate('marked_on', $date)->first();
+        $mark?->delete();
         $this->tick($child, $date, $session, $state === 'pres');
+
+        // Absent → Coming with nothing typed: the times the Absent mark took
+        // off go back as they were (Jordan, 27 Oct 2026: "back to the time
+        // before, not really to remove").
+        if ($state === 'pres' && blank($in) && blank($out) && $mark?->mark === DssDayMark::ABSENT && ! empty($mark->kept)) {
+            $this->putBack($user, $child, $date, $mark->kept);
+        }
 
         // Once a week is over its ticks are frozen, so "not scheduled" on a
         // day gone by is kept as the same mark the DSS page writes. Times
@@ -278,6 +294,30 @@ class AttendanceWeek
 
         if (filled($in) || filled($out)) {
             $this->times($user, $child, $date, $session, $in, $out);
+        }
+    }
+
+    /**
+     * The rows an Absent mark remembered, written again — only where the
+     * day has nothing on it now, and with an amendment for a day gone by.
+     *
+     * @param  list<array{session: string, in: string, out: ?string}>  $kept
+     */
+    private function putBack(User $user, Child $child, string $date, array $kept): void
+    {
+        if (Attendance::where('child_id', $child->id)->whereDate('attendance_date', $date)->whereNotNull('signed_in_at')->exists()) {
+            return;
+        }
+
+        foreach ($kept as $was) {
+            $row = Attendance::create([
+                'child_id' => $child->id,
+                'attendance_date' => $date,
+                'session' => $was['session'] ?? 'FULL',
+                'signed_in_at' => Carbon::parse($was['in']),
+                'signed_out_at' => isset($was['out']) ? Carbon::parse($was['out']) : null,
+            ]);
+            AttendanceAmendment::record(AttendanceAmendment::ADDED, $row, $user, $row->signed_in_at);
         }
     }
 

@@ -403,6 +403,9 @@
                                      sorted by surname because that is how a roll is
                                      found, which is a different question from how a
                                      name reads. --}}
+                                {{-- Parked (Jordan, 27 Oct 2026): "Show names as" moved to
+                                     Settings → Children → Names, as one setting for the centre. --}}
+                                @if(false)
                                 @php($nameFormat = auth()->user()->nameFormat())
                                 <form method="POST" action="{{ route('profile.name-format') }}" class="space-y-1.5">
                                     @csrf
@@ -421,6 +424,7 @@
                                         </button>
                                     @endforeach
                                 </form>
+                                @endif
                             </div>
                             </template>
                         </div>

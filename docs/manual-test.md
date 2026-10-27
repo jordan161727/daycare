@@ -8,16 +8,22 @@ The Phase 2 (Children) and Phase 5 (Staff) walk-throughs go deeper on their own 
 
 ## Before you start
 
-1. Migrate, seed and build on the local database. The seeders only fill blanks, so running them again is safe:
+1. Migrate, seed and build. On staging (or a fresh local database) one seeder does the whole chain, in order, and a second run changes nothing:
 
    ```
    php artisan migrate --force
+   php artisan db:seed --class=StagingDemoSeeder --force
+   npm run build
+   ```
+
+   On a database that already has a roll you want to keep, run the pieces instead (each only fills blanks):
+
+   ```
    php artisan db:seed --class=ChildRecordDemoSeeder --force
    php artisan db:seed --class=StaffDemoSeeder --force
    php artisan db:seed --class=FloorPlanDemoSeeder --force
    php artisan db:seed --class=StaffAttendanceDemoSeeder --force
    php artisan db:seed --class=ChildAttendanceDemoSeeder --force
-   npm run build
    ```
 
    The child one fills every child in every room from the first of last month to yesterday, on both records (register and door): about one booked day in eight is an Absent mark on the DSS page, the register misses one sign-in in eleven (what the monthly email's hold catches). Re-runnable; today is never touched. `SEED_FROM` / `SEED_TO` take another range.
@@ -69,6 +75,7 @@ The Phase 2 (Children) and Phase 5 (Staff) walk-throughs go deeper on their own 
 ### 1.2 Settings → Rooms & hours
 
 - [ ] Sidebar → Settings → the Rooms & hours tab. Tabs present: Children, Rooms & hours, Administrators, Devices, Login History. Company is parked (Jordan, 27 Oct 2026); `/settings/company` still answers.
+- [ ] Settings → Children → **Names** (moved here from the register's ⋯ menu, 27 Oct 2026): two cards, "John Smith · First name first" and "Smith, John · Surname first". Pick one and Save: the green line says how names read now, and the Children roster, the register and the reports all read that way for every user, teachers included. The ⋯ menu on the classic register no longer offers "Show names as".
 - [ ] Rooms table has Room, Ages, Staff : children, Capacity, NY max group, Room open hours, Check. Every room has a line.
 - [ ] Set Infant capacity to 12. The Check column flags that it is above the NY group limit of 8. Put it back to 8; the flag goes.
 - [ ] Centre hours below the table: centre opens, centre closes, earliest start for everyone else, early drop-off room, School Age leave and return times, longest shift, most hours in a week.
@@ -128,6 +135,9 @@ The Phase 2 (Children) and Phase 5 (Staff) walk-throughs go deeper on their own 
 - [ ] Summary line: enrolled, expected, in, still to come, not in. "Showing N" matches the rows on screen.
 - [ ] Columns: LAN, Student, Classroom, DOB · Age, Hours, Mon to Fri. The Age column reads "3 y 2 m", not a date.
 - [ ] Tap a past day cell for a child with no times: it cycles Not scheduled → Absent → Coming → Not scheduled. "Changes save as you tap"; the Last change line updates after each tap.
+- [ ] Room chips on the register (fixed 27 Oct 2026: they pointed back at the page they were on): pick Toddler, then Infant — the grid changes each time, and the week arrows keep the room. All drops it.
+- [ ] LAN and Student headers sort the grid (27 Oct 2026): press LAN for ascending, again for descending; the arrow shows which. Student does the same by name. The sort survives a tap on a cell.
+- [ ] Tap a cell that has times (27 Oct 2026): time → dot (the times stay on show) → Absent (the times go, the hover says "Tap: absent → coming (8:05a–4:10p back)") → tap again and the same times are back, not a bare day. Type a time in the pen while Absent and that time wins instead.
 - [ ] A cell with recorded times shows them. A day that is not one of the child's days but has times shows the "still billable" marker.
 - [ ] Click a time to edit it inline. ↑ adds a minute, Shift+↑ adds an hour, Esc cancels, Enter saves. The cell gets the "Time fixed by hand" dot.
 - [ ] Try to put a time on a day next week: refused with a message.

@@ -460,8 +460,17 @@ class DssAttendance
             DssDayMark::where('child_id', $child->id)->whereDate('marked_on', $date)->delete();
 
             if ($state['st'] === 'abs' || $state['st'] === 'none') {
+                // An Absent mark remembers the times it takes off, so the
+                // register's tap back to Coming can put them back (27 Oct 2026).
+                $kept = Attendance::where('child_id', $child->id)->whereDate('attendance_date', $date)->whereNotNull('signed_in_at')->get()
+                    ->map(fn (Attendance $row) => ['session' => $row->session ?? 'FULL', 'in' => $row->signed_in_at->toIso8601String(), 'out' => $row->signed_out_at?->toIso8601String()])
+                    ->values()->all();
                 $this->removeRows($child, $date, $by, []);
-                DssDayMark::create(['child_id' => $child->id, 'marked_on' => $date, 'mark' => $state['st'] === 'abs' ? DssDayMark::ABSENT : DssDayMark::NONE, 'created_by' => $by->id]);
+                DssDayMark::create([
+                    'child_id' => $child->id, 'marked_on' => $date, 'created_by' => $by->id,
+                    'mark' => $state['st'] === 'abs' ? DssDayMark::ABSENT : DssDayMark::NONE,
+                    'kept' => $state['st'] === 'abs' && $kept !== [] ? $kept : null,
+                ]);
 
                 return;
             }
