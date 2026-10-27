@@ -2,13 +2,8 @@
 
 namespace App\Providers;
 
-use App\Listeners\RecordLoginEvent;
-use Illuminate\Auth\Events\Failed;
-use Illuminate\Auth\Events\Login;
-use Illuminate\Auth\Events\Logout;
 use Illuminate\Cache\RateLimiting\Limit;
 use App\Models\Setting;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
@@ -29,7 +24,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        
+        /*
+         * Everything anyone does, logged (Ray, 28 Oct 2026). Hung off the
+         * models' own events, so no screen or command can save a record
+         * without a line being written — see App\Services\ActivityLog.
+         */
+        \App\Services\ActivityLog::watch();
+
         // Who sees the DSS page (Phase 8.1, "Only you"): the users named in
         // DAYCARE_DSS_USERS, or any director when nobody is named.
         \Illuminate\Support\Facades\Gate::define('see-dss', function (\App\Models\User $user) {
@@ -44,10 +45,11 @@ class AppServiceProvider extends ServiceProvider
          * Hung off the framework's own events rather than off the login
          * controller, so a second way in cannot skip the log. See
          * RecordLoginEvent for why each write is guarded.
+         *
+         * Not registered here: Laravel finds RecordLoginEvent's handle*
+         * methods on its own, and listing them again wrote every sign-in
+         * twice (seen in the activity log, 28 Oct 2026).
          */
-        Event::listen(Login::class, [RecordLoginEvent::class, 'handleLogin']);
-        Event::listen(Logout::class, [RecordLoginEvent::class, 'handleLogout']);
-        Event::listen(Failed::class, [RecordLoginEvent::class, 'handleFailed']);
 
         /*
          * The centre's name, on every screen that prints or displays it.

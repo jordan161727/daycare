@@ -9,7 +9,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 {{--
-    The staff time clock on the wall.
+    The staff time clock on the wall — the front door iPad (HANDOFF §5.2).
 
     Formal, because it is an employment record being made. The door kiosk a few
     feet away has a drawn sky and a rabbit on it, and rightly — a four-year-old
@@ -32,12 +32,12 @@
     themselves — because this is read from six feet away by somebody who is
     holding a coat.
 
-    Three states, one action set each. A tile that is impossible is absent, not
-    greyed out: somebody at half past seven reads what is there and taps it, and
-    a disabled button they have to work out the reason for gets tapped anyway.
-    There is no path from a break straight to clocked out — a break ends back on
-    the clock, so leaving is End Break then Clock Out, two presses that are two
-    true facts.
+    Four screens, and one set of buttons per state. Keypad → the person's card
+    → (for a clock-in, or "Going somewhere else?" after a break) the room
+    picker → the done screen. A tile that is impossible is absent, not greyed
+    out. There is no path from a break straight to clocked out — a break ends
+    back on the clock, in the room it was taken from, so leaving is End Break
+    then Clock Out, two presses that are two true facts.
 
     Everything returns to the welcome screen on its own. Nobody should have to
     dismiss a screen for the person behind them, and nobody should read the
@@ -85,7 +85,7 @@
                 <div class="h-1.5"
                      :class="staff
                         ? { working: 'bg-emerald-600', break: 'bg-amber-500', lunch: 'bg-amber-500', off: 'bg-slate-300' }[staff.state]
-                        : (done ? 'bg-emerald-600' : 'bg-indigo-600')"></div>
+                        : (done ? (done.tone === 'stop' ? 'bg-rose-600' : done.tone === 'hold' ? 'bg-amber-500' : 'bg-emerald-600') : 'bg-indigo-600')"></div>
 
                 {{-- ---- the welcome screen ---- --}}
                 <template x-if="! staff && ! done">
@@ -142,7 +142,7 @@
                 </template>
 
                 {{-- ---- one person, and only what they can do ---- --}}
-                <template x-if="staff && ! done">
+                <template x-if="staff && ! done && step === 'card'">
                     <div>
                         {{-- Who, on a tinted shoulder so the name and the state
                              read as one block rather than as two lines. --}}
@@ -152,7 +152,9 @@
                                 <p class="truncate text-[17px] font-bold leading-tight" x-text="staff.name"></p>
                                 <p class="text-[12px] leading-tight text-slate-500" x-text="staff.staff_id"></p>
                             </div>
-                            <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold"
+                            {{-- The pill names the four-state model's word for
+                                 them: Not on the clock / Working / On break. --}}
+                            <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold" data-presence-pill
                                   :class="{
                                       working: 'bg-emerald-100 text-emerald-800',
                                       break: 'bg-amber-100 text-amber-900',
@@ -160,14 +162,16 @@
                                       off: 'bg-slate-200 text-slate-600',
                                   }[staff.state]">
                                 <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-                                <span x-text="staff.state_label"></span>
+                                <span x-text="staff.presence_label"></span>
                             </span>
                         </div>
 
                         <div class="p-6">
-                            {{-- The time that is about to be recorded, said
-                                 large, because it is the fact being made. --}}
-                            <p class="text-center text-[13px] uppercase tracking-[0.15em] text-slate-400" x-text="staff.since ?? 'Not started today'"></p>
+                            {{-- The one sentence that is always about *now*:
+                                 on the clock since when and in which room, on
+                                 break since when and from where, or not on
+                                 the clock today. --}}
+                            <p class="text-center text-[14px] text-slate-700" data-presence-line x-text="staff.line"></p>
 
                             {{-- What the office planned for them today: the
                                  shift, and any change the Staff page holds for
@@ -177,15 +181,29 @@
 
                             <div class="mt-5 space-y-2.5">
                                 <template x-for="action in staff.actions" :key="action.action">
-                                    <button type="button" @click="punch(action.action)" :disabled="sending"
-                                            class="min-h-[4.5rem] w-full rounded-xl text-xl font-bold text-white transition active:scale-[0.98] disabled:opacity-40"
+                                    <button type="button" @click="action.picks_room ? pickRoom('in') : punch(action.action)" :disabled="sending"
+                                            class="flex min-h-[4.5rem] w-full flex-col items-start justify-center rounded-xl px-5 text-left text-white transition active:scale-[0.98] disabled:opacity-40"
                                             :class="{
                                                 go: 'bg-emerald-700 active:bg-emerald-800',
                                                 hold: 'bg-amber-600 active:bg-amber-700',
                                                 stop: 'bg-rose-700 active:bg-rose-800',
-                                            }[action.tone]"
-                                            x-text="action.label"></button>
+                                            }[action.tone]">
+                                        <span class="text-xl font-bold" x-text="action.label"></span>
+                                        {{-- The small line under the big word says what
+                                             else the press does: which room it leaves,
+                                             which room it goes back to. --}}
+                                        <span class="text-[13px] font-medium opacity-90" x-text="action.hint"></span>
+                                    </button>
                                 </template>
+
+                                {{-- RULE: from a break the only button is End
+                                     Break, back to the last room. Somewhere
+                                     else is a link, not a button, so the
+                                     common case is one press. --}}
+                                <button x-show="staff.presence === 'on_break'" x-cloak type="button" @click="pickRoom('brk')"
+                                        class="min-h-10 w-full text-[14px] font-semibold text-indigo-700 underline underline-offset-2" data-elsewhere>
+                                    Going somewhere else?
+                                </button>
 
                                 {{-- A state with nothing to press is one the
                                      office has to sort out. Said plainly rather
@@ -204,7 +222,7 @@
                                 <dd class="mt-0.5 text-[13px] text-slate-700" x-text="staff.last_activity ?? 'None yet'"></dd>
                             </div>
                             <div class="px-6 py-3.5">
-                                <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Hours today</dt>
+                                <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Worked so far</dt>
                                 <dd class="mt-0.5 text-[13px] font-semibold tabular-nums text-slate-700" x-text="hoursLine(staff.worked_minutes)"></dd>
                             </div>
                         </dl>
@@ -212,24 +230,73 @@
                         <div class="border-t border-slate-100 p-3">
                             <button type="button" @click="reset()"
                                     class="min-h-12 w-full rounded-xl text-[13px] font-semibold text-slate-400 transition active:bg-slate-50">
-                                Not <span x-text="firstName"></span>? Start over
+                                Not <span x-text="firstName"></span>? Cancel
                             </button>
                         </div>
+                    </div>
+                </template>
+
+                {{-- ---- the room picker ---- --}}
+                <template x-if="staff && ! done && step === 'rooms'">
+                    <div class="p-6" data-room-picker>
+                        <h2 class="text-xl font-bold" x-text="mode === 'in' ? 'Which room are you going to?' : 'Where are you going after your break?'"></h2>
+                        <p class="mt-1 text-[13px] text-slate-500">Your scheduled room is first. You can change rooms later at any room tablet.</p>
+
+                        <div class="mt-4 grid grid-cols-2 gap-2">
+                            {{-- One tile per room, the scheduled one first and
+                                 marked, each saying what the room holds right
+                                 now — so a person can see a short room and
+                                 choose it. --}}
+                            <template x-for="room in staff.rooms" :key="room.room">
+                                <button type="button" @click="punch(mode === 'in' ? 'clock_in' : 'break_end', room.room)" :disabled="sending"
+                                        class="flex min-h-[4.5rem] flex-col items-start gap-0.5 rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-left transition active:scale-[0.98] disabled:opacity-40"
+                                        :class="room.mine ? 'border-emerald-600 ring-4 ring-emerald-100' : ''"
+                                        :style="`border-left: 8px solid ${room.colour}`"
+                                        :data-room-tile="room.room">
+                                    <span class="text-[16px] font-bold" x-text="room.room"></span>
+                                    <span class="text-[12px] text-slate-500" x-text="room.sub"></span>
+                                    <span x-show="room.mine" class="mt-0.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800">Your schedule</span>
+                                </button>
+                            </template>
+                        </div>
+
+                        {{-- Admin, kitchen, meetings: on the clock, in nobody's ratio. --}}
+                        <button type="button" @click="punch(mode === 'in' ? 'clock_in' : 'break_end', 'office')" :disabled="sending"
+                                class="mt-2 flex w-full flex-col items-start rounded-xl border-2 border-slate-200 bg-white px-3 py-2.5 text-left transition active:scale-[0.98] disabled:opacity-40"
+                                style="border-left: 8px solid #9aa3b5" data-room-tile="office">
+                            <span class="text-[15px] font-bold">Office / no room</span>
+                            <span class="text-[12px] text-slate-500">Admin, kitchen, meetings — not counted in ratios</span>
+                        </button>
+
+                        <button type="button" @click="step = 'card'"
+                                class="mt-3 min-h-12 w-full rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-500 transition active:bg-slate-50">
+                            Cancel
+                        </button>
                     </div>
                 </template>
 
                 {{-- ---- the confirmation ---- --}}
                 <template x-if="done">
                     <div class="p-10 text-center">
-                        <span class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-emerald-50 text-2xl font-bold text-emerald-700 ring-1 ring-emerald-200" aria-hidden="true">✓</span>
+                        <span class="mx-auto grid h-14 w-14 place-items-center rounded-full text-2xl font-bold ring-1" aria-hidden="true"
+                              :class="done.tone === 'stop' ? 'bg-rose-50 text-rose-700 ring-rose-200' : done.tone === 'hold' ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-emerald-50 text-emerald-700 ring-emerald-200'">✓</span>
                         <p class="mt-4 text-2xl font-bold" x-text="done.title"></p>
-                        <p class="mt-1 text-3xl font-extrabold tabular-nums text-emerald-700" x-text="done.at"></p>
+                        <p class="mt-1 text-3xl font-extrabold tabular-nums" x-text="done.at"
+                           :class="done.tone === 'stop' ? 'text-rose-700' : done.tone === 'hold' ? 'text-amber-700' : 'text-emerald-700'"></p>
                         <p class="mt-3 text-[14px] text-slate-600" x-text="done.note"></p>
+
+                        {{-- RULE: a short room is warned about, never blocked.
+                             The office has already been told by the time this
+                             is on screen. --}}
+                        <p x-show="done.warning" x-cloak class="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-left text-[13px] leading-snug text-amber-900 ring-1 ring-amber-200" data-short-warning>
+                            ⚠ <span x-text="done.warning"></span>
+                        </p>
 
                         <button type="button" @click="reset()"
                                 class="mt-7 min-h-12 w-full rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-500 transition active:bg-slate-50">
                             Done
                         </button>
+                        <p class="mt-2 text-[11px] text-slate-400">Back to the keypad in a few seconds</p>
                     </div>
                 </template>
             </div>
@@ -245,6 +312,8 @@ function staffClock() { return {
     ticket: null,
     done: null,
     problem: null,
+    step: 'card',   // 'card' or 'rooms', once somebody is on screen
+    mode: 'in',     // why the picker is open: a clock-in, or somewhere else after a break
     now: '',
     today: '',
     timer: null,
@@ -327,6 +396,7 @@ function staffClock() { return {
             } else {
                 this.staff = data.staff;
                 this.ticket = data.ticket;
+                this.step = 'card';
                 // Walked away without pressing: the screen belongs to the next
                 // person in the queue, not to whoever scanned and left.
                 this.hold({{ \App\Http\Controllers\StaffClockController::TICKET_SECONDS }} * 1000);
@@ -340,9 +410,16 @@ function staffClock() { return {
         }
     },
 
+    /* ---- the room picker ---- */
+
+    pickRoom(mode) {
+        this.mode = mode;
+        this.step = 'rooms';
+    },
+
     /* ---- the button they pressed ---- */
 
-    async punch(action) {
+    async punch(action, room = null) {
         if (this.sending) return;
 
         this.sending = true;
@@ -351,17 +428,21 @@ function staffClock() { return {
             const response = await window.postJson(@js(route('clock.kiosk.punch')), {
                 ticket: this.ticket,
                 action,
+                room,
             });
             const data = await response.json();
 
             if (data.status === 'ok') {
                 this.done = {
-                    title: data.title,
+                    tone: { clock_out: 'stop', break_start: 'hold' }[data.action] ?? 'go',
+                    title: this.titleFor(data.action, data),
                     at: data.at,
-                    note: `${data.staff.name} — ${this.noteFor(data.action)}`,
+                    note: this.noteFor(data.action, data),
+                    warning: data.warning,
                 };
                 this.staff = null;
-                this.hold(5000);
+                this.step = 'card';
+                this.hold(6000);
 
                 return;
             }
@@ -369,6 +450,7 @@ function staffClock() { return {
             // Stale or expired: the state moved under them, so show it again
             // rather than claiming something happened.
             this.staff = data.staff ?? null;
+            this.step = 'card';
             this.problem = this.describe(data.status);
             this.hold(6000);
         } catch {
@@ -379,13 +461,26 @@ function staffClock() { return {
         }
     },
 
-    noteFor(action) {
+    titleFor(action, data) {
         return {
-            clock_in: 'have a good shift.',
-            clock_out: 'see you next time.',
-            break_start: 'enjoy your break.',
-            break_end: 'welcome back.',
-            lunch_end: 'welcome back.',
+            clock_in: 'You’re clocked in',
+            clock_out: 'See you tomorrow',
+            break_start: 'Enjoy your break',
+            break_end: 'Welcome back',
+            lunch_end: 'Welcome back',
+        }[action] ?? data.title;
+    },
+
+    noteFor(action, data) {
+        const place = data.room ? `Checked into ${data.room}` : (data.placed ? 'Working in the office (no room)' : null);
+        const hours = this.hoursLine(data.staff?.worked_minutes ?? 0);
+
+        return {
+            clock_in: place ? `${place} at ${data.at}.` : 'Have a good shift.',
+            clock_out: `Clocked out at ${data.at}. ${hours} today.`,
+            break_start: `When you’re back, End Break returns you to ${data.staff?.last_room ?? 'the office'}.`,
+            break_end: `Break ended. ${place ? place : 'Back in the office'} at ${data.at}.`,
+            lunch_end: `Lunch ended. ${place ? place : 'Back in the office'} at ${data.at}.`,
         }[action] ?? '';
     },
 
@@ -403,6 +498,7 @@ function staffClock() { return {
         this.done = null;
         this.problem = null;
         this.entry = '';
+        this.step = 'card';
         this.focusEntry();
     },
 

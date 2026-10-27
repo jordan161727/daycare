@@ -213,14 +213,18 @@ class DirectorAttendanceWeekTest extends TestCase
         $this->assertSame(0, DssDayMark::count());
     }
 
-    public function test_the_room_chips_filter_and_the_classic_register_is_one_link_away(): void
+    public function test_the_room_chips_filter_and_the_more_menu_is_gone(): void
     {
         $html = $this->actingAs($this->admin)->get(route('attendance.index', ['room' => 'Toddler']))->assertOk()->getContent();
         $w = $this->actingAs($this->admin)->get(route('attendance.index', ['room' => 'Toddler']))->viewData('w');
 
         $this->assertSame(['Cruz, Ava'], array_column($w['rows'], 'name'));
         $this->assertSame(2, $w['total']);
-        $this->assertStringContainsString(route('attendance.classic', ['date' => today()->toDateString()]), $html);
+
+        // The "⋯" menu came off the page (Jordan, 28 Oct 2026). The classic
+        // register still answers at its own address, just not from here.
+        $this->assertStringNotContainsString('aria-label="More options"', $html);
+        $this->assertStringNotContainsString(route('attendance.classic', ['date' => today()->toDateString()]), $html);
 
         // Each chip points at its own room, and the arrows at their own weeks
         // (the links kept the page's own values until 27 Oct 2026, so a chip

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\PairsStaffDevice;
 use App\Models\StaffDevice;
 use App\Models\User;
 use App\Services\StaffKiosk;
@@ -20,9 +21,15 @@ use Illuminate\Support\Str;
  * person's name and their own hours, and forgets them the moment the
  * confirmation clears — the next person in the queue starts from a blank
  * screen rather than from the last person's day.
+ *
+ * Since the room tablets (HANDOFF §5.2) a clock-in also asks which room the
+ * person is going to, and the answer rides on the same punch request — the
+ * tile they pick makes the punch and the room check-in together.
  */
 class StaffClockController extends Controller
 {
+    use PairsStaffDevice;
+
     /**
      * How long the buttons stay live after a card is presented.
      *
@@ -31,6 +38,23 @@ class StaffClockController extends Controller
      * walked away without pressing anything.
      */
     public const TICKET_SECONDS = 45;
+
+    /**
+     * How long a paired tablet stays paired.
+     *
+     * The session alone was not enough. It expires after SESSION_LIFETIME of
+     * idleness — eight hours here — and a clock on a wall is idle from Friday
+     * evening to Monday morning. Every kiosk in the building would have come
+     * up unpaired on Monday, and somebody would have had to walk round with
+     * the pairing links again. Weekly.
+     *
+     * So the pairing gets its own cookie, well over a year of it, holding the
+     * token. Laravel encrypts cookies, so it is not readable off the tablet,
+     * and it is no more of a secret than the token already on that device.
+     * Deactivating the device still cuts it off at once, because the lookup
+     * only ever considers active ones.
+     */
+    public const PAIRED_DAYS = 400;
 
     public function __construct(private StaffKiosk $kiosk) {}
 
@@ -48,23 +72,11 @@ class StaffClockController extends Controller
         $token = $request->query('token');
 
         if (filled($token)) {
-            $device = StaffDevice::forToken($token);
-
-            abort_if($device === null, 403, 'That pairing token does not match a device.');
-
-            $request->session()->put('staff_clock.device', $device->id);
-
-            // Dropped from the address bar so a bookmark, a screenshot or a
-            // shoulder does not carry the token around with it. The cookie is
-            // what remembers instead, and it outlives the session by years —
-            // see PAIRED_DAYS.
-            return redirect()->route('clock.kiosk')->withCookie(
-                cookie('staff_clock_device', $token, self::PAIRED_DAYS * 24 * 60, null, null, null, true, false, 'lax')
-            );
+            return $this->pairFromToken($request, $token, 'clock.kiosk');
         }
 
         return view('clock.kiosk', [
-            'device' => $this->device($request),
+            'device' => $this->pairedDevice($request),
         ]);
     }
 
@@ -85,7 +97,7 @@ class StaffClockController extends Controller
             'pin' => ['nullable', 'digits:4'],
         ]);
 
-        if ($this->device($request) === null) {
+        if ($this->pairedDevice($request) === null) {
             return response()->json(['status' => 'unpaired'], 200);
         }
 
@@ -114,7 +126,13 @@ class StaffClockController extends Controller
         ]);
     }
 
-    /** One of the buttons that state offered, pressed. */
+    /**
+     * One of the buttons that state offered, pressed.
+     *
+     * `room` comes with a clock-in (the tile they picked: a room name or
+     * "office") and with an End Break that chose "Going somewhere else?".
+     * Absent, End Break goes back to the room the break was taken from.
+     */
     public function punch(Request $request)
     {
         abort_unless(config('daycare.kiosk.enabled'), 404);
@@ -122,9 +140,10 @@ class StaffClockController extends Controller
         $data = $request->validate([
             'ticket' => ['required', 'string'],
             'action' => ['required', 'string', 'max:40'],
+            'room' => ['nullable', 'string', 'max:60'],
         ]);
 
-        $device = $this->device($request);
+        $device = $this->pairedDevice($request);
 
         // A screen that has not been paired takes no punches. Otherwise the
         // address on its own is a time clock anybody on the network can press.
@@ -157,6 +176,7 @@ class StaffClockController extends Controller
             method: $ticket['method'],
             device: $device,
             ip: $request->ip(),
+            room: $data['room'] ?? null,
         );
 
         // One press per card presented: the ticket is spent whether the punch
@@ -175,56 +195,10 @@ class StaffClockController extends Controller
             'action' => $result['action'],
             'title' => StaffKiosk::CONFIRMATIONS[$result['action']] ?? 'Recorded',
             'at' => $result['at'],
+            'room' => $result['room'],
+            'placed' => $result['placed'],
+            'warning' => $result['warning'],
             'staff' => $this->kiosk->screenFor($user),
         ]);
-    }
-
-    /** The device this screen is, if it has been paired and is still active. */
-    /**
-     * How long a paired tablet stays paired.
-     *
-     * The session alone was not enough. It expires after SESSION_LIFETIME of
-     * idleness — eight hours here — and a clock on a wall is idle from Friday
-     * evening to Monday morning. Every kiosk in the building would have come
-     * up unpaired on Monday, and somebody would have had to walk round with
-     * the pairing links again. Weekly.
-     *
-     * So the pairing gets its own cookie, well over a year of it, holding the
-     * token. Laravel encrypts cookies, so it is not readable off the tablet,
-     * and it is no more of a secret than the token already on that device.
-     * Deactivating the device still cuts it off at once, because the lookup
-     * only ever considers active ones.
-     */
-    public const PAIRED_DAYS = 400;
-
-    /**
-     * Which device this is.
-     *
-     * The session first, because it is a cheap integer lookup. The cookie is
-     * the fallback and costs a hash check per device, so a hit on it re-seeds
-     * the session and the expensive path runs once a session rather than once
-     * a press.
-     */
-    private function device(Request $request): ?StaffDevice
-    {
-        $id = $request->session()->get('staff_clock.device');
-
-        if (filled($id)) {
-            $device = StaffDevice::where('is_active', true)->find($id);
-
-            if ($device !== null) {
-                return $device;
-            }
-        }
-
-        $device = StaffDevice::forToken($request->cookie('staff_clock_device'));
-
-        if ($device === null) {
-            return null;
-        }
-
-        $request->session()->put('staff_clock.device', $device->id);
-
-        return $device;
     }
 }

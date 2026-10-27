@@ -13,7 +13,7 @@
 
     <div class="min-w-0 flex-1">
         <h1 class="text-2xl font-bold tracking-tight">Devices</h1>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">The screens staff scan their cards at. Each one is named for where it hangs, because that is what a punch will say six weeks later.</p>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">The screens staff scan their cards at. Each one is named for where it hangs, because that is what a punch will say six weeks later. A room tablet is told which room it is in with the ⚙ on the tablet and the room's code from <a href="{{ route('settings.rooms') }}" class="font-semibold text-indigo-600 hover:underline dark:text-indigo-400">Rooms &amp; hours</a>; what they record is on <a href="{{ route('staff.presence') }}" class="font-semibold text-indigo-600 hover:underline dark:text-indigo-400">Who’s where</a>.</p>
 
         @if(session('success'))
             <p class="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('success') }}</p>
@@ -42,7 +42,7 @@
 
         <section class="glass-card mt-6 rounded-2xl p-6">
             <h2 class="text-sm font-semibold">Add a device</h2>
-            <form method="POST" action="{{ route('devices.store') }}" class="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <form method="POST" action="{{ route('devices.store') }}" class="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto]" x-data="{ kind: @js(old('kind', 'clock')) }">
                 @csrf
                 <label>
                     <span class="cs-label">Name</span>
@@ -52,6 +52,23 @@
                 <label>
                     <span class="cs-label">Where it is</span>
                     <input name="location" maxlength="120" placeholder="Lobby, by the sign-in table" class="cs-input">
+                </label>
+                {{-- The front door makes payroll punches; a room tablet makes
+                     room check-ins for the ratios (HANDOFF §5.3). A tablet
+                     starts in a room and its gear can move it later. --}}
+                <label>
+                    <span class="cs-label">What it is</span>
+                    <select name="kind" x-model="kind" class="cs-input">
+                        @foreach(\App\Models\StaffDevice::KINDS as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <select name="classroom" x-show="kind === 'room'" x-cloak class="cs-input mt-1" aria-label="Which room">
+                        <option value="">Room — set with the ⚙ on the tablet</option>
+                        @foreach(\App\Services\ClassroomAssignment::rooms() as $room)
+                            <option value="{{ $room }}" @selected(old('classroom') === $room)>{{ $room }}</option>
+                        @endforeach
+                    </select>
                 </label>
                 <div class="flex items-end">
                     <button class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">Add</button>
@@ -77,6 +94,9 @@
                                 @if(filled($device->location))
                                     <span class="block text-xs text-slate-400">{{ $device->location }}</span>
                                 @endif
+                                <span class="mt-0.5 inline-block rounded-md px-1.5 py-0.5 text-[11px] font-semibold {{ $device->isRoomTablet() ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300' }}" data-device-kind="{{ $device->kind }}">
+                                    {{ $device->kindLabel() }}@if($device->isRoomTablet()) · {{ $device->classroom ?? 'no room yet' }}@endif
+                                </span>
                             </td>
                             <td class="px-5 py-3 text-slate-500 dark:text-slate-400">
                                 {{-- Never seen is worth saying plainly: it is the

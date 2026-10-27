@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\LoginEvent;
 use App\Models\Setting;
 use App\Models\StaffDevice;
+use App\Models\StaffRoomCheckin;
 use App\Http\Controllers\SettingController;
 use App\Models\TimePunch;
 use App\Models\User;
@@ -37,7 +38,7 @@ class StaffKiosk
 
     public const METHOD_PIN = 'pin';
 
-    public function __construct(private TimeClock $clock) {}
+    public function __construct(private TimeClock $clock, private StaffPresence $presence) {}
 
     /**
      * Who is standing there, or why the clock will not say.
@@ -182,25 +183,33 @@ class StaffKiosk
      *
      * @return list<array{action: string, label: string, tone: string}>
      */
-    public function actionsFor(User $user): array
+    public function actionsFor(User $user, ?array $status = null): array
     {
+        $status ??= $this->presence->status($user);
+        $here = $status['room'] ?? null;
+        $back = $status['last_room'] ?? null;
+
         return match ($this->clock->state($user, today()->toDateString())) {
             TimeClock::OFF => [
-                ['action' => 'clock_in', 'label' => 'Clock In', 'tone' => 'go'],
+                // The room picker follows (HANDOFF §5.2 step 4): the punch and
+                // the room check-in are made together by the tile they pick.
+                ['action' => 'clock_in', 'label' => 'Clock In', 'tone' => 'go', 'hint' => 'Next: pick the room you’re going to', 'picks_room' => true],
             ],
             // Attendance Only: they have arrived and that is the whole of what
             // this centre records, so there is nothing left to press. Offering
             // a clock-out that nothing reads would invite somebody to press it
             // and believe their hours were being counted.
             TimeClock::WORKING => SettingController::tracksTime() ? [
-                ['action' => 'break_start', 'label' => 'Start Break', 'tone' => 'hold'],
-                ['action' => 'clock_out', 'label' => 'Clock Out', 'tone' => 'stop'],
+                ['action' => 'break_start', 'label' => 'Start Break', 'tone' => 'hold', 'hint' => $here ? "Checks you out of {$here}" : 'Keeps your place in the office', 'picks_room' => false],
+                ['action' => 'clock_out', 'label' => 'Clock Out', 'tone' => 'stop', 'hint' => 'End of your day', 'picks_room' => false],
             ] : [],
+            // RULE: a break ends back on the clock, and back in the room it was
+            // taken from. "Going somewhere else?" is the picker, not a button.
             TimeClock::BREAK => [
-                ['action' => 'break_end', 'label' => 'End Break', 'tone' => 'hold'],
+                ['action' => 'break_end', 'label' => 'End Break', 'tone' => 'go', 'hint' => 'Back to '.($back ?? 'the office'), 'picks_room' => false],
             ],
             TimeClock::LUNCH => [
-                ['action' => 'lunch_end', 'label' => 'End Lunch', 'tone' => 'hold'],
+                ['action' => 'lunch_end', 'label' => 'End Lunch', 'tone' => 'go', 'hint' => 'Back to '.($back ?? 'the office'), 'picks_room' => false],
             ],
             default => [],
         };
@@ -230,9 +239,10 @@ class StaffKiosk
      *
      * @return array{status: string, action?: string, at?: string, user?: User}
      */
-    public function punch(User $user, string $action, string $method, ?StaffDevice $device, ?string $ip = null): array
+    public function punch(User $user, string $action, string $method, ?StaffDevice $device, ?string $ip = null, ?string $room = null): array
     {
-        $allowed = collect($this->actionsFor($user))->pluck('action')->all();
+        $status = $this->presence->status($user);
+        $allowed = collect($this->actionsFor($user, $status))->pluck('action')->all();
 
         if (! in_array($action, $allowed, true)) {
             // Not an error to apologise for: the screen was simply out of date.
@@ -240,11 +250,78 @@ class StaffKiosk
             return ['status' => 'stale', 'user' => $user];
         }
 
+        // The word the screen sent for the room: a room, 'office', or nothing.
+        // Nothing on a clock-in means an older screen, and the person is on the
+        // clock with no room until a tablet places them; nothing on End Break
+        // means back where they were.
+        [$valid, $to] = $this->presence->resolveRoom($room);
+
+        if (! $valid) {
+            return ['status' => 'stale', 'user' => $user];
+        }
+
+        $punch = $this->writePunch($user, self::PUNCH_FOR[$action], TimePunch::SOURCE_CLOCK, $method, $device, $ip);
+        $this->presence->logPunch($user, $user->name.' '.self::FEED[$action].' (front door)', $device);
+
+        $warning = null;
+        $place = null;
+
+        switch ($action) {
+            case 'clock_in':
+                if ($room !== null) {
+                    $place = $this->presence->checkIn($user, $to, StaffRoomCheckin::VIA_DOOR, $device);
+                    $this->presence->logRoom($user, $to, $user->name.' → '.($to ?? 'Office / no room'), $device);
+                }
+                break;
+
+            case 'break_start':
+                $left = $this->presence->leave($user, StaffRoomCheckin::ENDED_BREAK, $device);
+                if ($left !== null && ! $left->isOffice()) {
+                    $this->presence->logRoom($user, $left->classroom, $user->name.' left '.$left->classroom, $device);
+                }
+                $warning = $this->presence->shortWarning($left, $user, $device);
+                break;
+
+            case 'break_end':
+            case 'lunch_end':
+                // Back where they were unless they said otherwise. A break taken
+                // from the office goes back to the office.
+                $to = $room === null ? $status['last_room'] : $to;
+                $place = $this->presence->checkIn($user, $to, $room === null ? StaffRoomCheckin::VIA_RETURN : StaffRoomCheckin::VIA_DOOR, $device);
+                $this->presence->logRoom($user, $to, $user->name.' → '.($to ? ($room === null ? 'back to '.$to : $to) : 'Office / no room'), $device);
+                break;
+
+            case 'clock_out':
+                $left = $this->presence->leave($user, StaffRoomCheckin::ENDED_CLOCK_OUT, $device);
+                if ($left !== null && ! $left->isOffice()) {
+                    $this->presence->logRoom($user, $left->classroom, $user->name.' left '.$left->classroom, $device);
+                }
+                $warning = $this->presence->shortWarning($left, $user, $device);
+                break;
+        }
+
+        $user->clearKioskFailures();
+        $device?->touchSeen();
+
+        return [
+            'status' => 'ok',
+            'action' => $action,
+            'at' => $punch->punched_at->format('g:i A'),
+            'user' => $user,
+            'room' => $place?->classroom,
+            'placed' => $place !== null,
+            'warning' => $warning,
+        ];
+    }
+
+    /** The punch itself, with where and how it was made written on it. */
+    private function writePunch(User $user, string $type, string $source, string $method, ?StaffDevice $device, ?string $ip): TimePunch
+    {
         $punch = $this->clock->punch(
             user: $user,
-            type: self::PUNCH_FOR[$action],
+            type: $type,
             at: now(),
-            source: TimePunch::SOURCE_CLOCK,
+            source: $source,
             by: null,
             reason: null,
             ip: $ip,
@@ -258,14 +335,196 @@ class StaffKiosk
             'method' => $method,
         ])->save();
 
+        return $punch;
+    }
+
+    /* ------------------------------------------------------ room tablets */
+
+    /** What a room tablet may offer (HANDOFF §5.3). Never a clock-out. */
+    public const TABLET_CHECK_IN = 'check_in';
+
+    public const TABLET_BREAK = 'break_start';
+
+    /**
+     * A PIN keyed at a room tablet.
+     *
+     * Somebody not on the clock is clocked in there and then — the owner's
+     * choice over sending them back to the door — checked into the tablet's
+     * room, and flagged so the office confirms the start time. Everybody
+     * else gets the room screen.
+     *
+     * @return array{status: string, done?: array}
+     */
+    public function tabletArrival(User $user, StaffDevice $device, string $method, ?string $ip = null): array
+    {
+        $room = $device->classroom;
+
+        if ($room === null) {
+            return ['status' => 'no_room'];
+        }
+
+        if ($this->clock->state($user, today()->toDateString()) !== TimeClock::OFF) {
+            return ['status' => 'ok'];
+        }
+
+        $punch = $this->writePunch($user, TimePunch::IN, TimePunch::SOURCE_ROOM_TABLET, $method, $device, $ip);
+        $this->presence->checkIn($user, $room, StaffRoomCheckin::VIA_AUTO, $device);
+
+        $this->presence->logPunch($user, "{$user->name} clocked in (auto, {$room} tablet)", $device);
+        $this->presence->logRoom($user, $room, "{$user->name} → {$room}", $device);
+        $this->presence->flag($user, "{$user->name} skipped the front door — office to confirm start time", $room, $device);
+
         $user->clearKioskFailures();
-        $device?->touchSeen();
+        $device->touchSeen();
+
+        $at = $punch->punched_at->format('g:i A');
 
         return [
-            'status' => 'ok',
-            'action' => $action,
-            'at' => $punch->punched_at->format('g:i A'),
-            'user' => $user,
+            'status' => 'auto_clock_in',
+            'done' => [
+                'tone' => 'ok',
+                'title' => 'Clocked in for you',
+                'sub' => "You weren’t clocked in, so we clocked you in at {$at} and checked you into {$room}. Next time, start at the front door.",
+                'warning' => null,
+            ],
+        ];
+    }
+
+    /**
+     * One of the room tablet's two buttons, pressed.
+     *
+     * A room tap from a break ends the break (the punch is the tablet's);
+     * from a room it is a move; from the office it is a check-in. The break
+     * button is Start Break at the door under another name.
+     */
+    public function tabletPunch(User $user, string $action, ?string $room, string $method, StaffDevice $device, ?string $ip = null): array
+    {
+        $status = $this->presence->status($user);
+
+        if ($status['state'] === StaffPresence::OFF) {
+            return ['status' => 'stale', 'user' => $user];
+        }
+
+        $tablet = $device->classroom;
+
+        if ($action === self::TABLET_CHECK_IN) {
+            [$valid, $to] = $this->presence->resolveRoom($room ?? $tablet);
+
+            if (! $valid || $to === null) {
+                // RULE: no "Office / no room" at a tablet — that is done at the door.
+                return ['status' => 'stale', 'user' => $user];
+            }
+
+            $ending = $status['state'] === StaffPresence::ON_BREAK;
+            $from = $status['room'];
+            $lines = [];
+
+            if ($ending) {
+                $type = $this->clock->state($user, today()->toDateString()) === TimeClock::LUNCH ? TimePunch::LUNCH_END : TimePunch::BREAK_END;
+                $this->writePunch($user, $type, TimePunch::SOURCE_ROOM_TABLET, $method, $device, $ip);
+                $minutes = $status['since'] ? (int) $status['since']->diffInMinutes(now()) : 0;
+                $this->presence->logPunch($user, "{$user->name} ended break ({$minutes} min) · {$tablet} tablet", $device);
+                $lines[] = 'Break ended.';
+            } elseif ($from !== null && $from === $to) {
+                return ['status' => 'already_here', 'user' => $user];
+            } elseif ($from !== null) {
+                $this->presence->logRoom($user, $from, "{$user->name} left {$from}", $device);
+                $lines[] = "Checked out of {$from}.";
+            }
+
+            $left = $this->presence->openCheckin($user);
+            $this->presence->checkIn($user, $to, StaffRoomCheckin::VIA_TABLET, $device);
+            $this->presence->logRoom($user, $to, "{$user->name} → {$to} ({$tablet} tablet)", $device);
+
+            // The room they walked out of may be short now. Checked after the
+            // move so the person is counted where they are, not where they were.
+            $warning = ($left !== null && $left->classroom !== $to) ? $this->presence->shortWarning($left, $user, $device) : null;
+
+            $user->clearKioskFailures();
+            $device->touchSeen();
+
+            return [
+                'status' => 'ok',
+                'action' => $action,
+                'done' => [
+                    'tone' => 'ok',
+                    'title' => "You’re in {$to}",
+                    'sub' => trim(implode(' ', $lines)." Checked into {$to} at ".now()->format('g:i A').'.'),
+                    'warning' => $warning,
+                ],
+            ];
+        }
+
+        if ($action === self::TABLET_BREAK) {
+            if ($status['state'] === StaffPresence::ON_BREAK || ! SettingController::tracksTime()) {
+                return ['status' => 'stale', 'user' => $user];
+            }
+
+            $this->writePunch($user, TimePunch::BREAK_START, TimePunch::SOURCE_ROOM_TABLET, $method, $device, $ip);
+            $this->presence->logPunch($user, "{$user->name} started break ({$tablet} tablet)", $device);
+
+            $left = $this->presence->leave($user, StaffRoomCheckin::ENDED_BREAK, $device);
+            if ($left !== null && ! $left->isOffice()) {
+                $this->presence->logRoom($user, $left->classroom, "{$user->name} left {$left->classroom}", $device);
+            }
+
+            $user->clearKioskFailures();
+            $device->touchSeen();
+
+            return [
+                'status' => 'ok',
+                'action' => $action,
+                'done' => [
+                    'tone' => 'brk',
+                    'title' => 'Enjoy your break',
+                    'sub' => 'Break started at '.now()->format('g:i A').'. End it at the front door or by tapping into any room.',
+                    'warning' => $this->presence->shortWarning($left, $user, $device),
+                ],
+            ];
+        }
+
+        return ['status' => 'stale', 'user' => $user];
+    }
+
+    /**
+     * The room tablet's screen for one person: where they are, the big
+     * button for this room, the other rooms, and whether a break is on offer.
+     */
+    public function tabletScreenFor(User $user, StaffDevice $device): array
+    {
+        $status = $this->presence->status($user);
+        $tablet = $device->classroom;
+        $here = $status['state'] === StaffPresence::IN_ROOM && $status['room'] === $tablet;
+        $tiles = $tablet ? $this->presence->tilesFor($user, except: $tablet) : $this->presence->tilesFor($user);
+        $summary = $tablet ? $this->presence->roomSummary($tablet) : null;
+
+        $now = match ($status['state']) {
+            StaffPresence::ON_BREAK => 'On break since '.($status['since']?->format('g:i A') ?? '—').' · was in '.($status['last_room'] ?? 'the office'),
+            StaffPresence::IN_ROOM => 'Now: '.$status['room'].' since '.($status['since']?->format('g:i A') ?? '—'),
+            StaffPresence::NO_ROOM => 'Now: office / no room'.($status['since'] ? ' since '.$status['since']->format('g:i A') : ''),
+            default => 'Not on the clock.',
+        };
+
+        $hereSub = match (true) {
+            $status['state'] === StaffPresence::ON_BREAK => 'Ends your break',
+            $status['room'] !== null => 'Checks you out of '.$status['room'],
+            default => 'From the office',
+        };
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'first_name' => $user->firstName(),
+            'state' => $status['state'],
+            'on_break' => $status['state'] === StaffPresence::ON_BREAK,
+            'now' => $now,
+            'is_here' => $here,
+            'can_here' => $tablet !== null && ! $here,
+            'here_sub' => $summary ? $hereSub.' · '.$summary['sub'] : $hereSub,
+            'rooms' => array_map(fn (array $tile) => $tile + [
+                'is_here' => $status['state'] === StaffPresence::IN_ROOM && $status['room'] === $tile['room'],
+            ], $tiles),
+            'can_break' => $status['state'] !== StaffPresence::ON_BREAK && SettingController::tracksTime(),
         ];
     }
 
@@ -278,6 +537,15 @@ class StaffKiosk
         'lunch_end' => 'Back on the clock',
     ];
 
+    /** The same press as the activity feed tells it. */
+    public const FEED = [
+        'clock_in' => 'clocked in',
+        'clock_out' => 'clocked out',
+        'break_start' => 'started break',
+        'break_end' => 'ended break',
+        'lunch_end' => 'ended lunch',
+    ];
+
     /**
      * The screen for one person: who they are, where they stand, what they may
      * press, and the two facts underneath — what they last did and how much
@@ -287,10 +555,12 @@ class StaffKiosk
     {
         $today = today()->toDateString();
         $day = $this->clock->day($user->id, $today);
+        $status = $this->presence->status($user);
 
         return [
             'id' => $user->id,
             'name' => $user->name,
+            'first_name' => $user->firstName(),
             'staff_id' => $user->staffId(),
             'initials' => $user->initials,
             'state' => $day['state'],
@@ -300,13 +570,23 @@ class StaffKiosk
                 TimeClock::LUNCH => 'At lunch',
                 default => 'Not clocked in',
             },
+            // Where they stand in the four-state model (HANDOFF §5.1), the
+            // pill that names it, and the one sentence under the name.
+            'presence' => $status['state'],
+            'presence_label' => StaffPresence::LABELS[$status['state']],
+            'room' => $status['room'],
+            'last_room' => $status['last_room'],
+            'line' => $this->presence->line($user, $status, $day),
             // so_far already counts the completed stretches and adds the one
             // still running; 'worked' is the closed total. Adding them would
             // show a morning twice.
             'worked_minutes' => $day['so_far'],
             'since' => $this->sinceLine($day),
             'last_activity' => $this->lastActivity($user),
-            'actions' => $this->actionsFor($user),
+            'actions' => $this->actionsFor($user, $status),
+            // The room picker's tiles, scheduled room first. Sent with the
+            // card so picking a room is one round trip, not two.
+            'rooms' => $this->presence->tilesFor($user),
             // What the office has planned for them today (Phase 5): the shift
             // they were given and any change the Staff page holds for the
             // date, so the note reaches the person at the clock, not only
@@ -341,7 +621,11 @@ class StaffKiosk
     /** "On the clock since 7:54 AM", or nothing when they are not. */
     private function sinceLine(array $day): ?string
     {
-        if ($day['first_in'] === null) {
+        // The bug from staging (HANDOFF §5.2): "On the clock since 9:24 AM"
+        // under somebody who had clocked out. The first IN of the day is a
+        // fact about the morning, not about now; once they are off it is
+        // not said.
+        if ($day['first_in'] === null || $day['state'] === TimeClock::OFF) {
             return null;
         }
 

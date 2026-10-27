@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\RoomSchedule;
 use App\Models\Setting;
+use App\Models\StaffDevice;
 
 /**
  * The centre's rooms and hours, as Settings → Rooms & hours has them.
@@ -53,6 +54,47 @@ class CentreSettings
     }
 
     /** A centre-wide value by key — see KEYS. */
+    /**
+     * The four digits that tell a room tablet which room it is in.
+     *
+     * Plain in Settings rather than hashed: it is read back on the Rooms &
+     * hours page for the director to hand to whoever moves a tablet, and it
+     * chooses a room, nothing more — see RoomTabletController::setup.
+     */
+    public function tabletCode(string $room): ?string
+    {
+        $code = Setting::get("rooms.$room.tablet_code", null);
+
+        return blank($code) ? null : (string) $code;
+    }
+
+    /** The room a code names, or null for a code nobody set. */
+    public function roomForTabletCode(string $code): ?string
+    {
+        foreach (ClassroomAssignment::rooms() as $room) {
+            if ($this->tabletCode($room) !== null && hash_equals($this->tabletCode($room), $code)) {
+                return $room;
+            }
+        }
+
+        return null;
+    }
+
+    /** "1 tablet · seen 10:28a", or "No tablet yet", for the Rooms table. */
+    public function tabletsLine(string $room): string
+    {
+        $tablets = StaffDevice::tabletsIn($room);
+
+        if ($tablets->isEmpty()) {
+            return 'No tablet yet';
+        }
+
+        $seen = $tablets->first()->last_seen_at;
+
+        return $tablets->count().' tablet'.($tablets->count() === 1 ? '' : 's')
+            .($seen ? ' · seen '.($seen->isToday() ? $seen->format('g:ia') : $seen->format('D g:ia')) : ' · never used');
+    }
+
     public function get(string $key): mixed
     {
         $default = self::KEYS[$key]['default'] ?? null;
@@ -92,6 +134,9 @@ class CentreSettings
                 'opens_at' => $schedule ? substr((string) $schedule->opens_at, 0, 5) : null,
                 'closes_at' => $schedule ? substr((string) $schedule->closes_at, 0, 5) : null,
                 'check' => $check,
+                // The room tablet's code and what is paired to it (HANDOFF §11).
+                'tablet_code' => $this->tabletCode($room),
+                'tablets' => $this->tabletsLine($room),
             ];
         }
 

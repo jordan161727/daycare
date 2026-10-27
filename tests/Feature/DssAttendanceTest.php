@@ -59,7 +59,12 @@ class DssAttendanceTest extends TestCase
 
     public function test_only_the_named_person_sees_it(): void
     {
-        $this->actingAs($this->ray)->get(route('dss.index'))->assertOk()->assertSee('Only visible to Ray K');
+        $this->actingAs($this->ray)->get(route('dss.index'))->assertOk()->assertSee('Only visible to Ray K')
+            // The grid is <table class="grid">, and Tailwind's .grid utility
+            // would make it a CSS grid: the header and the body then lay out
+            // as two tables and the day columns drift apart (client, 28 Oct
+            // 2026). The page's own rule puts it back.
+            ->assertSee('.ch .grid { display: table;', false);
         $this->actingAs($this->other)->get(route('dss.index'))->assertForbidden();
         $this->actingAs($this->other)->getJson(route('dss.grid'))->assertForbidden();
     }

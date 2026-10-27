@@ -14,7 +14,7 @@
     .ch .vio { background: #ede9fe; color: #5b21b6; }
     .ch .bar { position: sticky; top: 0; z-index: 5; }
     .ch .gridwrap { overflow: auto; max-height: min(72vh, 820px); outline: none; }
-    .ch .grid { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+    .ch .grid { display: table; /* Tailwind's .grid utility would turn the table into a CSS grid and split the header from the body (client, 28 Oct 2026) */ border-collapse: separate; border-spacing: 0; font-size: 12px; }
     .ch .grid th { position: sticky; top: 0; z-index: 2; background: #fff; font-size: 10.5px; font-weight: 700; color: #5f6676; padding: 6px 2px; border-bottom: 1px solid #e7e9f0; text-align: center; white-space: nowrap; cursor: pointer; letter-spacing: 0; text-transform: none; }
     .ch .grid th.today { background: #d8ecfb; color: #1b5e91; }
     .ch .grid th.closed { color: #b5bac6; cursor: default; }

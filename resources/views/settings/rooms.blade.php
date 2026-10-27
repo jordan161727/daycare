@@ -46,25 +46,32 @@
                     <table class="w-full text-sm" data-rooms-table>
                         <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/5 dark:text-slate-400">
                             <tr>
-                                <th class="px-4 py-2.5">Room</th>
-                                <th class="px-4 py-2.5">Ages</th>
-                                <th class="px-4 py-2.5">Staff : children</th>
-                                <th class="px-4 py-2.5">Capacity</th>
-                                <th class="px-4 py-2.5">NY max group</th>
-                                <th class="px-4 py-2.5">Room open hours</th>
-                                <th class="px-4 py-2.5">Check</th>
+                                <th class="whitespace-nowrap px-2.5 py-2.5">Room</th>
+                                <th class="whitespace-nowrap px-2.5 py-2.5">Ages</th>
+                                <th class="px-2.5 py-2.5">Staff : children</th>
+                                <th class="px-2.5 py-2.5">Capacity</th>
+                                <th class="px-2.5 py-2.5">NY max group</th>
+                                <th class="px-2.5 py-2.5">Room open hours</th>
+                                <th class="px-2.5 py-2.5">Room tablet code</th>
+                                <th class="whitespace-nowrap px-2.5 py-2.5">Check</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 dark:divide-white/10">
                             @foreach($rooms as $i => $row)
                                 <tr data-room-row="{{ $row['room'] }}">
-                                    <td class="px-4 py-2.5 font-semibold"><x-room-icon :room="$row['room']" size="text-sm" /> {{ $row['room'] }}<input type="hidden" name="rooms[{{ $i }}][room]" value="{{ $row['room'] }}"></td>
-                                    <td class="px-4 py-2.5 text-slate-600 dark:text-slate-300">{{ $row['ages'] }}</td>
-                                    <td class="px-4 py-2.5"><span class="inline-flex items-center gap-1 tabular-nums">1 : <input type="number" name="rooms[{{ $i }}][ratio]" value="{{ old("rooms.$i.ratio", $row['ratio']) }}" min="1" max="30" class="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} ratio"></span></td>
-                                    <td class="px-4 py-2.5"><input type="number" name="rooms[{{ $i }}][capacity]" value="{{ old("rooms.$i.capacity", $row['capacity']) }}" min="0" max="60" class="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800 {{ $row['check']['tone'] === 'warn' && str_contains($row['check']['text'], 'group') ? 'border-amber-400' : '' }}" aria-label="{{ $row['room'] }} capacity"></td>
-                                    <td class="px-4 py-2.5 tabular-nums text-slate-600 dark:text-slate-300">{{ $row['ny_max'] ?: '—' }}</td>
-                                    <td class="px-4 py-2.5"><span class="inline-flex items-center gap-1.5 tabular-nums"><input type="time" name="rooms[{{ $i }}][opens_at]" value="{{ old("rooms.$i.opens_at", $row['opens_at']) }}" class="rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} opens"> – <input type="time" name="rooms[{{ $i }}][closes_at]" value="{{ old("rooms.$i.closes_at", $row['closes_at']) }}" class="rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} closes"></span></td>
-                                    <td class="px-4 py-2.5"><span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold {{ $row['check']['tone'] === 'warn' ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-100' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' }}" data-room-check="{{ $row['check']['tone'] }}">{{ $row['check']['text'] }}</span></td>
+                                    <td class="whitespace-nowrap px-2.5 py-2.5 font-semibold"><x-room-icon :room="$row['room']" size="text-sm" /> {{ $row['room'] }}<input type="hidden" name="rooms[{{ $i }}][room]" value="{{ $row['room'] }}"></td>
+                                    <td class="whitespace-nowrap px-2.5 py-2.5 text-slate-600 dark:text-slate-300">{{ $row['ages'] }}</td>
+                                    <td class="px-2.5 py-2.5"><span class="inline-flex items-center gap-1 whitespace-nowrap tabular-nums">1 : <input type="number" name="rooms[{{ $i }}][ratio]" value="{{ old("rooms.$i.ratio", $row['ratio']) }}" min="1" max="30" class="w-14 rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} ratio"></span></td>
+                                    <td class="px-2.5 py-2.5"><input type="number" name="rooms[{{ $i }}][capacity]" value="{{ old("rooms.$i.capacity", $row['capacity']) }}" min="0" max="60" class="w-16 rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800 {{ $row['check']['tone'] === 'warn' && str_contains($row['check']['text'], 'group') ? 'border-amber-400' : '' }}" aria-label="{{ $row['room'] }} capacity"></td>
+                                    <td class="px-2.5 py-2.5 tabular-nums text-slate-600 dark:text-slate-300">{{ $row['ny_max'] ?: '—' }}</td>
+                                    <td class="px-2.5 py-2.5"><span class="inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums"><input type="time" name="rooms[{{ $i }}][opens_at]" value="{{ old("rooms.$i.opens_at", $row['opens_at']) }}" class="rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} opens"> – <input type="time" name="rooms[{{ $i }}][closes_at]" value="{{ old("rooms.$i.closes_at", $row['closes_at']) }}" class="rounded-lg border border-slate-200 px-2 py-1 text-sm dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} closes"></span></td>
+                                    {{-- The four digits keyed into a tablet's gear to make it this
+                                         room (HANDOFF §5.3). Never a staff PIN — the save refuses it. --}}
+                                    <td class="px-2.5 py-2.5">
+                                        <input type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" name="rooms[{{ $i }}][tablet_code]" value="{{ old("rooms.$i.tablet_code", $row['tablet_code']) }}" placeholder="····" class="w-20 rounded-lg border border-slate-200 px-2 py-1 font-mono text-sm tabular-nums dark:border-white/10 dark:bg-night-800" aria-label="{{ $row['room'] }} room tablet code">
+                                        <span class="block text-[11px] text-slate-500 dark:text-slate-400" data-room-tablets="{{ $row['room'] }}">{{ $row['tablets'] }}</span>
+                                    </td>
+                                    <td class="whitespace-nowrap px-2.5 py-2.5"><span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold {{ $row['check']['tone'] === 'warn' ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-100' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200' }}" data-room-check="{{ $row['check']['tone'] }}">{{ $row['check']['text'] }}</span></td>
                                 </tr>
                             @endforeach
                         </tbody>

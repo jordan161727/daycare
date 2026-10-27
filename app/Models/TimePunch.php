@@ -38,6 +38,18 @@ class TimePunch extends Model
     public const SOURCE_SUPERVISOR = 'supervisor';
 
     /**
+     * A room tablet made it, not the front door.
+     *
+     * Two ways that happens: somebody who was never clocked in keyed their PIN
+     * at a room tablet and was clocked in for them (HANDOFF §5.3, the owner's
+     * "auto clock-in"), or somebody on a break tapped into a room and the tap
+     * ended the break. Marked so payroll can see which mornings started at a
+     * tablet rather than the door, because those are the start times the
+     * office is asked to confirm.
+     */
+    public const SOURCE_ROOM_TABLET = 'room_tablet';
+
+    /**
      * Why a supervisor changed a day.
      *
      * A fixed list, because "forgot" typed forty different ways is a column

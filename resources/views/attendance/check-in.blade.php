@@ -165,21 +165,10 @@
         </a>
 @endif
 
-@if($canAmend)
-            {{-- Edit unlocks the days already gone, so a check nobody
-                 recorded at the time can be put right. A mode rather than a
-                 permanent state: the screen somebody stands in front of all
-                 day offers today and nothing else, because the commonest
-                 mistake on a thirty-column grid is the column next to the
-                 one you meant. On a past day the switch reads "Read only"
-                 until it is thrown — a past day is for reading first. --}}
-            <div class="att-mode" :data-edit="editing ? 'true' : 'false'">
-                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : (day === today ? 'Live mode' : 'Read only')" @click="editing = ! editing; closePicker()">
-                    <span class="att-knob" x-html="editing ? icons.edit : icons.lock"></span>
-                </button>
-                <span class="att-mode-name" x-text="editing ? 'Edit mode' : (day === today ? 'Live mode' : 'Read only')"></span>
-            </div>
-        @endif
+        {{-- No Live / Edit switch (the client, 28 Oct 2026: "keep this
+             header, just remove the Live mode switch"). Today is live for
+             everybody; a day already gone opens in Edit for a director and
+             read-only for a teacher — see `editing` at the foot. --}}
 
         {{-- No ⋯ view menu here, at the client's ask. This screen is the
              cards and nothing else; the week sheet is the register's, under
@@ -188,11 +177,11 @@
 
     @if($isPast)
         {{-- A day already gone is read, not lived: the bar says so, and the
-             clock and live mode are off under it. A director's Edit switch
-             takes the bar away and brings the corrections back. --}}
+             clock is off under it. A director opens the day in Edit and
+             never sees the bar. --}}
         <div x-show="! editing" class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[#E7E9F0] px-4 py-3 text-sm text-[#1C2130] dark:bg-white/10 dark:text-slate-100" role="note" data-read-only-bar>
             <svg class="size-4 shrink-0 text-[#5F6676] dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
-            <span><b>Viewing {{ $dayLabel }} — read only.</b> Clock in/out and live mode are off. Tap a child to read that day's comment.</span>
+            <span><b>Viewing {{ $dayLabel }} — read only.</b> Clock in/out is off. Tap a child to read that day's comment.</span>
         </div>
     @endif
 
@@ -298,7 +287,7 @@
     <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
         Today's column takes a press: an empty <b>IN</b> checks the child in, a time on <b>OUT</b> checks them out, and a chip sets or corrects the code.
         @if($canAmend)
-            Earlier days are read-only until you switch <b>Edit mode</b> on, above; in Edit a past day takes a symptom code but not a time &mdash; times are corrected on the <a href="{{ route('attendance.index') }}" class="underline underline-offset-2">attendance register</a>, which records who changed them.
+            An earlier day takes a symptom code but not a time &mdash; times are corrected on the <a href="{{ route('attendance.index') }}" class="underline underline-offset-2">attendance register</a>, which records who changed them.
         @else
             Earlier days are read-only here &mdash; a director can correct them, or they can be put right on the <a href="{{ route('attendance.index') }}" class="underline underline-offset-2">attendance register</a>.
         @endif
@@ -817,7 +806,6 @@
                 <template x-if="! correcting(child) && ! readOnly() && slotOut(child)">
                     <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
                         Clocking in again keeps the <b x-text="slotOf(child).out"></b> clock-out on the record.
-                        @if($canAmend) Switch <b>Edit mode</b> on to correct the checks. @endif
                     </p>
                 </template>
             </div>
@@ -969,14 +957,11 @@ function checkInGrid() { return {
     // entries' "so far" read the same timezone the times on screen are in.
     timezone: @js(config('app.timezone')),
     canAmend: @js($canAmend),
-    // Off until it is thrown, today or any day: a day already gone opens
-    // read-only (20 Oct 2026), for reading its comments, and the director
-    // switches Edit on to correct it.
-    editing: false,
-    icons: {
-        lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
-        edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
-    },
+    // No switch any more (the client, 28 Oct 2026). Today is live for
+    // everybody, so the cards clock children in and out; a day already gone
+    // opens in Edit for a director, who corrects its checks, and read-only
+    // for a teacher. The server decides each press again regardless.
+    editing: @js($canAmend && $isPast),
     search: '',
     // The room the screen opens on: a teacher's own, the director's everyone,
     // or the one the address names (/check-in?infant). The address follows

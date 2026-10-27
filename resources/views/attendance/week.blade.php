@@ -39,14 +39,10 @@
                         <span class="muted">Nobody has signed in yet today.</span>
                     @endforelse
                 </div>
-                <div style="position: relative;" x-data="{ more: false }">
-                    <button type="button" class="btn" aria-label="More options" @click="more = ! more">⋯</button>
-                    <div x-show="more" x-cloak class="menu" @click.outside="more = false">
-                        <a class="mi" href="{{ route('attendance.classic', ['date' => $date]) }}">Classic register (cards, projection, room cover)</a>
-                        <a class="mi" href="{{ route('attendance.month-sheet') }}">Month sheet</a>
-                        <a class="mi" href="{{ route('check-in.index') }}">Teacher Attendance</a>
-                    </div>
-                </div>
+                {{-- The "⋯" menu that stood here (classic register, month
+                     sheet, Teacher Attendance) was removed at Jordan's request
+                     (28 Oct 2026). The pages still answer at their addresses;
+                     Teacher Attendance has the sidebar and the Linked bar. --}}
             </div>
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;" data-room-chips>

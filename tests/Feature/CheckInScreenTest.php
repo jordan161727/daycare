@@ -412,14 +412,13 @@ class CheckInScreenTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // The roster is about that day. It opens read-only (20 Oct 2026) —
-        // a day gone is for reading its comments first — with the Edit
-        // switch there for the director to throw.
+        // The roster is about that day, and for a director it opens in Edit:
+        // the Live / Edit switch came off the header (the client, 28 Oct
+        // 2026), so there is nothing to throw.
         $this->assertStringContainsString("day: '2026-09-21'", $html);
-        $this->assertStringContainsString('editing: false,', $html);
-        $this->assertStringContainsString('Viewing Monday, Sep 21 — read only.', $html);
-        $this->assertStringContainsString('att-switch', $html);
-        $this->assertStringContainsString("(day === today ? 'Live mode' : 'Read only')", $html);
+        $this->assertStringContainsString('editing: true,', $html);
+        $this->assertStringNotContainsString('att-switch', $html);
+        $this->assertStringNotContainsString('Live mode', $html);
 
         // The day is chosen from a stepper whose calendar stops at today,
         // and today is one press away.
@@ -491,7 +490,7 @@ class CheckInScreenTest extends TestCase
 
         $this->assertStringContainsString("day: '2026-09-21'", $html);
         $this->assertStringContainsString('data-read-only-bar', $html);
-        $this->assertStringContainsString('Clock in/out and live mode are off.', $html);
+        $this->assertStringContainsString('Clock in/out is off.', $html);
         $this->assertStringNotContainsString('att-switch', $html);
         $this->assertStringContainsString('data-back-to-today', $html);
         // The clock form is gated on readOnly(), which a teacher cannot turn off.
@@ -731,22 +730,28 @@ class CheckInScreenTest extends TestCase
         $this->assertStringNotContainsString('>·<', $html);
     }
 
-    public function test_edit_mode_is_offered_to_the_director_alone(): void
+    public function test_edit_on_a_past_day_is_the_directors_alone_and_nobody_gets_a_switch(): void
     {
         /*
          * A check nobody recorded at the time can be put right, but only by
-         * somebody who can be asked about it afterwards. A teacher's screen
-         * offers today and nothing else, which is also what the server
-         * enforces — this only decides whether the switch is drawn.
+         * somebody who can be asked about it afterwards. There is no switch
+         * to throw (the client, 28 Oct 2026): a director's past day opens
+         * in Edit, a teacher's opens read-only, and today is live for both.
+         * The server enforces the same either way.
          */
-        $this->assertStringContainsString(
-            'att-switch',
-            $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent(),
-        );
+        foreach ([$this->admin, $this->teacher] as $user) {
+            $html = $this->actingAs($user)->get(route('check-in.index'))->assertOk()->getContent();
+            $this->assertStringNotContainsString('att-switch', $html);
+            $this->assertStringContainsString('editing: false,', $html);
+        }
 
-        $this->assertStringNotContainsString(
-            'att-switch',
-            $this->actingAs($this->teacher)->get(route('check-in.index'))->assertOk()->getContent(),
+        $this->assertStringContainsString(
+            'editing: true,',
+            $this->actingAs($this->admin)->get(route('check-in.index', ['date' => '2026-09-21']))->assertOk()->getContent(),
+        );
+        $this->assertStringContainsString(
+            'editing: false,',
+            $this->actingAs($this->teacher)->get(route('check-in.index', ['date' => '2026-09-21']))->assertOk()->getContent(),
         );
     }
 

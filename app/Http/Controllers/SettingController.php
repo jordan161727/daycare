@@ -139,6 +139,15 @@ class SettingController extends Controller
             'rooms.*.capacity' => ['required', 'integer', 'between:0,60'],
             'rooms.*.opens_at' => ['nullable', 'date_format:H:i'],
             'rooms.*.closes_at' => ['nullable', 'date_format:H:i', 'after:rooms.*.opens_at'],
+            // The room tablet's code (HANDOFF §5.3). RULES: four digits, one
+            // room per code, and never a code that is also somebody's PIN —
+            // a PIN keyed at the gear must not move the tablet, and a code
+            // keyed at the door must not clock anybody in.
+            'rooms.*.tablet_code' => ['nullable', 'digits:4', 'distinct', function ($attribute, $value, $fail) {
+                if (filled($value) && User::kioskPinTaken((string) $value)) {
+                    $fail('A room code cannot be the same as a staff PIN.');
+                }
+            }],
             'centre.centre_opens' => ['required', 'date_format:H:i'],
             'centre.centre_closes' => ['required', 'date_format:H:i', 'after:centre.centre_opens'],
             'centre.earliest_start' => ['required', 'date_format:H:i'],
@@ -155,6 +164,7 @@ class SettingController extends Controller
         foreach ($validated['rooms'] as $row) {
             Setting::put("rooms.{$row['room']}.ratio", $row['ratio']);
             Setting::put("rooms.{$row['room']}.capacity", $row['capacity']);
+            Setting::put("rooms.{$row['room']}.tablet_code", $row['tablet_code'] ?? '');
             if ($row['opens_at'] && $row['closes_at']) {
                 \App\Models\RoomSchedule::updateOrCreate(['room' => $row['room']], ['opens_at' => $row['opens_at'], 'closes_at' => $row['closes_at']]);
             }

@@ -15,7 +15,18 @@ use Illuminate\Support\Str;
  */
 class StaffDevice extends Model
 {
-    protected $fillable = ['name', 'location', 'is_active'];
+    /** The front door: payroll punches. */
+    public const KIND_CLOCK = 'clock';
+
+    /** A classroom tablet: room check-ins, for the ratios. */
+    public const KIND_ROOM = 'room';
+
+    public const KINDS = [
+        self::KIND_CLOCK => 'Front door clock',
+        self::KIND_ROOM => 'Room tablet',
+    ];
+
+    protected $fillable = ['name', 'location', 'is_active', 'kind', 'classroom'];
 
     protected $casts = [
         'is_active' => 'boolean',
@@ -54,13 +65,56 @@ class StaffDevice extends Model
         return $token;
     }
 
+    public function isRoomTablet(): bool
+    {
+        return $this->kind === self::KIND_ROOM;
+    }
+
+    public function kindLabel(): string
+    {
+        return self::KINDS[$this->kind] ?? self::KINDS[self::KIND_CLOCK];
+    }
+
+    /** The page this kind of device lives on. */
+    public function kioskRoute(): string
+    {
+        return $this->isRoomTablet() ? 'room.kiosk' : 'clock.kiosk';
+    }
+
     /** The address this device is paired by, for showing and for a QR. */
     public function pairingUrl(): ?string
     {
         return blank($this->token)
             ? null
-            : route('clock.kiosk', ['token' => $this->token]);
+            : route($this->kioskRoute(), ['token' => $this->token]);
     }
+
+    /** Tell a room tablet which room it is standing in. */
+    public function setRoom(?string $room): void
+    {
+        $this->forceFill(['classroom' => $room])->save();
+    }
+
+    /** Room tablets currently set to a room, for Settings → Rooms & hours. */
+    public static function tabletsIn(string $room)
+    {
+        return static::where('is_active', true)
+            ->where('kind', self::KIND_ROOM)
+            ->where('classroom', $room)
+            ->orderByDesc('last_seen_at')
+            ->get();
+    }
+
+    /**
+     * The one cookie both kinds of screen pair by.
+     *
+     * One name on purpose: a tablet paired at /clock and then opened at /room
+     * is the same paired tablet, and the kind on the row says which page it
+     * should be on. See StaffClockController::PAIRED_DAYS for why a cookie.
+     */
+    public const COOKIE = 'staff_clock_device';
+
+    public const SESSION_KEY = 'staff_clock.device';
 
     /** Whether this is the device the token belongs to. */
     public function tokenMatches(string $token): bool

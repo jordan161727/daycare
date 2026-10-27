@@ -153,9 +153,23 @@ class DashboardSnapshot
         $minute = $now->copy()->timezone($timezone)->hour * 60 + $now->copy()->timezone($timezone)->minute;
         $shifts = StaffShift::whereDate('shift_date', $today)->get()->groupBy('user_id');
 
+        $presence = app(StaffPresence::class);
+
         return User::teachers()->get()
             ->filter(fn (User $user) => $this->clock->state($user, $today) === TimeClock::WORKING)
-            ->map(function (User $user) use ($shifts, $minute) {
+            ->map(function (User $user) use ($shifts, $minute, $presence) {
+                // Where the kiosks say they are, first (HANDOFF §5.1: only
+                // working_in_room counts). An open check-in names the room, or
+                // the office, which counts nowhere. Somebody on the clock who
+                // was never placed — the app's own clock, a typed punch — is
+                // read off the roster as before, so a centre without room
+                // tablets yet sees the same dashboard it always did.
+                $status = $presence->status($user);
+
+                if ($status['placed']) {
+                    return ['user' => $user, 'room' => $status['room']];
+                }
+
                 $shift = ($shifts[$user->id] ?? collect())->first(fn (StaffShift $shift) => $shift->covers($minute))
                     ?? ($shifts[$user->id] ?? collect())->first();
 

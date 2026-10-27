@@ -23,6 +23,8 @@ use App\Http\Controllers\FloorPlanController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\KioskController;
+use App\Http\Controllers\RoomTabletController;
+use App\Http\Controllers\StaffPresenceController;
 use App\Http\Controllers\DssController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\MonthSheetController;
@@ -94,6 +96,23 @@ Route::middleware('throttle:kiosk')->group(function () {
     // guessed at — held to its own tight budget. See the kiosk limiters.
     Route::post('/clock/identify', [StaffClockController::class, 'identify'])
         ->middleware('throttle:kiosk-secret')->name('clock.kiosk.identify');
+});
+
+/*
+ * The room tablets (HANDOFF §5.3). Paired like the clock, keyed with the
+ * same PIN, and signed out for the same reason. What they record is which
+ * room somebody is in, for the ratios; they never clock anyone out.
+ *
+ * Two presses check a secret — the PIN, and the four-digit room code behind
+ * the gear — and both sit on the tight limiter.
+ */
+Route::middleware('throttle:kiosk')->group(function () {
+    Route::get('/room', [RoomTabletController::class, 'index'])->name('room.kiosk');
+    Route::post('/room/punch', [RoomTabletController::class, 'punch'])->name('room.kiosk.punch');
+    Route::post('/room/identify', [RoomTabletController::class, 'identify'])
+        ->middleware('throttle:kiosk-secret')->name('room.kiosk.identify');
+    Route::post('/room/setup', [RoomTabletController::class, 'setup'])
+        ->middleware('throttle:kiosk-secret')->name('room.kiosk.setup');
 });
 
 /*
@@ -411,6 +430,15 @@ Route::get('/devices/{device}/link', [StaffDeviceController::class, 'link'])->na
 Route::get('/devices/{device}/link.svg', [StaffDeviceController::class, 'qr'])->name('devices.link.qr');
 Route::post('/devices/{device}/repair', [StaffDeviceController::class, 'repair'])->name('devices.repair');
 Route::delete('/devices/{device}', [StaffDeviceController::class, 'destroy'])->name('devices.destroy');
+
+// Who's where: the staff presence board the kiosks feed (HANDOFF §5.3.1),
+// and the flags the office has to answer. Director only, like the devices.
+Route::get('/staff/whos-where', [StaffPresenceController::class, 'board'])->middleware('never-cached')->name('staff.presence');
+Route::post('/staff/whos-where/flags/{event}', [StaffPresenceController::class, 'resolve'])->name('staff.presence.resolve');
+
+// Activity: everything anyone did, one line each (Ray, 28 Oct 2026).
+// Director only — it names who fixed what.
+Route::get('/staff/activity', [\App\Http\Controllers\ActivityLogController::class, 'index'])->middleware('never-cached')->name('staff.activity');
 
 Route::post('/teachers/{staff}/card', [StaffCardController::class, 'issue'])->name('staff.card.issue');
 Route::get('/teachers/{staff}/card.svg', [StaffCardController::class, 'show'])->name('staff.card.show');

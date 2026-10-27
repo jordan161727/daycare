@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\StaffDevice;
+use App\Services\ClassroomAssignment;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\SvgWriter;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Registering the screens staff punch at.
@@ -34,7 +36,14 @@ class StaffDeviceController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'location' => ['nullable', 'string', 'max:120'],
+            // Front door clock, or a room tablet — and for a tablet, the room
+            // it starts in. The gear on the tablet can change the room later.
+            'kind' => ['nullable', Rule::in(array_keys(StaffDevice::KINDS))],
+            'classroom' => ['nullable', Rule::in(ClassroomAssignment::rooms())],
         ]);
+
+        $data['kind'] = $data['kind'] ?? StaffDevice::KIND_CLOCK;
+        $data['classroom'] = $data['kind'] === StaffDevice::KIND_ROOM ? ($data['classroom'] ?? null) : null;
 
         $device = new StaffDevice($data);
         $device->created_by = $request->user()->id;
@@ -48,7 +57,7 @@ class StaffDeviceController extends Controller
         return redirect()->route('settings.devices')->with('issued_device', [
             'id' => $device->id,
             'name' => $device->name,
-            'url' => route('clock.kiosk', ['token' => $token]),
+            'url' => route($device->kioskRoute(), ['token' => $token]),
         ]);
     }
 
@@ -58,6 +67,8 @@ class StaffDeviceController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'location' => ['nullable', 'string', 'max:120'],
             'is_active' => ['nullable', 'boolean'],
+            'kind' => ['nullable', Rule::in(array_keys(StaffDevice::KINDS))],
+            'classroom' => ['nullable', Rule::in(ClassroomAssignment::rooms())],
         ]);
 
         $device->fill($data)->save();
@@ -110,7 +121,7 @@ class StaffDeviceController extends Controller
         return redirect()->route('settings.devices')->with('issued_device', [
             'id' => $device->id,
             'name' => $device->name,
-            'url' => route('clock.kiosk', ['token' => $token]),
+            'url' => route($device->kioskRoute(), ['token' => $token]),
         ]);
     }
 
