@@ -114,9 +114,14 @@
         </div>
     @endif
 
-    @if($week)
+    @if($draft)
+        {{-- A draft is the director's, not yet a plan to arrange a life around. --}}
+        <p class="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200" data-draft-notice>
+            This week's schedule hasn't been published yet. Your shifts will appear here once the director publishes it.
+        </p>
+    @elseif($week)
         <p class="mt-3 text-xs text-slate-500">
-            Built {{ $week->generated_at?->diffForHumans() }}@if($week->generatedBy) by {{ $week->generatedBy->name }}@endif.
+            @if($week->published_at) Published {{ $week->published_at->diffForHumans() }}. @else Built {{ $week->generated_at?->diffForHumans() }}@if($week->generatedBy) by {{ $week->generatedBy->name }}@endif. @endif
             Ask the director if something here is wrong — shifts are not editable from this screen.
         </p>
     @endif

@@ -173,7 +173,7 @@ class PlannedArrivalTimeTest extends TestCase
         $this->plan(self::FRIDAY, '07:15')->assertOk();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->getContent();
 
@@ -239,7 +239,7 @@ class PlannedArrivalTimeTest extends TestCase
          * of the excuse — the common job — to save a keystroke on the rare one.
          * The tap is the yes/no; the pencil is the hour.
          */
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringContainsString('Expected. Tap: not attending. Pencil: the hour they are due.', $html);
         $this->assertStringContainsString("this.canPlanTime(date) && this.isScheduled(child.id, date, session)", $html);
@@ -256,7 +256,7 @@ class PlannedArrivalTimeTest extends TestCase
          * box and the dot already said this, everywhere else on the sheet, and
          * a day still to come is not a different kind of day.
          */
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // The dashed box says "expected", the dot says "not attending", and
         // both read the same on Thursday as they do on Tuesday.
@@ -279,7 +279,7 @@ class PlannedArrivalTimeTest extends TestCase
          * this sheet, and dashed-versus-solid is a difference somebody has to
          * be looking for. So the key says it in words instead.
          */
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringContainsString('coming, at the hour agreed — not an arrival', $html);
     }

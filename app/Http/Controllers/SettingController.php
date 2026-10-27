@@ -98,6 +98,65 @@ class SettingController extends Controller
         return redirect()->route('settings.children')->with('status', 'Settings saved.');
     }
 
+    /** Settings → Rooms & hours — Phase 1.2: each room's figures and hours, and the centre's day. */
+    public function rooms(\App\Services\CentreSettings $centre)
+    {
+        return view('settings.rooms', [
+            'tab' => 'rooms',
+            'rooms' => $centre->rooms(),
+            'centre' => collect(\App\Services\CentreSettings::KEYS)->map(fn ($meta, $key) => $centre->get($key))->all(),
+            'warnings' => $centre->warnings(),
+        ]);
+    }
+
+    public function updateRooms(Request $request, \App\Services\CentreSettings $centre)
+    {
+        $roomNames = \App\Services\ClassroomAssignment::rooms();
+        $trim = fn ($t) => blank($t) ? null : substr((string) $t, 0, 5);
+        $request->merge([
+            'rooms' => collect($request->input('rooms', []))->map(fn ($row) => array_merge($row, [
+                'opens_at' => $trim($row['opens_at'] ?? null), 'closes_at' => $trim($row['closes_at'] ?? null),
+            ]))->all(),
+            'centre' => collect($request->input('centre', []))->map(fn ($v, $k) => in_array($k, ['longest_shift_hours', 'max_week_hours', 'early_dropoff_room'], true) ? $v : $trim($v))->all(),
+        ]);
+
+        $validated = $request->validate([
+            'rooms' => ['required', 'array'],
+            'rooms.*.room' => ['required', Rule::in($roomNames)],
+            'rooms.*.ratio' => ['required', 'integer', 'between:1,30'],
+            'rooms.*.capacity' => ['required', 'integer', 'between:0,60'],
+            'rooms.*.opens_at' => ['nullable', 'date_format:H:i'],
+            'rooms.*.closes_at' => ['nullable', 'date_format:H:i', 'after:rooms.*.opens_at'],
+            'centre.centre_opens' => ['required', 'date_format:H:i'],
+            'centre.centre_closes' => ['required', 'date_format:H:i', 'after:centre.centre_opens'],
+            'centre.earliest_start' => ['required', 'date_format:H:i'],
+            'centre.early_dropoff_room' => ['required', Rule::in($roomNames)],
+            'centre.school_age_leaves' => ['required', 'date_format:H:i'],
+            'centre.school_age_returns' => ['required', 'date_format:H:i'],
+            'centre.longest_shift_hours' => ['required', 'integer', 'between:1,16'],
+            'centre.max_week_hours' => ['required', 'integer', 'between:1,80'],
+        ], [
+            'centre.centre_closes.after' => 'The centre has to close after it opens.',
+            'rooms.*.closes_at.after' => 'A room has to close after it opens.',
+        ]);
+
+        foreach ($validated['rooms'] as $row) {
+            Setting::put("rooms.{$row['room']}.ratio", $row['ratio']);
+            Setting::put("rooms.{$row['room']}.capacity", $row['capacity']);
+            if ($row['opens_at'] && $row['closes_at']) {
+                \App\Models\RoomSchedule::updateOrCreate(['room' => $row['room']], ['opens_at' => $row['opens_at'], 'closes_at' => $row['closes_at']]);
+            }
+        }
+        foreach ($validated['centre'] as $key => $value) {
+            Setting::put("centre.$key", $value);
+        }
+
+        // Saved, and anything that now disagrees is said on the way back.
+        $warnings = $centre->warnings();
+
+        return redirect()->route('settings.rooms')->with('status', $warnings === [] ? 'Rooms & hours saved.' : 'Rooms & hours saved — '.count($warnings).' thing'.(count($warnings) === 1 ? '' : 's').' worth a look below.');
+    }
+
     /** Who may open the director's screens, and who issued their card. */
     public function administrators()
     {

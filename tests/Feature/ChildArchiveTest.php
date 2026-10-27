@@ -138,8 +138,8 @@ class ChildArchiveTest extends TestCase
             ->assertOk()
             ->assertSee('Goes')
             ->assertDontSee('Stays')
-            ->assertSee("Archived children are not counted in All, Active or Inactive and don't appear in search or Export.", false)
-            ->assertSee('Unarchive Ben Goes')
+            ->assertSee("Archived children are not counted in All, Active or Withdrawn and don't appear in search or Export.", false)
+            ->assertSee('Restore Ben Goes')
             ->assertDontSee(route('children.export'));
     }
 
@@ -184,7 +184,7 @@ class ChildArchiveTest extends TestCase
         $this->actingAs($this->admin)->get(route('children.index'))
             ->assertOk()
             ->assertSee('Goes')
-            ->assertSee('Inactive <span class="ml-0.5 opacity-60">1</span>', false);
+            ->assertSee('Withdrawn <span class="ml-0.5 opacity-60">1</span>', false);
     }
 
     public function test_non_admins_cannot_archive_unarchive_or_change_the_setting(): void

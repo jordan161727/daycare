@@ -35,7 +35,7 @@ class ScheduleEditingTest extends TestCase
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
-        $this->actingAs($this->admin)->get(route('attendance.index', ['date' => '2026-07-29']))->assertOk();
+        $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => '2026-07-29']))->assertOk();
 
         $this->assertDatabaseHas('schedule_weeks', ['week_start' => self::MONDAY]);
         $this->assertSame(5, ScheduleSlot::count());
@@ -54,7 +54,7 @@ class ScheduleEditingTest extends TestCase
         $nextWeek = '2026-08-03';
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => $nextWeek]))
+            ->get(route('attendance.classic', ['date' => $nextWeek]))
             ->assertOk()
             ->assertSee('has not been set up')
             ->assertSee('Open this week');
@@ -77,7 +77,7 @@ class ScheduleEditingTest extends TestCase
 
         $this->actingAs($this->admin)
             ->post(route('attendance.week.open'), ['week_start' => $nextWeek])
-            ->assertRedirect(route('attendance.index', ['date' => $nextWeek]))
+            ->assertRedirect(route('attendance.classic', ['date' => $nextWeek]))
             ->assertSessionHas('success');
 
         $this->assertDatabaseHas('schedule_weeks', ['week_start' => $nextWeek, 'copied_from_week_start' => self::MONDAY]);
@@ -134,13 +134,13 @@ class ScheduleEditingTest extends TestCase
 
         config(['daycare.schedule_view' => false]);
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->assertDontSee("? 'Schedule' : 'Sign in'", false);
 
         config(['daycare.schedule_view' => true]);
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->assertSee("? 'Schedule' : 'Sign in'", false);
     }
@@ -150,7 +150,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open('2026-07-20');
 
         $response = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk();
 
         // The Schedule view is parked behind daycare.schedule_view, so the way
@@ -190,7 +190,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open('2026-07-20');
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '2026-08-10']))
+            ->get(route('attendance.classic', ['date' => '2026-08-10']))
             ->assertOk()
             ->assertSee('has not been set up')
             ->assertSee('Opening it copies the week of')
@@ -222,7 +222,7 @@ class ScheduleEditingTest extends TestCase
         $this->makeChild('Turing', 'Alan', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -255,7 +255,7 @@ class ScheduleEditingTest extends TestCase
         $ada->forceFill(['schedule_days' => [1, 3, 5]])->save();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -283,7 +283,7 @@ class ScheduleEditingTest extends TestCase
         $this->makeChild('Turing', 'Alan', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -312,7 +312,7 @@ class ScheduleEditingTest extends TestCase
         $ada->forceFill(['schedule_days' => [1, 3, 5]])->save();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -345,7 +345,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -384,7 +384,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -405,7 +405,7 @@ class ScheduleEditingTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -564,7 +564,7 @@ class ScheduleEditingTest extends TestCase
         // room gets the numbers and the pick-up list from the same link the
         // director uses — this page only lists children they may already see.
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             // Built from the LAN, because that is how a child's page is
             // addressed. Built from the id it resolved to nothing, and a name on
@@ -592,7 +592,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -610,7 +610,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -628,7 +628,7 @@ class ScheduleEditingTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -683,7 +683,7 @@ class ScheduleEditingTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
         $parent = User::factory()->create(['role' => 'parent']);
 
-        $response = $this->actingAs($parent)->get(route('attendance.index', ['date' => self::MONDAY]));
+        $response = $this->actingAs($parent)->get(route('attendance.classic', ['date' => self::MONDAY]));
 
         if ($response->status() === 200) {
             $response->assertDontSee("view = view === 'signin' ? 'schedule' : 'signin'", false);
@@ -720,7 +720,7 @@ class ScheduleEditingTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '2026-07-20']))
+            ->get(route('attendance.classic', ['date' => '2026-07-20']))
             ->assertOk()
             ->assertSee('This week has ended')
             ->assertDontSee('Copy from another week');
@@ -833,7 +833,7 @@ class ScheduleEditingTest extends TestCase
     private function childrenOnThePage(string $date = self::MONDAY): array
     {
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => $date]))
+            ->get(route('attendance.classic', ['date' => $date]))
             ->assertOk()
             ->getContent();
 

@@ -28,7 +28,7 @@ class Person extends Model
         'name', 'address',
         'home_phone', 'work_phone', 'cell', 'alternate_phone', 'fax',
         'email', 'employer', 'title', 'ssn', 'drivers_license',
-        'photo_path', 'notes',
+        'photo_path', 'notes', 'texts_stopped_at',
     ];
 
     protected $casts = [

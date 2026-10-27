@@ -45,13 +45,13 @@ class NameFormatTest extends TestCase
         $this->makeChild();
         $admin = User::factory()->create(['role' => 'admin', 'name_format' => 'last_first']);
 
-        foreach (['attendance.index', 'children.index'] as $route) {
+        foreach (['attendance.classic', 'children.index'] as $route) {
             $this->actingAs($admin)->get(route($route))->assertOk()->assertSee('Lovelace, Ada');
         }
 
         $admin->update(['name_format' => 'first_last']);
 
-        foreach (['attendance.index', 'children.index'] as $route) {
+        foreach (['attendance.classic', 'children.index'] as $route) {
             $this->actingAs($admin)->get(route($route))->assertOk()->assertSee('Ada Lovelace');
         }
     }
@@ -61,7 +61,7 @@ class NameFormatTest extends TestCase
         $this->makeChild();
 
         $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSee('Show names as')
             // The choice is shown as the thing it does, not as a label to decode.
@@ -80,9 +80,9 @@ class NameFormatTest extends TestCase
         $theirs = User::factory()->create(['role' => 'admin', 'name_format' => 'first_last']);
 
         $this->actingAs($mine)
-            ->from(route('attendance.index'))
+            ->from(route('attendance.classic'))
             ->post(route('profile.name-format'), ['name_format' => 'last_first'])
-            ->assertRedirect(route('attendance.index'));
+            ->assertRedirect(route('attendance.classic'));
 
         $this->assertSame('last_first', $mine->fresh()->name_format);
         $this->assertSame('first_last', $theirs->fresh()->name_format);
@@ -130,7 +130,7 @@ class NameFormatTest extends TestCase
         $this->makeChild();
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin', 'name_format' => 'last_first']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

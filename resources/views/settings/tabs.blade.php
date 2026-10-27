@@ -4,14 +4,17 @@
      four steps: nobody works through them in order, and a tab bar across the
      top of a page whose content is a form reads as progress through it. --}}
 @php
+    // All five tabs live again at Jordan's request (22 Oct 2026). Company,
+    // Administrators and Devices were parked 16–22 Oct; the pages answered
+    // at their addresses throughout, they simply were not offered.
+    // Company parked again (Jordan, 27 Oct 2026: "in settings remove company").
+    // The page still answers at /settings/company; it is just not offered.
     $links = [
-        // Company is off the tabs at Jordan's request (16 Oct 2026). The page
-        // still answers at /settings/company; it is simply not offered.
         // ['key' => 'company', 'label' => 'Company', 'route' => 'settings.company', 'icon' => 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4'],
         ['key' => 'children', 'label' => 'Children', 'route' => 'settings.children', 'icon' => 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4'],
-        // Administrators and Devices are parked too (16 Oct 2026), same as Company.
-        // ['key' => 'administrators', 'label' => 'Administrators', 'route' => 'settings.administrators', 'icon' => 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'],
-        // ['key' => 'devices', 'label' => 'Devices', 'route' => 'settings.devices', 'icon' => 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z'],
+        ['key' => 'rooms', 'label' => 'Rooms & hours', 'route' => 'settings.rooms', 'icon' => 'M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 7h16M12 4v16'],
+        ['key' => 'administrators', 'label' => 'Administrators', 'route' => 'settings.administrators', 'icon' => 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z'],
+        ['key' => 'devices', 'label' => 'Devices', 'route' => 'settings.devices', 'icon' => 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z'],
         ['key' => 'history', 'label' => 'Login History', 'route' => 'settings.history', 'icon' => 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'],
     ];
 @endphp

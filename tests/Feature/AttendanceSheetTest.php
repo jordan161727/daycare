@@ -28,7 +28,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $response = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk();
 
         $response->assertSee('<table', false);
@@ -48,7 +48,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSee("toggleSort('lan')", false)
             ->assertSee("toggleSort('name')", false)
@@ -65,7 +65,7 @@ class AttendanceSheetTest extends TestCase
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // Opens on the cards; the ⋯ menu offers both, ticking the one in use.
         $this->assertStringContainsString("mode: 'avatar',", $html);
@@ -92,7 +92,7 @@ class AttendanceSheetTest extends TestCase
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // The tap opens the pop-up rather than clocking on the spot.
         $this->assertStringContainsString('this.cardChild = child;', $html);
@@ -121,7 +121,7 @@ class AttendanceSheetTest extends TestCase
          */
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // Live, a tap steps the child through the day — in, then out, a
         // session at a time; in Edit it is the today cell's own cycle.
@@ -158,7 +158,7 @@ class AttendanceSheetTest extends TestCase
         // A per-viewer convenience in browser storage, which can be missing or
         // refuse in a private window or on a kiosk — so every touch is guarded
         // and the cards are the answer when it is.
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringContainsString("try { localStorage.setItem('attendance.view', this.mode); } catch", $html);
         $this->assertStringContainsString("if (localStorage.getItem('attendance.view') === 'sheet') this.mode = 'sheet';", $html);
@@ -170,7 +170,7 @@ class AttendanceSheetTest extends TestCase
         // something to clear; it hands focus back so the next name can be typed.
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringContainsString('x-show="search" x-cloak @click="search = \'\'; $refs.sheetSearch.focus()"', $html);
         $this->assertStringContainsString('aria-label="Clear search">×</button>', $html);
@@ -192,7 +192,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '2026-07-15']))
+            ->get(route('attendance.classic', ['date' => '2026-07-15']))
             ->assertOk()
             ->getContent();
 
@@ -211,7 +211,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSee("sortBy: 'lan'", false);
     }
@@ -221,7 +221,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -239,7 +239,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Turing', 'Alan', 'School Age');
 
         $response = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk();
 
         $response->assertSee('enrolled');
@@ -260,7 +260,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -296,11 +296,11 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSeeInOrder(['<span>LAN</span>', '>Student<', '>Classroom</th>', '>DOB</th>', '>Age</th>', '>Hours</th>'], escape: false);
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // On the sheet the room is its column and nothing else. The page also
         // carries the checklist, which has a room control of its own for
@@ -314,7 +314,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -347,7 +347,7 @@ class AttendanceSheetTest extends TestCase
         $date = today()->startOfWeek()->toDateString();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -368,7 +368,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -398,7 +398,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -426,7 +426,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -458,7 +458,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -494,14 +494,14 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '']))
+            ->get(route('attendance.classic', ['date' => '']))
             ->assertOk()
             ->assertSee('aria-current="date"', false);
     }
     public function test_an_unparsable_date_is_rejected(): void
     {
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => 'not-a-date']))
+            ->get(route('attendance.classic', ['date' => 'not-a-date']))
             ->assertSessionHasErrors('date');
     }
 
@@ -547,7 +547,7 @@ class AttendanceSheetTest extends TestCase
         $this->makeChild('Turing', 'Alan', 'Toddler');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

@@ -60,12 +60,15 @@ class ChildStatusFilterTest extends TestCase
                 ->assertOk()
                 ->assertSee('All <span class="ml-0.5 opacity-60">2</span>', false)
                 ->assertSee('Active <span class="ml-0.5 opacity-60">1</span>', false)
-                ->assertSee('Inactive <span class="ml-0.5 opacity-60">1</span>', false);
+                ->assertSee('Withdrawn <span class="ml-0.5 opacity-60">1</span>', false);
         }
     }
 
-    /** A status nobody is in is not offered: a chip reading 0 does nothing. */
-    public function test_a_status_with_nobody_in_it_has_no_chip(): void
+    /**
+     * Every tab is drawn, with its count, as the Phase 2 mock-up has them —
+     * so the tab is in the same place whether or not anybody is in it.
+     */
+    public function test_a_status_with_nobody_in_it_still_has_its_tab(): void
     {
         $this->child('Active', 'Stays');
 
@@ -73,21 +76,23 @@ class ChildStatusFilterTest extends TestCase
             ->get(route('children.index'))
             ->assertOk()
             ->assertSee('Active <span class="ml-0.5 opacity-60">1</span>', false)
-            ->assertDontSee('Inactive <span', false)
-            ->assertDontSee('Pending <span', false);
+            ->assertSee('Withdrawn <span class="ml-0.5 opacity-60">0</span>', false)
+            ->assertSee('Pending <span class="ml-0.5 opacity-60">0</span>', false);
     }
 
     /** Sorting keeps the filter, or a column heading silently shows everybody. */
     public function test_sorting_carries_the_filter_with_it(): void
     {
-        $this->child('Inactive', 'Left');
+        // Pending rather than Withdrawn: the Withdrawn tab lists how each
+        // child left and has no sortable columns (Phase 2).
+        $this->child('Pending', 'Soon');
 
         $this->actingAs($this->admin)
-            ->get(route('children.index', ['status' => 'Inactive']))
+            ->get(route('children.index', ['status' => 'Pending']))
             ->assertOk()
             // Escaped, because the page writes it into an href: the ampersands
             // arrive as &amp; and a raw comparison misses a URL that is there.
-            ->assertSee(e(route('children.index', ['sort' => 'classroom', 'direction' => 'asc', 'status' => 'Inactive'])), false);
+            ->assertSee(e(route('children.index', ['sort' => 'classroom', 'direction' => 'asc', 'status' => 'Pending'])), false);
     }
 
     /**
@@ -112,7 +117,7 @@ class ChildStatusFilterTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.index', ['status' => 'Inactive']))
             ->assertOk()
-            ->assertSee('Nobody on the roll is inactive right now.');
+            ->assertSee('Nobody on the roll is withdrawn right now.');
     }
 
     private function child(string $status, string $first): Child

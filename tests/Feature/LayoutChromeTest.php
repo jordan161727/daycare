@@ -56,61 +56,41 @@ class LayoutChromeTest extends TestCase
     }
 
     /**
-     * The sidebar as the centre set it on 2026-10-14.
-     *
-     * Four links and no more: Dashboard, Director Attendance, Teacher
-     * Attendance, Children — and the register only for the director, since a
-     * teacher works the door screen. Everything else is parked behind
-     * @if(false): built, kept in the file with its comments and role checks,
-     * not being run. Parked means nothing renders, so the leave queue and its
-     * waiting badge stay off even with requests really waiting.
+     * The sidebar as Phase 1.1 of docs/work.md orders it: Dashboard, Floor
+     * plan, the two attendance screens, Children; then Staff, Families and
+     * Only you as sections; then Reports and Settings. The NEW badges on the
+     * new modules, DSS only for whoever may see it, and every link keeping
+     * the role check it always had.
      */
-    public function test_the_sidebar_is_the_four_core_links_and_the_register_is_the_directors(): void
+    public function test_the_sidebar_is_ordered_as_the_phase_one_menu(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
         $teacher = User::factory()->create(['role' => 'teacher']);
-
-        foreach (['2026-09-01', '2026-09-08'] as $date) {
-            LeaveRequest::create([
-                'user_id' => $teacher->id,
-                'leave_type' => 'VACATION',
-                'starts_on' => $date,
-                'ends_on' => $date,
-                'hours_per_day' => 8,
-                'status' => LeaveRequest::STATUS_PENDING,
-            ]);
-        }
-
-        // The sidebar's own label markup, so a "Reports" card on the
-        // dashboard body does not stand in for a link.
         $label = fn (string $text) => '<span x-show="!collapsed">'.$text.'</span>';
 
-        foreach ([$admin, $teacher] as $user) {
-            $this->actingAs($user)->get(route('dashboard'))->assertOk()
-                ->assertSee($label('Dashboard'), escape: false)
-                ->assertSee($label('Teacher Attendance'), escape: false)
-                ->assertDontSee($label('Reports'), escape: false)
-                ->assertDontSee($label('Timesheets'), escape: false)
-                ->assertDontSee($label('Week Schedule'), escape: false)
-                ->assertDontSee($label('My Leave'), escape: false)
-                ->assertDontSee($label('Leave Requests'), escape: false)
-                ->assertDontSee($label('Payroll Prep'), escape: false)
-                ->assertDontSee('rounded-full bg-amber-500', escape: false);
-        }
+        $this->actingAs($admin)->get(route('dashboard'))->assertOk()
+            ->assertSeeInOrder(array_map($label, ['Dashboard', 'Floor plan', 'Director Attendance', 'Teacher Attendance', 'Children', 'Staff', 'Staff attendance', 'Schedule', 'Messages', 'DSS', 'Reports', 'Settings']), false)
+            ->assertSeeInOrder(['>Staff</p>', '>Families</p>', '>Only you</p>'], false)
+            ->assertDontSee('>New</span>', false) // badges parked 26 Oct 2026
+            ->assertSee('>Private</span>', false)
+            ->assertSee('>Admin</span>', false)
+            // Parked (Jordan, 26 Oct 2026): the menu is the mock-up's twelve
+            // links; the office pages stay live at their addresses.
+            ->assertDontSee('>Office</p>', false)
+            ->assertDontSee($label('Payroll'), false)
+            ->assertDontSee($label('My Leave'), false)
+            ->assertDontSee($label('Comments'), false);
 
-        // Settings came back for the director (16 Oct 2026): it is where
-        // archived children are restored. A teacher still does not see it.
-        $this->actingAs($admin)->get(route('dashboard'))->assertSee($label('Settings'), escape: false);
-        $this->actingAs($teacher)->get(route('dashboard'))->assertDontSee($label('Settings'), escape: false);
-
-        // The register and the roll are the director's; a teacher's sidebar
-        // is Dashboard and Teacher Attendance.
-        $this->actingAs($admin)->get(route('dashboard'))
-            ->assertSee($label('Director Attendance'), escape: false)
-            ->assertSee($label('Children'), escape: false);
-        $this->actingAs($teacher)->get(route('dashboard'))
-            ->assertDontSee($label('Director Attendance'), escape: false)
-            ->assertDontSee($label('Children'), escape: false);
+        // A teacher: no director's pages, no DSS; My Schedule is parked for now.
+        $this->actingAs($teacher)->get(route('dashboard'))->assertOk()
+            ->assertSee($label('Floor plan'), false)
+            ->assertSee($label('Schedule'), false)
+            ->assertDontSee($label('My Schedule'), false)
+            ->assertSee($label('Messages'), false)
+            ->assertDontSee($label('Staff attendance'), false)
+            ->assertDontSee($label('DSS'), false)
+            ->assertDontSee($label('Settings'), false)
+            ->assertDontSee($label('Payroll'), false);
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void
@@ -135,10 +115,18 @@ class LayoutChromeTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin', 'must_change_password' => false]);
 
+        // The key belongs to the classic register's sheet; the week grid
+        // (Phase 3) carries its own key under the header.
+        $this->actingAs($admin)
+            ->get(route('attendance.classic'))
+            ->assertOk()
+            ->assertSee("\$dispatch('attendance-key')", false);
+
         $this->actingAs($admin)
             ->get(route('attendance.index'))
             ->assertOk()
-            ->assertSee("\$dispatch('attendance-key')", false);
+            ->assertDontSee("\$dispatch('attendance-key')", false)
+            ->assertSee('Tap a day to change it');
 
         $this->actingAs($admin)
             ->get(route('dashboard'))

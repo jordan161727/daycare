@@ -48,6 +48,11 @@ class TimePunch extends Model
      */
     public const REASONS = [
         'forgot' => 'Forgot to punch',
+        // The two halves of "forgot", because the Staff attendance panel asks
+        // which end of the day went wrong — and a reason that says so is the
+        // one somebody reading the record months later actually wants.
+        'forgot_in' => 'Forgot to clock in',
+        'forgot_out' => 'Forgot to clock out',
         'wrong_time' => 'Punched wrong time',
         'device' => 'Kiosk / device issue',
         'schedule' => 'Schedule change',

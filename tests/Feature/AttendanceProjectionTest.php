@@ -74,7 +74,7 @@ class AttendanceProjectionTest extends TestCase
         $this->attended($child, ['2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31']);
 
         // The page opens the week, reads the forecast and renders it.
-        $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::WEEK]))->assertOk();
+        $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => self::WEEK]))->assertOk();
 
         $this->assertSame(0, ScheduleSlot::where('week_start', self::WEEK)->where('is_scheduled', true)->count());
         $this->assertTrue($this->expects($this->project(), $child, self::MON), 'the forecast still says Monday');
@@ -329,7 +329,7 @@ class AttendanceProjectionTest extends TestCase
         app(WeekSchedule::class)->open(self::PRIOR);
 
         $response = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEEK]))
+            ->get(route('attendance.classic', ['date' => self::WEEK]))
             ->assertOk();
 
         $response->assertSee('Projected');

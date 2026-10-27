@@ -129,6 +129,15 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
             'Who referred',
             // Whether a scanned enrollment has been read by a person yet.
             'Import status',
+            // Phase 2's columns, at the end so nothing that read the sheet by
+            // position moves: how they left, the one enrollment note, the
+            // health facts beside the alerts, the custody line.
+            'Withdrawal reason',
+            'Withdrawal note',
+            'Could return',
+            'Enrollment note',
+            'Health',
+            'Custody note',
         ];
     }
 
@@ -204,6 +213,16 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
             $child->where_advertised,
             $child->who_referred,
             $child->import_status,
+            $child->withdrawal_reason,
+            $child->withdrawal_note,
+            $child->could_return,
+            $child->enrollment_note,
+            collect([
+                $child->health('doctor') ? 'Doctor: '.$child->health('doctor') : null,
+                $child->health('immunizations_due') ? 'Immunizations due: '.$child->health('immunizations_due') : null,
+                $child->health('medication') ? 'Medication: '.$child->health('medication') : null,
+            ])->filter()->implode("\n"),
+            $child->custody_note,
         ];
     }
 

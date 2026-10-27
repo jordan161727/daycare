@@ -110,7 +110,7 @@ class TeacherClassroomAccessTest extends TestCase
                 'password' => 'password123',
                 'password_confirmation' => 'password123',
             ])
-            ->assertRedirect(route('teachers.index'));
+            ->assertRedirect(route('staff.show', User::where('email', 'teacher@example.com')->first()));
 
         $teacher = User::where('email', 'teacher@example.com')->firstOrFail();
 

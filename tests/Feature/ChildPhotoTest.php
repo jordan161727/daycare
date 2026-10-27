@@ -80,7 +80,7 @@ class ChildPhotoTest extends TestCase
         // attendance board hands it to the browser inside the avatar markup.
         $this->actingAs($admin)->get(route('children.index'))->assertSee($after, escape: false)->assertDontSee($before, escape: false);
         [$beforeStamp, $afterStamp] = [substr($before, strrpos($before, 'v=')), substr($after, strrpos($after, 'v='))];
-        $this->actingAs($admin)->get(route('attendance.index'))->assertSee($afterStamp, escape: false)->assertDontSee($beforeStamp, escape: false);
+        $this->actingAs($admin)->get(route('attendance.classic'))->assertSee($afterStamp, escape: false)->assertDontSee($beforeStamp, escape: false);
     }
 
     public function test_the_photo_can_be_removed(): void
@@ -185,7 +185,7 @@ class ChildPhotoTest extends TestCase
         $child = $this->child(['gender' => 'Girl']);
 
         $html = $this->actingAs($this->admin())
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

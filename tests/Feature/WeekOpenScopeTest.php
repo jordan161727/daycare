@@ -75,14 +75,14 @@ class WeekOpenScopeTest extends TestCase
         $this->assertTrue(ScheduleWeek::where('week_start', self::NEXT_WEEK)->exists());
 
         $this->actingAs($this->infantTeacher)
-            ->get(route('attendance.index', ['date' => self::NEXT_WEEK]))
+            ->get(route('attendance.classic', ['date' => self::NEXT_WEEK]))
             ->assertOk()
             ->assertSee('has not been set up')
             ->assertSee('Open this week');
 
         // And the Toddler teacher, who built it, gets the sheet.
         $this->actingAs($this->toddlerTeacher)
-            ->get(route('attendance.index', ['date' => self::NEXT_WEEK]))
+            ->get(route('attendance.classic', ['date' => self::NEXT_WEEK]))
             ->assertOk()
             ->assertDontSee('has not been set up');
     }
@@ -136,7 +136,7 @@ class WeekOpenScopeTest extends TestCase
         $infant = $this->makeChild('Infant', '2026-02-10');
 
         $this->actingAs($this->toddlerTeacher)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertDontSee('has not been set up');
 

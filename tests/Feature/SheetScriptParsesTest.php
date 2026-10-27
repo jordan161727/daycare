@@ -56,7 +56,7 @@ class SheetScriptParsesTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-21');
 
         $html = $this->actingAs($admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

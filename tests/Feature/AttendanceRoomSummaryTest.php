@@ -24,7 +24,7 @@ class AttendanceRoomSummaryTest extends TestCase
         $this->makeChild('Toddler');
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -54,7 +54,7 @@ class AttendanceRoomSummaryTest extends TestCase
         $this->makeChild('Infant');
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -74,7 +74,7 @@ class AttendanceRoomSummaryTest extends TestCase
         $this->makeChild('Infant');
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

@@ -50,7 +50,7 @@ class InactiveOnTheRegisterTest extends TestCase
         app(WeekSchedule::class)->open(self::LAST_TERM);
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::LAST_TERM]))
+            ->get(route('attendance.classic', ['date' => self::LAST_TERM]))
             ->assertOk()
             ->assertSee('Gone');
     }
@@ -64,7 +64,7 @@ class InactiveOnTheRegisterTest extends TestCase
         app(WeekSchedule::class)->open(self::THIS_WEEK);
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::THIS_WEEK]))
+            ->get(route('attendance.classic', ['date' => self::THIS_WEEK]))
             ->assertOk()
             ->assertSee('Here')
             ->assertDontSee('Gone');
@@ -87,7 +87,7 @@ class InactiveOnTheRegisterTest extends TestCase
         app(WeekSchedule::class)->open(self::LAST_TERM);
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::LAST_TERM]))
+            ->get(route('attendance.classic', ['date' => self::LAST_TERM]))
             ->assertOk()
             ->assertSee('Gone');
     }
@@ -105,7 +105,7 @@ class InactiveOnTheRegisterTest extends TestCase
         app(WeekSchedule::class)->open(self::THIS_WEEK);
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::THIS_WEEK]))
+            ->get(route('attendance.classic', ['date' => self::THIS_WEEK]))
             ->assertOk()
             ->assertDontSee('Vague');
 
@@ -117,7 +117,7 @@ class InactiveOnTheRegisterTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::THIS_WEEK]))
+            ->get(route('attendance.classic', ['date' => self::THIS_WEEK]))
             ->assertOk()
             ->assertSee('Vague');
     }
@@ -145,7 +145,7 @@ class InactiveOnTheRegisterTest extends TestCase
         app(WeekSchedule::class)->open(self::LAST_TERM);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::LAST_TERM]))
+            ->get(route('attendance.classic', ['date' => self::LAST_TERM]))
             ->assertOk()
             ->getContent();
 
@@ -176,7 +176,7 @@ class InactiveOnTheRegisterTest extends TestCase
 
         // Both of them: one active, one who was here that week.
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::LAST_TERM]))
+            ->get(route('attendance.classic', ['date' => self::LAST_TERM]))
             ->assertOk()
             ->assertSee('All <span class="ml-0.5 opacity-60 tabular-nums"', false)
             ->assertSee("+ '/' + 2", false);

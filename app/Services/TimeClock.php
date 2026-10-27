@@ -60,6 +60,75 @@ class TimeClock
         return $this->day($user->id, $date)['state'];
     }
 
+    /**
+     * What was done to a day, one line per change, newest first.
+     *
+     * Reads a day's punches — live and voided together, as punches() hands
+     * them over with withVoided — and tells the story of each correction. A
+     * replacement carries its predecessor, so it is one line ("Clocked in
+     * 7:40 am → 7:00 am"); a void with no replacement is a removal; anything
+     * else a supervisor wrote was an addition. A voided punch that was
+     * replaced is told by its replacement's line and gets none of its own.
+     *
+     * Shared by the edit panel's "Change history" and the Staff attendance
+     * page's "Changes this week", so the two never word the same act
+     * differently.
+     *
+     * @return Collection<int, array{who: ?string, when: string, at: Carbon, reason: ?string, what: string, date: string, user_id: int}>
+     */
+    public function changes(Collection $punches): Collection
+    {
+        $replaced = $punches
+            ->filter(fn (TimePunch $punch) => $punch->corrects_id !== null)
+            ->pluck('corrects_id')
+            ->flip();
+
+        return $punches
+            ->filter(fn (TimePunch $punch) => $punch->isCorrection() || $punch->isVoided())
+            ->map(function (TimePunch $punch) use ($replaced) {
+                if ($punch->corrects) {
+                    return [
+                        'who' => $punch->recorder?->name,
+                        'at' => $punch->created_at,
+                        'when' => $punch->created_at->diffForHumans(),
+                        'reason' => $punch->reason,
+                        'what' => $punch->label().' '.$punch->corrects->time().' → '.$punch->time(),
+                        'date' => $punch->work_date->toDateString(),
+                        'user_id' => $punch->user_id,
+                    ];
+                }
+
+                if ($punch->isVoided()) {
+                    if ($replaced->has($punch->id)) {
+                        return null;
+                    }
+
+                    return [
+                        'who' => $punch->voider?->name,
+                        'at' => $punch->voided_at,
+                        'when' => $punch->voided_at->diffForHumans(),
+                        'reason' => $punch->void_reason,
+                        'what' => $punch->label().' '.$punch->time().' removed',
+                        'date' => $punch->work_date->toDateString(),
+                        'user_id' => $punch->user_id,
+                    ];
+                }
+
+                return [
+                    'who' => $punch->recorder?->name,
+                    'at' => $punch->created_at,
+                    'when' => $punch->created_at->diffForHumans(),
+                    'reason' => $punch->reason,
+                    'what' => $punch->label().' missing → '.$punch->time(),
+                    'date' => $punch->work_date->toDateString(),
+                    'user_id' => $punch->user_id,
+                ];
+            })
+            ->filter()
+            ->sortByDesc(fn (array $line) => $line['at']->timestamp)
+            ->values();
+    }
+
     /** The punches on a day, live ones and voided ones, oldest first. */
     public function punches(int $userId, string $date, bool $withVoided = false): Collection
     {
@@ -115,6 +184,12 @@ class TimeClock
         // correction overrides an earlier hand-typed entry. An employee's own
         // punch never does — see rebuild().
         $this->rebuild($user, $at->toDateString(), force: $source === TimePunch::SOURCE_SUPERVISOR);
+
+        // Somebody standing in for this person on the floor plan ("Move X to
+        // Y until Z arrives") is released the moment Z clocks in.
+        if ($type === TimePunch::IN) {
+            app(FloorCover::class)->settle($user, $at);
+        }
 
         return $punch;
     }

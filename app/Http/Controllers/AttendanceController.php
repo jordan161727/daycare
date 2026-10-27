@@ -19,6 +19,70 @@ use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
+    /**
+     * The week as a grid — Phase 3, as DirectorAttendance.dc.html draws it.
+     *
+     * A row per child, a cell per day (two for School Age), tapped through
+     * not scheduled → absent → coming, with the times typed straight into
+     * the cell. See App\Services\AttendanceWeek. The register this page was
+     * before is index(), kept whole as the classic register.
+     */
+    public function week(Request $request, \App\Services\AttendanceWeek $week)
+    {
+        $selectedDate = trim((string) $request->input('date')) ?: today()->toDateString();
+        validator(['date' => $selectedDate], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+        $user = $request->user();
+        $room = ClassroomAssignment::fromQuery($request) ?: (trim((string) $request->input('room')) ?: null);
+        $room = $room && in_array($room, ClassroomAssignment::rooms(), true) ? $room : null;
+
+        $data = $week->build($user, Carbon::parse($selectedDate), $room, trim((string) $request->input('q', '')));
+
+        $recent = Attendance::with('child')
+            ->whereDate('attendance_date', today()->toDateString())
+            ->whereHas('child', fn ($query) => $query->visibleTo($user))
+            ->latest('signed_in_at')
+            ->take(10)
+            ->get()
+            ->map(fn (Attendance $a) => [
+                'name' => $a->child?->displayName() ?? 'Unknown',
+                'room' => $a->child?->classroom,
+                'in' => Child::timeShort($a->signed_in_at?->timezone(config('app.timezone'))),
+                'out' => Child::timeShort($a->signed_out_at?->timezone(config('app.timezone'))),
+            ])->values()->all();
+
+        return view('attendance.week', [
+            'w' => $data,
+            'room' => $room,
+            'q' => trim((string) $request->input('q', '')),
+            'recent' => $recent,
+            'date' => $selectedDate,
+        ]);
+    }
+
+    /** One cell tapped, or times typed into it — see AttendanceWeek::apply(). */
+    public function cell(Request $request, \App\Services\AttendanceWeek $week)
+    {
+        $data = $request->validate([
+            'child_id' => ['required', 'integer'],
+            'date' => ['required', 'date_format:Y-m-d'],
+            'session' => ['required', 'in:AM,PM,FULL'],
+            'state' => ['required', 'in:none,abs,pres'],
+            'in' => ['nullable', 'string', 'max:12'],
+            'out' => ['nullable', 'string', 'max:12'],
+        ]);
+
+        $child = Child::visibleTo($request->user())->findOrFail($data['child_id']);
+
+        try {
+            $week->apply($request->user(), $child, $data['date'], $data['session'], $data['state'], $data['in'] ?? null, $data['out'] ?? null);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['saved' => true] + $week->build($request->user(), Carbon::parse($data['date']), null, ''));
+    }
+
     public function index(WeekSchedule $weeks, AttendanceProjection $projector)
     {
             $user = request()->user();
@@ -492,14 +556,14 @@ class AttendanceController extends Controller
         }
 
         if ($weeks->isOpen($weekStart)) {
-            return redirect()->route('attendance.index', ['date' => $weekStart]);
+            return redirect()->route('attendance.classic', ['date' => $weekStart]);
         }
 
         $week = $weeks->open($weekStart, $request->user());
         $source = $week->copied_from_week_start;
 
         return redirect()
-            ->route('attendance.index', ['date' => $weekStart])
+            ->route('attendance.classic', ['date' => $weekStart])
             ->with('success', $source
                 ? 'Week opened from '.$source->format('M j').' copy.'
                 : 'Week opened. Nothing came before it, so the days start from each child\'s record.');

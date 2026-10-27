@@ -144,7 +144,25 @@ class MyScheduleTest extends TestCase
 
         $this->bookChildren('UPK-4', 6);
 
+        // Generated and published: a draft is the director's, and My Schedule
+        // shows nothing of it — see test_a_draft_week_is_not_shown().
+        app(StaffSchedule::class)->generate(self::WEEK)->forceFill(['published_at' => now()])->save();
+    }
+
+    public function test_a_draft_week_is_not_shown(): void
+    {
+        // Until the director publishes, the shifts are a plan being argued
+        // with, not one to arrange a life around.
+        $this->aisha->staffRules()->create(['rule_type' => 'FIXED_SHIFT', 'priority' => 'HARD', 'day' => 'ALL', 'time_1' => 8 * 60, 'time_2' => 16 * 60]);
+        $this->bookChildren('UPK-4', 6);
         app(StaffSchedule::class)->generate(self::WEEK);
+
+        $this->actingAs($this->aisha)
+            ->get(route('staff-schedule.mine'))
+            ->assertOk()
+            ->assertSee("hasn't been published yet", false)
+            ->assertDontSee('On today')
+            ->assertDontSee('8:00 AM – 4:00 PM', false);
     }
 
     /** Book children into a room for every day of the test week. */

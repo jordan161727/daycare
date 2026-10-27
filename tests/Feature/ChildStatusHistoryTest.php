@@ -59,7 +59,8 @@ class ChildStatusHistoryTest extends TestCase
         $this->assertSame('Active', $latest->from_status);
         $this->assertSame('Inactive', $latest->to_status);
         $this->assertSame($this->admin->id, $latest->changed_by);
-        $this->assertSame('Active → Inactive', $latest->summary());
+        // The column says Inactive; the screen says Withdrawn (Phase 2).
+        $this->assertSame('Active → Withdrawn', $latest->summary());
     }
 
     /**
@@ -76,7 +77,7 @@ class ChildStatusHistoryTest extends TestCase
         $child->update(['status' => 'Active']);
 
         $this->assertSame(
-            ['Added as Active', 'Active → Inactive', 'Inactive → Active'],
+            ['Added as Active', 'Active → Withdrawn', 'Withdrawn → Active'],
             $child->statusChanges()->orderBy('id')->get()->map->summary()->all()
         );
     }
@@ -133,7 +134,8 @@ class ChildStatusHistoryTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.show', $child))
             ->assertOk()
-            ->assertDontSee('On the roll');
+            ->assertSee('Added as Active')
+            ->assertDontSee('Active → Withdrawn');
 
         $this->actingAs($this->admin)->put(route('children.update', $child), [
             'first_name' => $child->first_name,
@@ -145,8 +147,8 @@ class ChildStatusHistoryTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.show', $child))
             ->assertOk()
-            ->assertSee('On the roll')
-            ->assertSee('Active → Inactive')
+            ->assertSee('Enrollment history')
+            ->assertSee('Active → Withdrawn')
             ->assertSee('by '.$this->admin->name);
     }
 
@@ -192,8 +194,8 @@ class ChildStatusHistoryTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.show', $child))
             ->assertOk()
-            ->assertSee('On the roll')
-            ->assertSee('Active → Inactive');
+            ->assertSee('Enrollment history')
+            ->assertSee('Active → Withdrawn');
     }
 
     /** And the record says when they became what they are, above the planned dates. */
@@ -208,8 +210,9 @@ class ChildStatusHistoryTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.show', $child))
             ->assertOk()
-            ->assertSee('Inactive since')
-            ->assertSee('6/5/2026');
+            // On the timeline: the line, and the day it was written.
+            ->assertSee('Active → Withdrawn')
+            ->assertSee('Jun 5, 2026');
     }
 
     /** An active child is not told how long they have been ordinary. */

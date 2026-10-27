@@ -85,7 +85,8 @@ class ChildPendingStatusTest extends TestCase
             ->get(route('children.index'))
             ->assertOk()
             ->assertSee('Pending')
-            ->assertSee('bg-amber-100', false);
+            // The blue "Starts …" / "Pending" pill in the Record column (Phase 2).
+            ->assertSee('pill info', false);
     }
 
     /** It is not counted as active, which is the reason it exists. */

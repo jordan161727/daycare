@@ -149,7 +149,9 @@ class RoomScheduleTest extends TestCase
             ->get(route('children.index'))
             ->assertOk()
             // Their hours and their days, which differ child to child.
-            ->assertSee('7:00 AM – 5:30 PM')
+            // At sheet size on the roll since Phase 2 ("7:00a – 5:30p"), the
+            // days as dots with the phrase on their tooltip.
+            ->assertSee('7:00a – 5:30p')
             ->assertSee('Mon, Wed, Fri')
             // And not the room's, repeated on every row.
             ->assertDontSee('Class 8:00 AM – 5:00 PM')

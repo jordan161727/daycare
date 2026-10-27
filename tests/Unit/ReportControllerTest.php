@@ -53,7 +53,7 @@ class ReportControllerTest extends TestCase
         $request = Request::create('/reports', 'GET', ['date' => today()->toDateString()]);
         $request->setUserResolver(fn () => $teacher);
 
-        $response = (new ReportController())->index($request);
+        $response = app(ReportController::class)->index($request);
         $viewData = $response->getData();
 
         $this->assertCount(1, $viewData['children']);
@@ -85,7 +85,7 @@ class ReportControllerTest extends TestCase
         $request = Request::create('/reports', 'GET', ['date' => today()->toDateString()]);
         $request->setUserResolver(fn () => $admin);
 
-        $response = (new ReportController())->index($request);
+        $response = app(ReportController::class)->index($request);
         $viewData = $response->getData();
 
         $this->assertCount(2, $viewData['children']);

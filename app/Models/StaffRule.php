@@ -28,7 +28,23 @@ class StaffRule extends Model
     public const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'ALL'];
 
     /** Employment types, in the order they appear in the picker. */
-    public const EMPLOYMENT = ['LEAD', 'FT', 'FT_SALARY', 'PT', 'SUB'];
+    public const EMPLOYMENT = ['LEAD', 'FT', 'FT_SALARY', 'PT', 'PT_FLEX', 'SUB', 'INACTIVE'];
+
+    /** What each employment type is called on screen (Phase 5: FT, PT, PT flex, Substitute, Inactive). */
+    public const EMPLOYMENT_LABELS = [
+        'LEAD' => 'Lead',
+        'FT' => 'FT',
+        'FT_SALARY' => 'FT salary',
+        'PT' => 'PT',
+        'PT_FLEX' => 'PT flex',
+        'SUB' => 'Substitute',
+        'INACTIVE' => 'Inactive',
+    ];
+
+    public static function employmentLabel(?string $type): string
+    {
+        return $type === null || $type === '' ? 'Not set' : (self::EMPLOYMENT_LABELS[$type] ?? str_replace('_', ' ', $type));
+    }
 
     /**
      * Every rule type, and the columns it actually uses.

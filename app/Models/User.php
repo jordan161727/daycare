@@ -124,6 +124,26 @@ class User extends Authenticatable
         return $this->hasMany(LeaveRequest::class);
     }
 
+    /** The director's one-off changes to their days (Phase 5 Staff → Time off). */
+    public function timeOff()
+    {
+        return $this->hasMany(StaffTimeOff::class);
+    }
+
+    /** "FT", "PT flex", "Substitute" — the employment type as the Staff page says it. */
+    public function employmentLabel(): string
+    {
+        return StaffRule::employmentLabel($this->employment);
+    }
+
+    /** On the books but not on the schedule: inactive, or not a teaching job. */
+    public function isOffSchedule(): bool
+    {
+        return $this->employment === 'INACTIVE'
+            || $this->role !== 'teacher'
+            || in_array($this->jobRole(), ['Director', 'Cook', 'Administrator'], true);
+    }
+
     /** Every movement on their leave balances. The balance is the sum. */
     public function leaveLedgerEntries()
     {

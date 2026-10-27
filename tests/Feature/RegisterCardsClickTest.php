@@ -45,7 +45,7 @@ class RegisterCardsClickTest extends TestCase
 
         app(WeekSchedule::class)->open('2026-09-21');
 
-        $html = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $page = tempnam(sys_get_temp_dir(), 'register').'.html';
         file_put_contents($page, $html);
@@ -164,7 +164,7 @@ class RegisterCardsClickTest extends TestCase
             'signed_in_at' => Carbon::parse('2026-09-23 08:05:00'),
         ]);
 
-        $html = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $page = tempnam(sys_get_temp_dir(), 'register').'.html';
         file_put_contents($page, $html);
@@ -226,7 +226,7 @@ class RegisterCardsClickTest extends TestCase
 
         app(WeekSchedule::class)->open('2026-09-21');
 
-        $html = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $page = tempnam(sys_get_temp_dir(), 'register').'.html';
         file_put_contents($page, $html);

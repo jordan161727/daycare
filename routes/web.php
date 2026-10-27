@@ -12,14 +12,19 @@ use App\Http\Controllers\CommentLogController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\ChildController;
 use App\Http\Controllers\ChildArchiveController;
+use App\Http\Controllers\ChildRecordController;
+use App\Http\Controllers\ChildStatusController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ChildDocumentController;
+use App\Http\Controllers\FloorPlanController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\KioskController;
+use App\Http\Controllers\DssController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\MonthSheetController;
 use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
@@ -37,6 +42,7 @@ use App\Http\Controllers\StaffReportController;
 use App\Http\Controllers\StaffTimesheetController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoomScheduleController;
+use App\Http\Controllers\StaffController;
 use App\Http\Controllers\StaffRuleController;
 use App\Http\Controllers\StaffScheduleController;
 
@@ -91,6 +97,18 @@ Route::middleware('throttle:kiosk')->group(function () {
 });
 
 /*
+ * Messages (Phase 9), the two ends that face the outside world. A photo or
+ * video a parent was sent: the link in the text, signed and temporary, so
+ * it needs no login and does not live for ever. And the provider's webhook
+ * for replies, checked by the provider's signature when a real driver is
+ * on; CSRF is excused for it in bootstrap/app.php.
+ */
+Route::middleware('throttle:kiosk')->group(function () {
+    Route::get('/messages/media', [MessageController::class, 'media'])->name('messages.media');
+    Route::post('/sms/inbound', [MessageController::class, 'inbound'])->name('sms.inbound');
+});
+
+/*
  * The door kiosk. Outside the auth group on purpose — there is nobody to log in
  * at a door, and a staff login left open on a lobby tablet would be worse than
  * none. The guardian's PIN is what authenticates, checked on every press.
@@ -130,9 +148,7 @@ Route::get('/dashboard', function () {
 
     if (! Schema::hasTable('children') || ! Schema::hasTable('attendances')) {
         return view('dashboard.index', [
-            'totalChildren' => 0,
-            'presentToday' => 0,
-            'totalRooms' => 0,
+            'snapshot' => ['now' => now(), 'enrolled' => 0, 'scheduled' => 0, 'in' => 0, 'returning' => 0, 'out' => 0, 'expected' => 0, 'absent' => 0, 'arrived' => 0, 'staffOnFloor' => 0, 'ratios' => [], 'states' => []],
             'recentAttendance' => collect(),
             'upcomingClosures' => $upcomingClosures,
         ]);
@@ -149,24 +165,16 @@ Route::get('/dashboard', function () {
         ->filter(fn (Child $child) => $child->isEnrolledOn($today));
     $totalChildren = $roll->count();
 
-    // One record, one count (the door and the register share a table again
-    // since 20 Oct 2026). A child, not a row: a School Age child's morning
-    // and afternoon are two rows, and a row with no arrival on it is not a
-    // child in the building.
-    $presentToday = Attendance::whereDate('attendance_date', $today)
-        ->whereIn('child_id', $roll->pluck('id'))
-        ->whereNotNull('signed_in_at')
-        ->distinct()
-        ->count('child_id');
-
-    $totalRooms = $roll->pluck('classroom')->filter()->unique()->count();
+    // The day as it stands — every number read from the screens that wrote
+    // it. See App\Services\DashboardSnapshot.
+    $snapshot = app(\App\Services\DashboardSnapshot::class)->for($user);
 
     $recentAttendance = Attendance::with('child')->whereDate('attendance_date', $today)
         ->whereIn('child_id', $roll->pluck('id'))
         ->whereNotNull('signed_in_at')
         ->latest('signed_in_at')->take(5)->get();
 
-    return view('dashboard.index', compact('totalChildren', 'presentToday', 'totalRooms', 'recentAttendance', 'upcomingClosures'));
+    return view('dashboard.index', compact('snapshot', 'recentAttendance', 'upcomingClosures'));
 })->name('dashboard');
 
 
@@ -219,6 +227,31 @@ Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy'])->nam
 Route::post('/holidays/rules', [HolidayController::class, 'storeRule'])->name('holidays.rules.store');
 Route::put('/holidays/rules/{rule}', [HolidayController::class, 'updateRule'])->name('holidays.rules.update');
 Route::delete('/holidays/rules/{rule}', [HolidayController::class, 'destroyRule'])->name('holidays.rules.destroy');
+
+// The Staff page (Phase 5): everyone on the team down the left, one person
+// on the right under Details, Rules, Attendance and Time off. The older
+// roster at /teachers stays where it is; this is the page the sidebar opens.
+Route::get('/staff', [StaffController::class, 'index'])->name('staff.index');
+Route::get('/staff/export', [StaffController::class, 'export'])->middleware('never-cached')->name('staff.export');
+Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->whereNumber('staff');
+Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->whereNumber('staff');
+Route::post('/staff/{staff}/password', [StaffController::class, 'sendPassword'])->name('staff.password')->whereNumber('staff');
+Route::get('/staff/{staff}/attendance.csv', [StaffController::class, 'attendanceExport'])->middleware('never-cached')->name('staff.attendance.export')->whereNumber('staff');
+Route::post('/staff/{staff}/time-off', [StaffController::class, 'storeTimeOff'])->name('staff.time-off.store')->whereNumber('staff');
+Route::put('/staff/{staff}/time-off/{timeOff}', [StaffController::class, 'updateTimeOff'])->name('staff.time-off.update')->whereNumber('staff');
+Route::delete('/staff/{staff}/time-off/{timeOff}', [StaffController::class, 'destroyTimeOff'])->name('staff.time-off.destroy')->whereNumber('staff');
+
+/*
+ * Editing the Schedule (Phase 7). Reading it is open to teachers below;
+ * changing a shift, publishing the week and marking somebody off from a bar
+ * are the director's — a roster anyone could drag about is not a plan.
+ */
+Route::post('/staff-schedule/publish', [StaffScheduleController::class, 'publish'])->name('staff-schedule.publish');
+Route::get('/staff-schedule/day', [StaffScheduleController::class, 'day'])->name('staff-schedule.day');
+Route::post('/staff-schedule/preview', [StaffScheduleController::class, 'preview'])->name('staff-schedule.preview');
+Route::post('/staff-schedule/apply', [StaffScheduleController::class, 'apply'])->name('staff-schedule.apply');
+Route::post('/staff-schedule/time-off', [StaffScheduleController::class, 'timeOff'])->name('staff-schedule.time-off');
+Route::get('/staff-schedule/print', [StaffScheduleController::class, 'print'])->name('staff-schedule.print');
 
 // Scheduling rules only ever make sense against the person they constrain, so
 // they are nested rather than given a table of their own.
@@ -312,6 +345,14 @@ Route::get('/staff-timesheets/export', [StaffTimesheetController::class, 'export
  * from a list and handed on. Director-only for the same reason as the grid it
  * sits beside — it can be asked to print pay.
  */
+// The monthly UPK-4 email to the school district (Phase 8.2): the
+// director's settings, a test to themselves, and the month sent by hand.
+Route::post('/reports/upk-email', [ReportController::class, 'saveEmail'])->name('reports.upk-email.save');
+Route::post('/reports/upk-email/test', [ReportController::class, 'testEmail'])->name('reports.upk-email.test');
+Route::post('/reports/upk-email/send', [ReportController::class, 'sendEmail'])->name('reports.upk-email.send');
+// A day pressed on the attendance sheet: ✓ → A → blank → ✓, written as the DSS page writes it.
+Route::post('/reports/sheet/cell', [ReportController::class, 'sheetCell'])->name('reports.sheet.cell');
+
 Route::get('/staff-reports', [StaffReportController::class, 'index'])->name('staff.reports');
 Route::get('/staff-reports/export', [StaffReportController::class, 'export'])->middleware('never-cached')->name('staff.reports.export');
 
@@ -338,6 +379,9 @@ Route::get('/settings', fn () => redirect()->route('settings.children'))->name('
 Route::get('/settings/company', [SettingController::class, 'company'])->name('settings.company');
 Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
 Route::get('/settings/children', [SettingController::class, 'children'])->name('settings.children');
+// Rooms & hours — Phase 1.2: ratios, capacities, room hours, the centre's day and shift limits.
+Route::get('/settings/rooms', [SettingController::class, 'rooms'])->name('settings.rooms');
+Route::put('/settings/rooms', [SettingController::class, 'updateRooms'])->name('settings.rooms.update');
 Route::put('/settings/children', [SettingController::class, 'updateChildren'])->name('settings.children.update');
 Route::get('/settings/administrators', [SettingController::class, 'administrators'])->name('settings.administrators');
 
@@ -346,6 +390,15 @@ Route::get('/settings/administrators', [SettingController::class, 'administrator
 // their room as Inactive, not hide one from the whole centre.
 Route::post('/children/{child}/archive', [ChildArchiveController::class, 'archive'])->name('children.archive')->whereNumber('child');
 Route::post('/children/{child}/unarchive', [ChildArchiveController::class, 'unarchive'])->name('children.unarchive')->whereNumber('child');
+
+// The rest of the lifecycle (Phase 2.2): a place on the roll is the
+// office's to give and take. Each writes a line to the enrollment history.
+Route::post('/children/{child}/start', [ChildStatusController::class, 'start'])->name('children.start')->whereNumber('child');
+Route::post('/children/{child}/cancel', [ChildStatusController::class, 'cancel'])->name('children.cancel')->whereNumber('child');
+Route::post('/children/{child}/withdraw', [ChildStatusController::class, 'withdraw'])->name('children.withdraw')->whereNumber('child');
+Route::post('/children/{child}/reenroll', [ChildStatusController::class, 'reenroll'])->name('children.reenroll')->whereNumber('child');
+// Moving a child between rooms moves them between teachers: director only.
+Route::post('/children/{child}/room', [ChildRecordController::class, 'room'])->name('children.room')->whereNumber('child');
 Route::get('/settings/devices', [SettingController::class, 'devices'])->name('settings.devices');
 Route::get('/settings/login-history', [SettingController::class, 'history'])->name('settings.history');
 
@@ -407,6 +460,22 @@ Route::middleware('role:admin,teacher')->group(function () {
      * populate.
      */
     Route::get('/children/{child}/people', [PersonController::class, 'forChild'])->name('children.people')->whereNumber('child');
+
+    /*
+     * The cards on the record that save in place (Phase 2.3): the overview,
+     * the enrollment note, the health facts and alerts, notes, documents,
+     * and what each adult is for the child. Same door as editing the record.
+     */
+    Route::put('/children/{child}/overview', [ChildRecordController::class, 'overview'])->name('children.overview')->whereNumber('child');
+    Route::put('/children/{child}/enrollment-note', [ChildRecordController::class, 'enrollmentNote'])->name('children.enrollment-note')->whereNumber('child');
+    Route::put('/children/{child}/health', [ChildRecordController::class, 'health'])->name('children.health')->whereNumber('child');
+    Route::post('/children/{child}/alerts', [ChildRecordController::class, 'storeAlert'])->name('children.alerts.store')->whereNumber('child');
+    Route::delete('/children/{child}/alerts/{index}', [ChildRecordController::class, 'destroyAlert'])->name('children.alerts.destroy')->whereNumber('child')->whereNumber('index');
+    Route::post('/children/{child}/notes', [ChildRecordController::class, 'storeNote'])->name('children.notes.store')->whereNumber('child');
+    Route::post('/children/{child}/documents', [ChildRecordController::class, 'storeDocument'])->name('children.documents.store')->whereNumber('child');
+    Route::get('/children/{child}/documents/{document}', [ChildRecordController::class, 'document'])->name('children.documents.show')->whereNumber('child')->whereNumber('document');
+    Route::post('/children/{child}/people/{person}/flags', [ChildRecordController::class, 'personFlags'])->name('children.people.flags')->whereNumber('child')->whereNumber('person');
+    Route::post('/children/{child}/people/{person}/order', [ChildRecordController::class, 'personOrder'])->name('children.people.order')->whereNumber('child')->whereNumber('person');
     Route::get('/people/search', [PersonController::class, 'search'])->name('people.search');
     Route::post('/people', [PersonController::class, 'store'])->name('people.store');
     Route::get('/people/{person}', [PersonController::class, 'show'])->name('people.show')->whereNumber('person');
@@ -416,6 +485,7 @@ Route::middleware('role:admin,teacher')->group(function () {
     Route::post('/people/{person}/unlink', [PersonController::class, 'unlink'])->name('people.unlink')->whereNumber('person');
 
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('/reports/export', [ReportController::class, 'export'])->middleware('never-cached')->name('reports.export');
 
     // Read-only for teachers: knowing who else is on the floor at 3pm is the
     // reason the roster exists, and hiding it would send them back to asking.
@@ -444,8 +514,48 @@ Route::middleware('role:admin,teacher')->group(function () {
     Route::delete('/leave/{leave}', [LeaveController::class, 'destroy'])->name('leave.destroy');
 });
 
-Route::get('/attendance', [AttendanceController::class, 'index'])
+/*
+ * Messages (Phase 9): texts to families. Teachers and the office both read
+ * and write; what each may see is decided per conversation — see
+ * MessageThread::visibleTo(). A parent's reply arrives at /sms/inbound from
+ * the provider, with no session, below.
+ */
+Route::middleware(['auth', 'password.change', 'role:admin,teacher'])->group(function () {
+    Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
+    Route::get('/messages/search', [MessageController::class, 'search'])->name('messages.search');
+    Route::get('/messages/recipients', [MessageController::class, 'recipients'])->name('messages.recipients');
+    Route::post('/messages', [MessageController::class, 'store'])->name('messages.store');
+    Route::post('/messages/polish', [MessageController::class, 'polish'])->name('messages.polish');
+    Route::post('/messages/upload', [MessageController::class, 'upload'])->name('messages.upload');
+    Route::get('/messages/{thread}', [MessageController::class, 'show'])->name('messages.show')->whereNumber('thread');
+    Route::post('/messages/{thread}/reply', [MessageController::class, 'reply'])->name('messages.reply')->whereNumber('thread');
+});
+// The DSS attendance page (Phase 8.1): the county's month, for the one
+// person who reconciles it — see the see-dss gate in AppServiceProvider.
+Route::middleware(['auth', 'password.change', 'can:see-dss'])->group(function () {
+    Route::get('/dss', [DssController::class, 'index'])->name('dss.index');
+    Route::get('/dss/grid', [DssController::class, 'grid'])->name('dss.grid');
+    Route::post('/dss/cells', [DssController::class, 'apply'])->name('dss.apply');
+    Route::get('/dss/export/preview', [DssController::class, 'preview'])->name('dss.preview');
+    Route::get('/dss/export', [DssController::class, 'export'])->middleware('never-cached')->name('dss.export');
+});
+
+// The building, room by room, live — Phase 4.2. Read over what the door,
+// the register, the clock and the roster already say; the one write is the
+// short room's "Move X to Y until Z arrives", a cover on today's roster.
+Route::get('/floor-plan', [FloorPlanController::class, 'index'])->middleware(['auth', 'password.change', 'role:admin,teacher', 'never-cached'])->name('floor-plan.index');
+Route::post('/floor-plan/move', [FloorPlanController::class, 'move'])->middleware(['auth', 'password.change', 'role:admin'])->name('floor-plan.move');
+
+// Director Attendance (Phase 3, as DirectorAttendance.dc.html draws it): the
+// week as a grid, a tap per day, times typed in the cell. The register this
+// page was before — cards, the projection, the room cover, the recent
+// drawer — is kept whole as the classic register, one link away.
+Route::get('/attendance', [AttendanceController::class, 'week'])
     ->name('attendance.index');
+Route::get('/attendance/classic', [AttendanceController::class, 'index'])
+    ->name('attendance.classic');
+Route::post('/attendance/week/cell', [AttendanceController::class, 'cell'])
+    ->name('attendance.week.cell');
 
 // The week on paper. Same audience as the sheet above: whoever may see a
 // child's row on screen may print it.

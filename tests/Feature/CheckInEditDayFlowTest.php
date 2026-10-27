@@ -125,7 +125,7 @@ class CheckInEditDayFlowTest extends TestCase
         $this->assertStringContainsString($q.'out'.$q.':'.$q.'4:30p'.$q, $checkIn);
 
         // And the register, that week, shows the same arrival: one record.
-        $register = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::DAY]))->assertOk()->getContent());
+        $register = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => self::DAY]))->assertOk()->getContent());
         $this->assertStringContainsString('"'.$this->child->id.'":{"'.self::DAY.'":{"FULL":"8:05a"', $register, 'the cell on the register for that day');
         $this->assertSame(1, Attendance::count());
     }

@@ -52,7 +52,7 @@ class RoomOrderTest extends TestCase
     {
         $this->children();
 
-        $html = $this->actingAs($this->admin())->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin())->get(route('attendance.classic'))->assertOk()->getContent();
 
         preg_match_all('/@click="pickRoom\(&quot;([^&]+)&quot;\)"|@click="pickRoom\(\'([^\']+)\'\)"/', $html, $matches);
         $chips = array_values(array_filter(array_map(fn ($a, $b) => $a ?: $b, $matches[1], $matches[2])));
@@ -64,7 +64,9 @@ class RoomOrderTest extends TestCase
     {
         $this->children();
 
-        $html = $this->actingAs($this->admin())->get(route('reports.index'))->assertOk()->getContent();
+        // The weekly sign-in sheet, which carries the dropdown (Phase 8.2
+        // made Child attendance the page's first report).
+        $html = $this->actingAs($this->admin())->get(route('reports.index', ['report' => 'week']))->assertOk()->getContent();
 
         preg_match('/<select id="report-classroom".*?<\/select>/s', $html, $select);
         preg_match_all('/<option value="([^"]+)"/', $select[0] ?? '', $options);

@@ -380,7 +380,7 @@ class ClassroomAssignmentTest extends TestCase
         $child->forceFill(['classroom_override' => 'Transition', 'classroom_override_from' => self::MONDAY])->save();
 
         app(WeekSchedule::class)->open(self::MONDAY);
-        $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::MONDAY]))->assertOk();
+        $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => self::MONDAY]))->assertOk();
 
         $this->assertSame('Transition', $child->fresh()->classroom);
     }

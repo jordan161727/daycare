@@ -50,7 +50,7 @@ class SharedRecordTest extends TestCase
         // Both screens show it.
         $door = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent());
         $this->assertStringContainsString('"in":"8:00a","in_code":3', $door);
-        $register = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('attendance.index', ['date' => '2026-10-20']))->assertOk()->getContent());
+        $register = str_replace(chr(92).'u0022', '"', $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => '2026-10-20']))->assertOk()->getContent());
         $this->assertStringContainsString('"'.$this->child->id.'":{"2026-10-20":{"FULL":"8:00a"', $register);
     }
 

@@ -49,7 +49,7 @@ class AttendanceCellDesignTest extends TestCase
         ]);
 
         $response = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk();
 
         // Sheet-sized: the grid is sixty rows by five columns and every filled
@@ -71,7 +71,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -109,7 +109,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -144,7 +144,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -158,7 +158,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -193,7 +193,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -227,7 +227,7 @@ class AttendanceCellDesignTest extends TestCase
         }
 
         $map = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->viewData('attendanceMap');
 
@@ -249,7 +249,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -290,7 +290,7 @@ class AttendanceCellDesignTest extends TestCase
         // And once they are in, the cell is the time — an arrival outranks the
         // closure, because it is a fact about the day rather than a plan for it.
         $map = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->viewData('attendanceMap');
 
@@ -309,7 +309,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -424,7 +424,7 @@ class AttendanceCellDesignTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 
@@ -443,7 +443,7 @@ class AttendanceCellDesignTest extends TestCase
     {
         $this->makeChild();
         app(WeekSchedule::class)->open(self::MONDAY);
-        $room = fn (string $query) => preg_match("/room: '([^']*)'/", str_replace('"', "'", $this->actingAs($this->admin)->get('/attendance?date='.self::MONDAY.$query)->assertOk()->getContent()), $m) ? $m[1] : null;
+        $room = fn (string $query) => preg_match("/room: '([^']*)'/", str_replace('"', "'", $this->actingAs($this->admin)->get('/attendance/classic?date='.self::MONDAY.$query)->assertOk()->getContent()), $m) ? $m[1] : null;
 
         $this->assertSame('Infant', $room('&infant'));
         $this->assertSame('UPK-4', $room('&upk4'));
@@ -453,7 +453,7 @@ class AttendanceCellDesignTest extends TestCase
         $this->assertSame('', $room(''));
 
         // The chips keep the address in step, and keep the date while they do.
-        $html = $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::MONDAY]))->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => self::MONDAY]))->getContent();
         $this->assertStringContainsString("@click=\"pickRoom('')\"", $html);
         $this->assertStringContainsString("if (key === 'room' || rooms.includes(letters(key))) params.delete(key);", $html);
     }
@@ -469,7 +469,7 @@ class AttendanceCellDesignTest extends TestCase
         $this->makeChild();
         app(WeekSchedule::class)->open(self::MONDAY);
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::MONDAY]))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic', ['date' => self::MONDAY]))->assertOk()->getContent();
 
         $this->assertStringNotContainsString('data-card-sort', $html);
         $this->assertStringContainsString("if (this.mode !== 'avatar') return this.filteredCache.rows;", $html);

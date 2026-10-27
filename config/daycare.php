@@ -34,6 +34,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Messages (Phase 9)
+    |--------------------------------------------------------------------------
+    |
+    | Texts to families go out from two numbers: the Classroom line for Room
+    | conversations, and the Office line for Office conversations and
+    | announcements. A parent's reply comes back to whichever line it was
+    | sent to, which is how the app knows which conversation it belongs in.
+    |
+    | The driver is "log" until an SMS account is set up: every text is
+    | recorded in the app and written to the log, and nothing leaves the
+    | building. Set it to "twilio" with the account in config/services.php
+    | to send for real.
+    |
+    */
+
+    'messages' => [
+        'driver' => env('DAYCARE_SMS_DRIVER', 'log'),
+        'classroom_line' => env('DAYCARE_CLASSROOM_LINE', '(716) 555-0143'),
+        'office_line' => env('DAYCARE_OFFICE_LINE', '(716) 555-0142'),
+        // Days a video link stays open. A video is too big for a text, so
+        // the parent gets a private link instead; it should not live for ever.
+        'video_link_days' => 30,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Province
     |--------------------------------------------------------------------------
     |
@@ -139,6 +165,59 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Room capacity and ages
+    |--------------------------------------------------------------------------
+    |
+    | How many children a room holds, and the ages it takes, as the floor plan
+    | prints them. Until Settings → Rooms & hours (Phase 1.2) lets the centre
+    | set these, they are here, with the figures from the mock-ups. School Age
+    | shares its room with UPK-4 before and after school.
+    |
+    */
+
+    'capacity' => [
+        'Infant' => 8,
+        'Transition' => 10,
+        'Toddler' => 10,
+        'PreK' => 12,
+        'UPK-4' => 20,
+        'School Age' => 20,
+    ],
+
+    'room_ages' => [
+        'Infant' => '6 wk–18 mo',
+        'Transition' => '19–24 mo',
+        'Toddler' => '24–36 mo',
+        'PreK' => '3–4 yrs',
+        'UPK-4' => '4–5 yrs',
+        'School Age' => '6–12 yrs',
+    ],
+
+    /* Who sees the private DSS page: emails, comma-separated; blank = any director. */
+    'dss' => ['users' => env('DAYCARE_DSS_USERS', '')],
+
+    /* The hour School Age is back from school, for the afternoon's ratio. */
+    'school_age_returns_at' => '15:00',
+
+    /* And the hour they leave for it: the end of a School Age morning. */
+    'school_age_leaves_at' => '08:30',
+
+    /*
+    | New York's largest group per age (18 NYCRR 418-1.8). A room whose
+    | capacity is above its group cap has to run as two groups, and the
+    | floor plan says so.
+    */
+    'ny_max_group' => [
+        'Infant' => 8,
+        'Transition' => 12,
+        'Toddler' => 12,
+        'PreK' => 18,
+        'UPK-4' => 21,
+        'School Age' => 30,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Default weekly hours by employment type
     |--------------------------------------------------------------------------
     |
@@ -151,7 +230,11 @@ return [
         'FT' => 40,
         'FT_SALARY' => 40,
         'PT' => 24,
+        // Part time with no set days: the schedule gives them what the rooms need.
+        'PT_FLEX' => 24,
         'SUB' => 20,
+        // Still on the books, not on the schedule.
+        'INACTIVE' => 0,
     ],
 
     /*

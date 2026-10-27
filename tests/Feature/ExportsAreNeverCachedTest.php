@@ -32,6 +32,12 @@ class ExportsAreNeverCachedTest extends TestCase
         'staff.reports.export',
         'attendance.month-sheet.export',
         'comments.export',
+        // The Staff page (Phase 5): the team, and one person's attendance.
+        'staff.export',
+        'staff.attendance.export',
+        // Phase 8: the county's file and the reports' files.
+        'dss.export',
+        'reports.export',
     ];
 
     public function test_every_export_route_carries_the_middleware(): void

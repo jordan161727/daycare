@@ -193,7 +193,7 @@ class MonthSheetTest extends TestCase
 
         // And the register no longer offers a way here, which is the thing
         // that was removed rather than something that broke.
-        $register = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $register = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // No link to this page from the register. As a bounded address, with
         // its closing quote: the register does link to the month *export*,

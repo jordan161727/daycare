@@ -141,8 +141,10 @@ class TeacherController extends Controller
 
         $teacher = User::create($data);
 
+        // Land on the new person's page in the Staff module (the sidebar's
+        // Staff), not the older roster at /teachers — 26 Oct 2026.
         if ($temporary === null) {
-            return redirect()->route('teachers.index')->with('success', 'Teacher account created successfully.');
+            return redirect()->route('staff.show', $teacher)->with('success', 'Teacher account created successfully.');
         }
 
         try {
@@ -153,11 +155,11 @@ class TeacherController extends Controller
             // the teacher still has to replace it on the way in.
             report($e);
 
-            return redirect()->route('teachers.index')
+            return redirect()->route('staff.show', $teacher)
                 ->with('error', "Account created, but the email to {$teacher->email} could not be sent. Temporary password: {$temporary}");
         }
 
-        return redirect()->route('teachers.index')
+        return redirect()->route('staff.show', $teacher)
             ->with('success', "Teacher account created. A temporary password has been emailed to {$teacher->email}.");
     }
 
@@ -173,7 +175,7 @@ class TeacherController extends Controller
         abort_unless($teacher->role === 'teacher', 404);
         $teacher->update($this->validatedData($request, $teacher));
 
-        return redirect()->route('teachers.index')->with('success', 'Teacher account updated successfully.');
+        return redirect()->route('staff.show', $teacher)->with('success', 'Teacher account updated successfully.');
     }
 
     public function destroy(User $teacher)
@@ -181,7 +183,7 @@ class TeacherController extends Controller
         abort_unless($teacher->role === 'teacher', 404);
         $teacher->delete();
 
-        return redirect()->route('teachers.index')->with('success', 'Teacher account deleted successfully.');
+        return redirect()->route('staff.index')->with('success', 'Teacher account deleted successfully.');
     }
 
     private function classrooms()

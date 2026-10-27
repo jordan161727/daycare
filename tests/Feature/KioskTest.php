@@ -61,7 +61,7 @@ class KioskTest extends TestCase
         // Read back through the board itself rather than the table, because the
         // point of the kiosk is what a teacher sees when they open the sheet —
         // the box already green, with nobody having tapped it.
-        $response = $this->actingAs($admin)->get(route('attendance.index'))->assertOk();
+        $response = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk();
 
         $map = $response->viewData('attendanceMap');
 

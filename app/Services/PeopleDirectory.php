@@ -143,6 +143,15 @@ class PeopleDirectory
             $link->can_pickup = (bool) ($flags['can_pickup'] ?? false);
             $link->is_emergency = (bool) ($flags['is_emergency'] ?? false);
 
+            // Who pays the fees and who gets the texts (Phase 2): only set
+            // when the form carried them, so the People step on the edit
+            // form, which does not, leaves what the record page ticked.
+            foreach (['pays_fees', 'gets_texts'] as $tick) {
+                if (array_key_exists($tick, $flags)) {
+                    $link->{$tick} = (bool) $flags[$tick];
+                }
+            }
+
             // Rule 3: a call order only means anything on an emergency contact,
             // and is cleared the moment that tick comes off.
             $link->priority = $link->is_emergency ? ($flags['priority'] ?? null) : null;

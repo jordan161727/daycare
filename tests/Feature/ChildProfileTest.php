@@ -71,7 +71,7 @@ class ChildProfileTest extends TestCase
     public function test_back_returns_to_the_page_the_record_was_opened_from(): void
     {
         $child = $this->child();
-        $sheet = route('attendance.index', ['date' => '2026-09-14']);
+        $sheet = route('attendance.classic', ['date' => '2026-09-14']);
 
         $this->actingAs($this->admin())
             ->get(route('children.show', $child), ['referer' => $sheet])
@@ -108,7 +108,7 @@ class ChildProfileTest extends TestCase
                 ->assertOk()
                 ->getContent();
 
-            $this->assertStringContainsString('href="'.route('children.index').'" class="rounded-xl bg-white/10', $html);
+            $this->assertStringContainsString('href="'.route('children.index').'" style="font-size: 13px; font-weight: 600;">← Children', $html);
         }
     }
 
@@ -186,7 +186,8 @@ class ChildProfileTest extends TestCase
         $this->actingAs($this->admin())
             ->get(route('children.show', $child))
             ->assertOk()
-            ->assertSee('Set by hand from 8/1/2026');
+            ->assertSee('Set by hand')
+            ->assertSee('from Aug 1, 2026');
     }
 
     public function test_a_social_security_number_is_never_on_the_page(): void
@@ -210,7 +211,7 @@ class ChildProfileTest extends TestCase
             // And may keep it up to date: a teacher is the one told a new
             // mobile number at the door. What decides rooms, enrolment and
             // billing is still the director's � see ChildRecordEditingTest.
-            ->assertSee('Edit record');
+            ->assertSee('Edit details');
     }
 
     public function test_a_teacher_may_not_read_a_child_in_another_room(): void

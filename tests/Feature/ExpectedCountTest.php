@@ -109,7 +109,7 @@ class ExpectedCountTest extends TestCase
     private function sheet(): string
     {
         return $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
     }

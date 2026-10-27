@@ -202,6 +202,8 @@ class PersonController extends Controller
             'is_guardian' => ['nullable', 'boolean'],
             'can_pickup' => ['nullable', 'boolean'],
             'is_emergency' => ['nullable', 'boolean'],
+            'pays_fees' => ['nullable', 'boolean'],
+            'gets_texts' => ['nullable', 'boolean'],
             'priority' => ['nullable', 'integer', 'min:1', 'max:99'],
             'restriction' => ['nullable', 'string', 'max:255'],
         ];
@@ -283,6 +285,8 @@ class PersonController extends Controller
             'is_guardian' => $link->is_guardian,
             'can_pickup' => $link->can_pickup,
             'is_emergency' => $link->is_emergency,
+            'pays_fees' => $link->pays_fees,
+            'gets_texts' => $link->gets_texts,
             'priority' => $link->priority,
             'restriction' => $link->restriction,
             // What the row shows as the address when the person has none of

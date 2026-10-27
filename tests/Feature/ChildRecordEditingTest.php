@@ -163,14 +163,21 @@ class ChildRecordEditingTest extends TestCase
 
     public function test_the_roster_offers_the_edit_to_whoever_may_read_it(): void
     {
-        $this->child();
+        $child = $this->child();
 
         // The roster is already filtered to what this reader may see, so every
-        // row on it is one they may also keep up to date.
+        // row on it is one they may also keep up to date: the row opens the
+        // record (Phase 2), and the record carries "Edit details".
         $this->actingAs($this->teacher)
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSee('Edit');
+            ->assertSee(route('children.show', $child), escape: false);
+
+        $this->actingAs($this->teacher)
+            ->get(route('children.show', $child))
+            ->assertOk()
+            ->assertSee('Edit details')
+            ->assertSee(route('children.edit', $child), escape: false);
     }
 
     /** The whole form, since an update posts every field the page carries. */

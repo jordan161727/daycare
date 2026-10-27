@@ -307,7 +307,35 @@ class StaffKiosk
             'since' => $this->sinceLine($day),
             'last_activity' => $this->lastActivity($user),
             'actions' => $this->actionsFor($user),
+            // What the office has planned for them today (Phase 5): the shift
+            // they were given and any change the Staff page holds for the
+            // date, so the note reaches the person at the clock, not only
+            // the director who wrote it.
+            'today' => $this->todayLine($user, $today),
         ];
+    }
+
+    /**
+     * "Scheduled 9:00 AM – 6:00 PM · Transition", with the office's change
+     * for the day after it ("Out until 3:00 PM · appointment"), or null when
+     * nothing is planned.
+     */
+    private function todayLine(User $user, string $today): ?string
+    {
+        $shift = \App\Models\StaffShift::where('user_id', $user->id)->whereDate('shift_date', $today)->orderBy('starts_at')->first();
+        $change = \App\Models\StaffTimeOff::where('user_id', $user->id)->onDate($today)->orderByDesc('id')->first();
+
+        $parts = [];
+
+        if ($shift) {
+            $parts[] = 'Scheduled '.$shift->label().($shift->classroom ? ' · '.$shift->classroom : '');
+        }
+
+        if ($change) {
+            $parts[] = $change->describe().' · '.strtolower($change->reasonLabel());
+        }
+
+        return $parts === [] ? null : implode(' — ', $parts);
     }
 
     /** "On the clock since 7:54 AM", or nothing when they are not. */

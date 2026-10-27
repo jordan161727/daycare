@@ -40,7 +40,7 @@ class AttendanceHoursColumnTest extends TestCase
         $this->makeChild(['drop_off_time' => '08:30', 'pick_up_time' => '17:30']);
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -80,7 +80,7 @@ class AttendanceHoursColumnTest extends TestCase
         $this->makeChild(['drop_off_time' => '07:30', 'pick_up_time' => '16:30']);
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -98,7 +98,7 @@ class AttendanceHoursColumnTest extends TestCase
         $this->makeChild();
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

@@ -67,7 +67,7 @@ class ChildScheduleTest extends TestCase
             // counted, and it is the control you press to see those children.
             ->assertSee('All <span class="ml-0.5 opacity-60">12</span>', false)
             ->assertSee('Active <span class="ml-0.5 opacity-60">9</span>', false)
-            ->assertSee('Inactive <span class="ml-0.5 opacity-60">3</span>', false);
+            ->assertSee('Withdrawn <span class="ml-0.5 opacity-60">3</span>', false);
     }
 
     public function test_the_roster_shows_the_date_year_first(): void
@@ -101,7 +101,7 @@ class ChildScheduleTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
 
         $roster = $this->actingAs($admin)->get(route('children.index'))->assertOk()->getContent();
-        $sheet = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $sheet = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         foreach (['att-person', 'att-avatar', 'att-name'] as $class) {
             $this->assertStringContainsString($class, $roster, "the roster does not use {$class}");
@@ -112,7 +112,8 @@ class ChildScheduleTest extends TestCase
         // a row that says the same thing twice is a row saying it twice.
         $this->assertStringNotContainsString('att-room', $roster);
         $this->assertStringNotContainsString('att-room', $sheet);
-        $this->assertStringContainsString('>Classroom', $roster);
+        // The roster calls the column Room, as the Phase 2 mock-up does.
+        $this->assertStringContainsString('>Room', $roster);
         $this->assertStringContainsString('>Classroom</th>', $sheet);
 
         // Both read from the left, which is the only alignment either uses —
@@ -131,10 +132,10 @@ class ChildScheduleTest extends TestCase
         $this->makeChild(['birth_date' => '2023-03-15', 'first_name' => 'Ada']);
         $admin = User::factory()->create(['role' => 'admin']);
 
-        $order = ['LAN', 'Student', 'Classroom', 'DOB', 'Age'];
-
-        $this->actingAs($admin)->get(route('children.index'))->assertOk()->assertSeeInOrder($order);
-        $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->assertSeeInOrder($order);
+        // Same order on both; the roster names the columns as the Phase 2
+        // mock-up does (Child, Room), the sheet as it always has.
+        $this->actingAs($admin)->get(route('children.index'))->assertOk()->assertSeeInOrder(['LAN', 'Child', 'Room', 'DOB', 'Age']);
+        $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->assertSeeInOrder(['LAN', 'Student', 'Classroom', 'DOB', 'Age']);
     }
 
     public function test_the_roster_carries_the_age_beside_the_date(): void
@@ -198,7 +199,7 @@ class ChildScheduleTest extends TestCase
         $this->makeChild(['birth_date' => '2023-03-15', 'first_name' => 'Ada']);
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

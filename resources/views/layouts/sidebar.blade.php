@@ -46,78 +46,85 @@
          went on pushing the account block below off the bottom of the screen —
          the scrollbar never appeared because there was nothing to overflow. --}}
     <nav class="sidebar-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-3 py-2">
-        <a href="{{ route('dashboard') }}" class="nav-link {{ request()->routeIs('dashboard') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13h8V3H3v10zm10 8h8V3h-8v18zM3 21h8v-6H3v6z"/></svg><span x-show="!collapsed">Dashboard</span></a>
-        {{-- The register is the director's. A teacher works the door screen
-             below; the week sheet is not on their sidebar (14 Oct 2026). --}}
-        @if(auth()->user()->isAdmin())
-        <a href="{{ route('attendance.index') }}" class="nav-link {{ request()->routeIs('attendance.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span x-show="!collapsed">Director Attendance</span><span x-show="!collapsed" class="ml-auto rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold">Today</span></a>
-        @endif
-        {{-- The door screen, above the register: it is opened every morning
-             and every afternoon, and the week sheet is opened to read. --}}
-        <a href="{{ route('check-in.index') }}" class="nav-link {{ request()->routeIs('check-in.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg><span x-show="!collapsed">Teacher Attendance</span></a>
-        {{-- The roll is the director's too (15 Oct 2026): a teacher's sidebar
-             is Dashboard and Teacher Attendance. --}}
-        @if(auth()->user()->isAdmin())
-        <a href="{{ route('children.index') }}" class="nav-link {{ request()->routeIs('children.index') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-4-4h-1m-4 6H2v-2a4 4 0 014-4h3a4 4 0 014 4v2zm-5-6a4 4 0 100-8 4 4 0 000 8z"/></svg><span x-show="!collapsed">Children</span></a>
-        @endif
-        {{-- The comments log (20 Oct 2026), per Jordan's feed design: every
-             note of a day across every child. For whoever works the door,
-             the same as Teacher Attendance. --}}
-        <a href="{{ route('comments.index') }}" class="nav-link {{ request()->routeIs('comments.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5.5A2.5 2.5 0 016.5 3h11A2.5 2.5 0 0120 5.5v8a2.5 2.5 0 01-2.5 2.5H10l-5 4v-4H6.5A2.5 2.5 0 014 13.5v-8z"/></svg><span x-show="!collapsed">Comments</span></a>
-        {{-- Settings, live again at Jordan's request (16 Oct 2026): the
-             director's page for the centre, the administrators, the devices
-             and Settings > Children, where archived children are restored. --}}
-        @if(auth()->user()->isAdmin())
-      <a href="{{ route('settings.children') }}" class="nav-link {{ request()->routeIs('settings.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span x-show="!collapsed">Settings</span></a>
-        @endif
-        {{-- Jordan's call (14 Oct 2026): the sidebar is Dashboard, Director
-             Attendance (director only), Teacher Attendance and Children, and
-             nothing else. Everything below is parked, not removed — the
-             links, their comments and their role checks are exactly as they
-             were, and @if(auth()->user()->isAdmin()) gives the director the
-             lot back. --}}
-        @if(false)
-        <a href="{{ route('reports.index') }}" class="nav-link {{ request()->routeIs('reports.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span x-show="!collapsed">Reports</span></a>
+        {{-- The menu as Phase 1.1 of docs/work.md orders it (24 Oct 2026):
+             the day's screens, then Staff, Families and Only you as sections,
+             then Reports and Settings. Modules the mock-ups mark NEW wear the
+             badge; Messages wears its unread count; DSS shows only to whoever
+             may see it. Every link keeps the role check it always had. The
+             office's other pages — payroll, leave, holidays, imports — sit
+             under an Office section at the foot so nothing is lost. --}}
+        @php($isAdmin = auth()->user()->isAdmin())
+        {{-- Parked (Jordan, 26 Oct 2026): the NEW badges are off the menu. The
+             span is kept here so a link can carry it again by swapping $new back. --}}
+        {{-- @php($new = '<span x-show="!collapsed" class="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">New</span>') --}}
+        @php($new = '')
+        @php($section = fn (string $label) => '<p x-show="!collapsed" class="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">'.$label.'</p>')
+        @php($icon = fn (string $d) => '<svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="'.$d.'"/></svg>')
+        @php($link = fn (string $route, string $active, string $label, string $d, string $badge = '') => '<a href="'.route($route).'" class="nav-link '.(request()->routeIs(...explode('|', $active)) ? 'nav-link-active' : '').'">'.$icon($d).'<span x-show="!collapsed">'.$label.'</span>'.$badge.'</a>')
 
-        {{-- The staff time clock. Director only: a device records hours
-             somebody is paid for, and a card is somebody's identity at it. --}}
-        @if(auth()->user()->isAdmin())
-            <p x-show="!collapsed" class="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">Employee</p>
-            <a href="{{ route('staff.timesheets') }}" class="nav-link {{ request()->routeIs('staff.timesheets') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span x-show="!collapsed">Timesheets</span></a>
-            <a href="{{ route('teachers.index') }}" class="nav-link {{ request()->routeIs('teachers.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m17-10a4 4 0 010 8m-3-12a4 4 0 010 8M9 11a4 4 0 100-8 4 4 0 000 8z"/></svg><span x-show="!collapsed">Staff</span></a>
-            <a href="{{ route('staff.reports') }}" class="nav-link {{ request()->routeIs('staff.reports*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19V9m5 10V5m5 14v-7m5 7V3"/></svg><span x-show="!collapsed">Reports</span></a>
+        {!! $link('dashboard', 'dashboard', 'Dashboard', 'M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z') !!}
+        {!! $link('floor-plan.index', 'floor-plan.*', 'Floor plan', 'M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 7h16M12 4v16', $new) !!}
+        {!! $link('attendance.index', 'attendance.*', 'Director Attendance', 'M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z') !!}
+        {!! $link('check-in.index', 'check-in.*', 'Teacher Attendance', 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z') !!}
+        {!! $link('children.index', 'children.index', 'Children', 'M17 20h5v-2a4 4 0 00-4-4h-1m-4 6H2v-2a4 4 0 014-4h3a4 4 0 014 4v2zm-5-6a4 4 0 100-8 4 4 0 000 8z') !!}
+
+        {!! $section('Staff') !!}
+        @if($isAdmin)
+            {{-- The Staff page (Phase 5). The kiosks are not on the menu:
+                 the clock and the door screen live in their own tab on the
+                 wall, signed out, and a link here would only open a screen
+                 the office never uses from a desk. --}}
+            {!! $link('staff.index', 'staff.index|staff.show|teachers.*', 'Staff', 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', $new) !!}
+            {!! $link('staff.timesheets', 'staff.timesheets', 'Staff attendance', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', $new) !!}
         @endif
-        @if(auth()->user()->isAdmin() || auth()->user()->role === 'teacher')
-            <a href="{{ route('staff-schedule.index') }}" class="nav-link {{ request()->routeIs('staff-schedule.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg><span x-show="!collapsed">Week Schedule</span></a>
-            @if(! auth()->user()->isAdmin())
-                {{-- Their own week, above the whole floor's, because it is the
-                     one they open daily. A director has no shifts of their own,
-                     so it would only ever be an empty page for them. --}}
-                <a href="{{ route('staff-schedule.mine') }}" class="nav-link {{ request()->routeIs('staff-schedule.mine') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg><span x-show="!collapsed">My Schedule</span></a>
-            @endif
-            {{-- Your own balances and requests. Everybody has leave, including
-                 the director — they simply cannot sign off their own. --}}
-            <a href="{{ route('leave.index') }}" class="nav-link {{ request()->routeIs('leave.index') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm4-7h6"/></svg><span x-show="!collapsed">My Leave</span></a>
-            @if(config('daycare.timesheet.clock.enabled'))
-                <a href="{{ route('clock.index') }}" class="nav-link {{ request()->routeIs('clock.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l2.5 2.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span x-show="!collapsed">Time Clock</span></a>
-            @endif
+        {!! $link('staff-schedule.index', 'staff-schedule.index', 'Schedule', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', $new) !!}
+        {{-- Parked (Jordan, 26 Oct 2026): the menu shows the mock-up's links
+             only. The pages stay live at their addresses; flip the @if to
+             bring a link back. --}}
+        @if(false)
+        @unless($isAdmin)
+            {{-- Their own week, above the whole floor's, because it is the one
+                 they open daily. A director has no shifts of their own. --}}
+            {!! $link('staff-schedule.mine', 'staff-schedule.mine', 'My Schedule', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') !!}
+        @endunless
+        {!! $link('leave.index', 'leave.index', 'My Leave', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') !!}
+        @if(config('daycare.timesheet.clock.enabled'))
+            {!! $link('clock.index', 'clock.*', 'Time Clock', 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z') !!}
         @endif
-        @if(auth()->user()->isAdmin())
-        {{-- {{-- <a href="{{ route('staff.timesheets') }}" class="nav-link {{ request()->routeIs('staff.timesheets') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span x-show="!collapsed">Timesheets</span><span x-show="!collapsed" class="ml-auto rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-semibold">Today</span></a> --}}
-            {{-- <a href="{{ route('teachers.index') }}" class="nav-link {{ request()->routeIs('teachers.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2m17-10a4 4 0 010 8m-3-12a4 4 0 010 8M9 11a4 4 0 100-8 4 4 0 000 8z"/></svg><span x-show="!collapsed">Teachers</span></a> --}}
-        <a href="{{ route('room-schedule.index') }}" class="nav-link {{ request()->routeIs('room-schedule.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg><span x-show="!collapsed">Room Schedules</span></a>
-        <a href="{{ route('holidays.index') }}" class="nav-link {{ request()->routeIs('holidays.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zm4-6l2 2 4-4"/></svg><span x-show="!collapsed">Holidays</span></a>
-        @php($waiting = rescue(fn () => \App\Models\LeaveRequest::where('status', 'pending')->count(), 0, false))
-        <a href="{{ route('leave.requests') }}" class="nav-link {{ request()->routeIs('leave.requests') || request()->routeIs('leave.balances') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg><span x-show="!collapsed">Leave Requests</span>@if($waiting > 0)<span x-show="!collapsed" class="ml-auto rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{{ $waiting }}</span>@endif</a>
-        {{-- The fortnight that gets approved, and the only place a punch can
-             be put right: a missed clock-out, a break nobody recorded, a time
-             that needs moving. The grid above flags those; this fixes them,
-             so the two belong next to each other. --}}
-        <a href="{{ route('timesheets.index') }}" class="nav-link {{ request()->routeIs('timesheets.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span x-show="!collapsed">Payroll Prep</span></a>
-        <a href="{{ route('payroll.index') }}" class="nav-link {{ request()->routeIs('payroll.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg><span x-show="!collapsed">Payroll</span></a>
-         <a href="{{ route('children.import.form') }}" class="nav-link {{ request()->routeIs('children.import.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 3v12m0 0l-4-4m4 4l4-4"/></svg><span x-show="!collapsed">Import Children</span></a>
-      <a href="{{ route('settings.company') }}" class="nav-link {{ request()->routeIs('settings.*') ? 'nav-link-active' : '' }}"><svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span x-show="!collapsed">Settings</span></a>
-         @endif
+        @endif
+
+        {!! $section('Families') !!}
+        @php($unread = \App\Models\MessageThread::unreadFor(auth()->user()))
+        {!! $link('messages.index', 'messages.*', 'Messages', 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z', $unread > 0 ? '<span x-show="!collapsed" class="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white" data-unread>'.$unread.'</span>' : '') !!}
+        {{-- Parked (Jordan, 26 Oct 2026) — see above. --}}
+        @if(false)
+        {{-- The comments log: every note of a day across every child. --}}
+        {!! $link('comments.index', 'comments.*', 'Comments', 'M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z') !!}
+        @endif
+
+        @can('see-dss')
+            {!! $section('Only you') !!}
+            {!! $link('dss.index', 'dss.*', 'DSS', 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', '<span x-show="!collapsed" class="ml-auto rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Private</span>') !!}
+        @endcan
+
+        <div class="pt-3"></div>
+        {!! $link('reports.index', 'reports.*', 'Reports', 'M4 19V9m5 10V5m5 14v-7m5 7V3', $new) !!}
+        @if($isAdmin)
+            {!! $link('settings.children', 'settings.*', 'Settings', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z') !!}
+
+            {{-- Parked (Jordan, 26 Oct 2026) — see above. The office's
+                 other pages, kept together at the foot. --}}
+            @if(false)
+            {!! $section('Office') !!}
+            {!! $link('staff.reports', 'staff.reports*', 'Staff reports', 'M4 19V9m5 10V5m5 14v-7m5 7V3') !!}
+            {!! $link('room-schedule.index', 'room-schedule.*', 'Room Schedules', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') !!}
+            {!! $link('holidays.index', 'holidays.*', 'Holidays', 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') !!}
+            @php($waiting = rescue(fn () => \App\Models\LeaveRequest::where('status', 'pending')->count(), 0, false))
+            {!! $link('leave.requests', 'leave.requests', 'Leave Requests', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', $waiting > 0 ? '<span x-show="!collapsed" class="ml-auto rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">'.$waiting.'</span>' : '') !!}
+            {!! $link('timesheets.index', 'timesheets.*', 'Payroll Prep', 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2') !!}
+            {!! $link('payroll.index', 'payroll.*', 'Payroll', 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z') !!}
+            {!! $link('children.import.form', 'children.import.*', 'Import Children', 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12') !!}
+            @endif
         @endif
     </nav>
 
@@ -130,7 +137,7 @@
                 <x-user-avatar :user="auth()->user()" size="h-8 w-8" text="text-xs" />
                 <span x-show="!collapsed" class="min-w-0">
                     <span class="block truncate text-[13px] font-semibold leading-tight">{{ auth()->user()->name }}</span>
-                    <span class="block text-[11px] leading-tight text-slate-600 dark:text-slate-400">{{ ucfirst(auth()->user()->role) }}</span>
+                    <span class="block text-[11px] leading-tight text-slate-600 dark:text-slate-400">{{ auth()->user()->isAdmin() ? 'Admin' : ucfirst(auth()->user()->role) }}</span>
                 </span>
             </a>
             <form method="POST" action="{{ route('logout') }}" class="shrink-0">

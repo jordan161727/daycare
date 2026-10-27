@@ -205,7 +205,7 @@ class AttendanceRetimeTest extends TestCase
         $this->makeChild();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 

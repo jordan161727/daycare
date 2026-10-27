@@ -150,6 +150,15 @@ class SettingsTest extends TestCase
         }
     }
 
+    public function test_the_company_tab_is_parked_but_its_page_still_answers(): void
+    {
+        // Parked 27 Oct 2026 (Jordan): not offered in the tab list, reachable by address.
+        $html = $this->actingAs($this->admin)->get(route('settings.children'))->assertOk()->getContent();
+        $this->assertStringNotContainsString('>Company<', $html);
+        $this->assertStringNotContainsString(route('settings.company'), $html);
+        $this->actingAs($this->admin)->get(route('settings.company'))->assertOk();
+    }
+
     public function test_the_administrators_tab_lists_only_administrators(): void
     {
         $this->teacher();

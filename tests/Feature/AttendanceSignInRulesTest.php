@@ -169,7 +169,7 @@ class AttendanceSignInRulesTest extends TestCase
         $this->makeChild();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->getContent();
 

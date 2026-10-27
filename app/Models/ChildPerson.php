@@ -22,6 +22,7 @@ class ChildPerson extends Model
     protected $fillable = [
         'child_id', 'person_id', 'relationship',
         'is_guardian', 'can_pickup', 'is_emergency',
+        'pays_fees', 'gets_texts',
         'priority', 'restriction', 'source',
     ];
 
@@ -29,6 +30,8 @@ class ChildPerson extends Model
         'is_guardian' => 'boolean',
         'can_pickup' => 'boolean',
         'is_emergency' => 'boolean',
+        'pays_fees' => 'boolean',
+        'gets_texts' => 'boolean',
         'priority' => 'integer',
     ];
 

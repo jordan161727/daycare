@@ -40,6 +40,10 @@ class StaffTimesheetExport implements FromCollection, WithHeadings, WithStyles, 
         'on_time' => 'On time',
         'late' => 'Late',
         'missing_out' => 'Missing time out',
+        // Added 27 Oct 2026: a corrected day and a day with no clock-in
+        // left the column blank, which read as unchecked.
+        'missing_in' => 'Missing clock-in',
+        'edited' => 'Edited',
     ];
 
     /** @param  Collection<int, array<string, mixed>>  $rows  The grid's own rows. */

@@ -42,10 +42,14 @@ class ChildController extends Controller
      */
     public function index()
     {
-        [$children, $sort, $direction, $status] = $this->roster();
+        [$children, $sort, $direction, $status, $room, $pay, $gap] = $this->roster();
 
         $requestUser = request()->user();
 
+        // Everybody attached to the roll and every paper on file, in two
+        // queries rather than two per child: the Guardian and Record columns
+        // and the "Records to finish" counts all read these.
+        $children->load(['personLinks.person', 'documents']);
 
         // The whole roll, not the page: "61 active" counted off ten rows would
         // be a different number on every page of the same list.
@@ -76,7 +80,31 @@ class ChildController extends Controller
         $showArchived = self::showsArchived();
         $archivedCount = $showArchived ? Child::visibleTo($requestUser)->archived()->count() : 0;
 
-        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount', 'showArchived', 'archivedCount'));
+        /*
+         * Records to finish (Phase 2.1): what is still missing across the
+         * active roll, counted once here so the banner can say "3 no
+         * emergency contact" and a press lists just those children. Over the
+         * active children only — a withdrawn child's missing consent is not
+         * a job for today.
+         */
+        $active = Child::visibleTo($requestUser)->where('status', 'Active')->with(['personLinks', 'documents'])->get();
+        $gapCounts = collect(Child::GAPS)->map(fn ($label, $key) => $active->filter(fn (Child $child) => array_key_exists($key, $child->missingItems()))->count())->filter();
+
+        // The room chips and the pay chips count the tab that is open, as the
+        // mock has them: "Toddler 11" is eleven of the children listed.
+        $tab = Child::query()->visibleTo($requestUser)
+            ->when($status !== Child::ARCHIVED, fn ($q) => $q->notArchived())
+            ->when($status !== '', fn ($q) => $q->where('status', $status))
+            ->get(['id', 'classroom', 'dss_case_no', 'dss_cin']);
+        $roomCounts = ClassroomAssignment::rooms();
+        $roomCounts = collect($roomCounts)->mapWithKeys(fn ($r) => [$r => $tab->where('classroom', $r)->count()])->all();
+        $payCounts = [
+            'all' => $tab->count(),
+            'dss' => $tab->filter(fn (Child $c) => $c->isDss())->count(),
+            'private' => $tab->filter(fn (Child $c) => ! $c->isDss())->count(),
+        ];
+
+        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount', 'showArchived', 'archivedCount', 'room', 'pay', 'gap', 'gapCounts', 'roomCounts', 'payCounts'));
     }
 
     /** Whether the Children page has an Archived tab. Set in Settings › Children. */
@@ -124,11 +152,23 @@ class ChildController extends Controller
         $wantsArchived = $status === Child::ARCHIVED;
         abort_if($wantsArchived && ! self::showsArchived(), 404);
 
+        // The room chips, the pay chips and the "Records to finish" buttons
+        // (Phase 2.1). An unknown value is a 404 for the reason a status is.
+        $room = trim((string) request('room'));
+        abort_unless($room === '' || in_array($room, ClassroomAssignment::rooms(), true), 404);
+        $pay = trim((string) request('pay'));
+        abort_unless(in_array($pay, ['', 'dss', 'private'], true), 404);
+        $gap = trim((string) request('gap'));
+        abort_unless($gap === '' || array_key_exists($gap, Child::GAPS), 404);
+
         $children = Child::query()
             ->visibleTo(request()->user())
             // Every tab but Archived leaves the archived out — All included.
             ->when(! $wantsArchived, fn ($query) => $query->notArchived())
             ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($room !== '', fn ($query) => $query->where('classroom', $room))
+            ->when($pay === 'dss', fn ($query) => $query->where(fn ($q) => $q->whereNotNull('dss_case_no')->where('dss_case_no', '!=', '')->orWhere(fn ($q) => $q->whereNotNull('dss_cin')->where('dss_cin', '!=', ''))))
+            ->when($pay === 'private', fn ($query) => $query->where(fn ($q) => $q->whereNull('dss_case_no')->orWhere('dss_case_no', ''))->where(fn ($q) => $q->whereNull('dss_cin')->orWhere('dss_cin', '')))
             // Age is shown, not stored, so it sorts by the date it is worked out
             // from — the other way round, since the youngest child is the one
             // with the latest date of birth.
@@ -186,7 +226,14 @@ class ChildController extends Controller
             // page it was on. A roster is read by scrolling, like the sheet.
             ->get();
 
-        return [$children, $sort, $direction, $status];
+        // A gap is worked out from the people and the papers, not a column,
+        // so it narrows the list after the query rather than in it.
+        if ($gap !== '') {
+            $children->load(['personLinks', 'documents']);
+            $children = $children->filter(fn (Child $child) => array_key_exists($gap, $child->missingItems()))->values();
+        }
+
+        return [$children, $sort, $direction, $status, $room, $pay, $gap];
     }
 
     /**
@@ -198,6 +245,8 @@ class ChildController extends Controller
     public function export()
     {
         [$children, , , $status] = $this->roster();
+
+        $children = $children->values();
 
         // Everybody attached to the roll, in two queries rather than two per
         // child. Both sheets read these same links.
@@ -281,6 +330,8 @@ class ChildController extends Controller
         // nobody else's.
         abort_unless($this->isVisibleTo($child, request()->user()), 403);
 
+        $child->load(['personLinks.person', 'documents.uploadedBy', 'updatedBy']);
+
         return view('children.show', [
             'child' => $child,
             'roomSchedule' => RoomSchedule::byRoom()[$child->classroom] ?? null,
@@ -288,6 +339,16 @@ class ChildController extends Controller
             // What happened to their place on the roll, newest first. Eager the
             // user, or the panel asks for each name one query at a time.
             'statusChanges' => $child->statusChanges()->with('changedBy')->get(),
+
+            /*
+             * The rest of the record (Phase 2.3): the teachers' notes from
+             * check-in beside the office's own, this month's attendance, and
+             * who the search box offers before "create a new person".
+             */
+            'teacherComments' => \App\Models\AttendanceComment::with('author')->where('child_id', $child->id)->latest('date')->latest('id')->limit(60)->get(),
+            'officeNotes' => $child->notes()->with('author')->limit(60)->get(),
+            'month' => $this->attendanceMonth($child),
+            'relationships' => PersonController::RELATIONSHIPS,
 
             /*
              * Everybody on this child's record, and the two lists drawn from
@@ -308,6 +369,97 @@ class ChildController extends Controller
             'pickups' => $people->pickupList($child),
             'emergencies' => $people->emergencyList($child),
         ]);
+    }
+
+    /**
+     * This month on the register, for the Attendance card: each weekday as
+     * in, absent, today, planned or closed, with the totals and the average
+     * first-in and last-out. Absent is a day they were booked for that has
+     * gone by with no sign-in — there is no absent switch until Phase 3.
+     */
+    private function attendanceMonth(Child $child): array
+    {
+        $today = Carbon::today();
+        $first = $today->copy()->startOfMonth();
+        $last = $today->copy()->endOfMonth();
+
+        $rows = \App\Models\Attendance::where('child_id', $child->id)
+            ->whereBetween('attendance_date', [$first->toDateString(), $last->toDateString()])
+            ->whereNotNull('signed_in_at')
+            ->get()
+            ->groupBy(fn ($row) => $row->attendance_date->toDateString());
+
+        $closed = \App\Models\ClosureDay::whereBetween('closed_on', [$first->toDateString(), $last->toDateString()])->pluck('closed_on')
+            ->map(fn ($d) => Carbon::parse($d)->toDateString())->all();
+
+        $planned = \App\Models\ScheduleSlot::where('child_id', $child->id)->where('is_scheduled', true)
+            ->whereBetween('slot_date', [$first->toDateString(), $last->toDateString()])
+            ->pluck('slot_date')->map(fn ($d) => Carbon::parse($d)->toDateString())->unique()->all();
+
+        // The word on a day, where somebody put one: absent, or not scheduled
+        // after all — the same marks Director Attendance and the DSS page set.
+        $marks = \App\Models\DssDayMark::where('child_id', $child->id)
+            ->whereBetween('marked_on', [$first->toDateString(), $last->toDateString()])
+            ->get()->mapWithKeys(fn ($m) => [$m->marked_on->toDateString() => $m->mark])->all();
+
+        $days = [];
+        $in = 0;
+        $absent = 0;
+        $ins = [];
+        $outs = [];
+
+        for ($date = $first->copy(); $date->lte($last); $date->addDay()) {
+            if ($date->isWeekend()) {
+                continue;
+            }
+
+            $key = $date->toDateString();
+            $booked = in_array($key, $planned, true) || ($planned === [] && $child->attendsOn($date));
+            $enrolled = $child->isEnrolledOn($key);
+
+            if (in_array($key, $closed, true)) {
+                $state = 'closed';
+            } elseif (isset($rows[$key])) {
+                $state = $date->isSameDay($today) ? 'today' : 'in';
+                $in++;
+                $firstIn = $rows[$key]->min('signed_in_at');
+                $lastOut = $rows[$key]->whereNotNull('signed_out_at')->max('signed_out_at');
+                if ($firstIn) {
+                    $ins[] = Carbon::parse($firstIn)->timezone(config('app.timezone'))->secondsSinceMidnight();
+                }
+                if ($lastOut) {
+                    $outs[] = Carbon::parse($lastOut)->timezone(config('app.timezone'))->secondsSinceMidnight();
+                }
+            } elseif (($marks[$key] ?? null) === \App\Models\DssDayMark::ABSENT) {
+                $state = 'absent';
+                $absent++;
+            } elseif ($date->isSameDay($today)) {
+                $state = 'today';
+            } elseif ($date->gt($today)) {
+                $state = $booked && $enrolled ? 'planned' : 'none';
+            } elseif ($booked && $enrolled && ($marks[$key] ?? null) !== \App\Models\DssDayMark::NONE) {
+                $state = 'absent';
+                $absent++;
+            } else {
+                $state = 'none';
+            }
+
+            $days[] = ['date' => $date->copy(), 'state' => $state, 'times' => isset($rows[$key])
+                ? Child::timeShort($rows[$key]->min('signed_in_at')?->timezone(config('app.timezone')))
+                : null];
+        }
+
+        $average = fn (array $seconds) => $seconds === [] ? null : Carbon::today()->addSeconds((int) round(array_sum($seconds) / count($seconds)))->format('g:ia');
+
+        return [
+            'label' => $today->format('F'),
+            'days' => $days,
+            'lead' => max(0, $first->dayOfWeekIso - 1),
+            'in' => $in,
+            'absent' => $absent,
+            'avgIn' => $average($ins),
+            'avgOut' => $average($outs),
+        ];
     }
 
     /**
@@ -536,6 +688,12 @@ class ChildController extends Controller
             'alerts' => ['nullable', 'array', 'max:12'],
             'alerts.*.type' => ['required', Rule::in(array_keys(Child::ALERT_TYPES))],
             'alerts.*.text' => ['nullable', 'string', 'max:120'],
+            // What the record page adds to an alert (Phase 2.3): kept through
+            // a save from this form rather than silently dropped by it.
+            'alerts.*.severity' => ['nullable', Rule::in(['mild', 'moderate', 'severe'])],
+            'alerts.*.reaction' => ['nullable', 'string', 'max:200'],
+            'alerts.*.action' => ['nullable', 'string', 'max:200'],
+            'alerts.*.plan_on' => ['nullable', 'date'],
             'enrolled_on' => ['nullable', 'date'],
             'withdrawn_on' => ['nullable', 'date', 'after_or_equal:enrolled_on'],
             // What the parent contracted for. Blank means nobody has said, and
@@ -627,10 +785,14 @@ class ChildController extends Controller
         // apart from that.
         if (array_key_exists('alerts', $data)) {
             $data['alerts'] = array_values(array_filter(
-                array_map(fn ($alert) => [
+                array_map(fn ($alert) => array_filter([
                     'type' => $alert['type'],
                     'text' => trim((string) ($alert['text'] ?? '')),
-                ], $data['alerts'] ?? []),
+                    'severity' => $alert['severity'] ?? null,
+                    'reaction' => $alert['reaction'] ?? null,
+                    'action' => $alert['action'] ?? null,
+                    'plan_on' => $alert['plan_on'] ?? null,
+                ], fn ($value, $key) => in_array($key, ['type', 'text'], true) || filled($value), ARRAY_FILTER_USE_BOTH), $data['alerts'] ?? []),
                 fn ($alert) => $alert['text'] !== ''
             ));
         }

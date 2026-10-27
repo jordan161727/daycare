@@ -107,7 +107,7 @@ class RoomCoverTest extends TestCase
         $this->shift('Grace Hopper', 'Toddler', 'MON', 7 * 60, 15 * 60);
 
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 

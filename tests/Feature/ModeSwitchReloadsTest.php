@@ -47,7 +47,7 @@ class ModeSwitchReloadsTest extends TestCase
 
     public function test_the_sheet_opens_in_live_mode_by_default(): void
     {
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringContainsString('editing: false,', $html);
     }
@@ -55,7 +55,7 @@ class ModeSwitchReloadsTest extends TestCase
     public function test_mode_edit_in_the_address_opens_the_sheet_in_edit_mode(): void
     {
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['mode' => 'edit']))
+            ->get(route('attendance.classic', ['mode' => 'edit']))
             ->assertOk()
             ->getContent();
 
@@ -69,7 +69,7 @@ class ModeSwitchReloadsTest extends TestCase
         $viewer = User::factory()->create(['role' => 'viewer']);
 
         $html = $this->actingAs($viewer)
-            ->get(route('attendance.index', ['mode' => 'edit']))
+            ->get(route('attendance.classic', ['mode' => 'edit']))
             ->assertOk()
             ->getContent();
 
@@ -78,7 +78,7 @@ class ModeSwitchReloadsTest extends TestCase
 
     public function test_the_switch_reloads_with_the_mode_in_the_address(): void
     {
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // The button calls the switch, and the switch is a navigation.
         $this->assertStringContainsString('@click="switchMode()"', $html);
@@ -94,7 +94,7 @@ class ModeSwitchReloadsTest extends TestCase
          * one still out would lose the tap — so every save is counted and the
          * switch waits for the count to reach zero before it navigates.
          */
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringContainsString('while (this.inFlight > 0)', $html);
 

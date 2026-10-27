@@ -29,7 +29,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        /*
+        
+        // Who sees the DSS page (Phase 8.1, "Only you"): the users named in
+        // DAYCARE_DSS_USERS, or any director when nobody is named.
+        \Illuminate\Support\Facades\Gate::define('see-dss', function (\App\Models\User $user) {
+            $allowed = array_filter(array_map('trim', explode(',', (string) config('daycare.dss.users', ''))));
+
+            return $allowed === [] ? $user->isAdmin() : in_array($user->email, $allowed, true);
+        });
+
+/*
          * Every sign-in, sign-out and failed attempt, written down.
          *
          * Hung off the framework's own events rather than off the login

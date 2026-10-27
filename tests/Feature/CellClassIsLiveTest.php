@@ -91,7 +91,7 @@ class CellClassIsLiveTest extends TestCase
     private function sheet(): string
     {
         return $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['mode' => 'edit']))
+            ->get(route('attendance.classic', ['mode' => 'edit']))
             ->assertOk()
             ->getContent();
     }

@@ -368,7 +368,7 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk();
 
         $map = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->viewData('amendmentMap');
 
@@ -453,7 +453,7 @@ class AttendanceCorrectionTest extends TestCase
 
         // And the register hands the cards the whole day, trips included.
         app(WeekSchedule::class)->open('2026-09-14');
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
         $this->assertStringContainsString('11:00a', $html);
         $this->assertStringContainsString('1:00p', $html);
         $this->assertStringContainsString('4:00p', $html);
@@ -548,7 +548,7 @@ class AttendanceCorrectionTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-14');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->getContent();
 
@@ -576,7 +576,7 @@ class AttendanceCorrectionTest extends TestCase
         $this->makeChild();
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '2026-09-09']))
+            ->get(route('attendance.classic', ['date' => '2026-09-09']))
             ->assertOk()
             ->assertDontSee('@click="switchMode()"', false);
     }
@@ -591,7 +591,7 @@ class AttendanceCorrectionTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-07');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '2026-09-09']))
+            ->get(route('attendance.classic', ['date' => '2026-09-09']))
             ->assertOk()
             ->getContent();
 
@@ -614,7 +614,7 @@ class AttendanceCorrectionTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-14');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->getContent();
 
@@ -640,7 +640,7 @@ class AttendanceCorrectionTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-14');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->getContent();
 
@@ -672,7 +672,7 @@ class AttendanceCorrectionTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-14');
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::WEDNESDAY]))
+            ->get(route('attendance.classic', ['date' => self::WEDNESDAY]))
             ->assertOk()
             ->getContent();
 

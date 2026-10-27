@@ -39,4 +39,10 @@ return [
         'model' => env('GEMINI_MODEL', 'gemini-3.6-flash'),
     ],
 
+    // Texts to families (Phase 9). Used when daycare.messages.driver is twilio.
+    'twilio' => [
+        'sid' => env('TWILIO_SID'),
+        'token' => env('TWILIO_TOKEN'),
+    ],
+
 ];

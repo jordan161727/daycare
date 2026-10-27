@@ -40,7 +40,7 @@ class TabletLayoutTest extends TestCase
         $this->makeChild();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -90,10 +90,10 @@ class TabletLayoutTest extends TestCase
     {
         $this->makeChild();
 
-        $order = ['LAN', 'Student', 'Classroom', 'DOB', 'Age'];
-
-        $this->actingAs($this->admin)->get(route('children.index'))->assertOk()->assertSeeInOrder($order);
-        $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->assertSeeInOrder($order);
+        // The roster names them as the Phase 2 mock-up does (Child, Room);
+        // the order is the same on both.
+        $this->actingAs($this->admin)->get(route('children.index'))->assertOk()->assertSeeInOrder(['LAN', 'Child', 'Room', 'DOB', 'Age']);
+        $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->assertSeeInOrder(['LAN', 'Student', 'Classroom', 'DOB', 'Age']);
     }
 
     /**

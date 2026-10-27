@@ -7,6 +7,7 @@ use App\Models\TimesheetEntry;
 use App\Models\TimesheetPeriod;
 use App\Models\User;
 use App\Models\StaffShift;
+use App\Models\StaffTimeOff;
 use App\Services\TimeClock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -29,7 +30,33 @@ use Illuminate\Validation\Rule;
  */
 class TimePunchController extends Controller
 {
+    /**
+     * What a day with no hours counts as, in the panel's words.
+     *
+     * Written to the Staff page's time off — kind "all", one date — because
+     * that is where the office keeps the word for a day somebody was not in,
+     * and the Schedule and the clock already read it from there. "Worked" is
+     * the absence of such an entry.
+     */
+    public const COUNTS_AS = [
+        'worked' => 'Worked',
+        'pto' => 'Paid time off',
+        'sick' => 'Sick',
+        'unpaid' => 'Unpaid absence',
+    ];
+
     public function __construct(private TimeClock $clock) {}
+
+    /** The panel's word for a time-off entry, or "worked" where there is none. */
+    public static function countsAs(?StaffTimeOff $off): string
+    {
+        return match (true) {
+            $off === null => 'worked',
+            $off->reason === 'sick' => 'sick',
+            (bool) $off->paid => 'pto',
+            default => 'unpaid',
+        };
+    }
 
     /** One person, one day: the punches, the arithmetic, and the history. */
     /**
@@ -154,7 +181,10 @@ class TimePunchController extends Controller
             'reason' => ['required', Rule::in(array_keys(TimePunch::REASONS))],
             // 120, so that label + colon + note stays inside the record's 160.
             'note' => ['nullable', 'string', 'max:120', 'required_if:reason,other'],
-            'changes' => ['required', 'array', 'min:1', 'max:40'],
+            // A day marked sick or off may have no punches to change at all,
+            // so the word alone is a save. Marking it worked again is too.
+            'counts_as' => ['nullable', Rule::in(array_keys(self::COUNTS_AS))],
+            'changes' => ['required_without:counts_as', 'present', 'array', 'max:40'],
             'changes.*.op' => ['required', Rule::in(['move', 'add', 'remove'])],
             'changes.*.id' => ['required_if:changes.*.op,move,remove', 'nullable', 'integer'],
             'changes.*.type' => ['required_if:changes.*.op,add', 'nullable', Rule::in(array_keys(TimePunch::LABELS))],
@@ -214,7 +244,16 @@ class TimePunchController extends Controller
         $by = $request->user();
         $ip = $request->ip();
 
-        DB::transaction(function () use ($data, $live, $user, $date, $reason, $by, $ip) {
+        $countsAs = $data['counts_as'] ?? null;
+        $offNow = StaffTimeOff::where('user_id', $user->id)->onDate($date)->where('kind', 'all')->orderByDesc('id')->first();
+
+        if ($data['changes'] === [] && ($countsAs === null || $countsAs === self::countsAs($offNow))) {
+            return response()->json(['message' => 'Nothing has changed on this day.'], 422);
+        }
+
+        DB::transaction(function () use ($data, $live, $user, $date, $reason, $by, $ip, $countsAs, $offNow) {
+            $this->markDay($user, $date, $countsAs, $offNow, $reason, $by);
+
             foreach ($data['changes'] as $change) {
                 if ($change['op'] === 'remove') {
                     $this->clock->void($live[$change['id']], $by, $reason);
@@ -255,6 +294,39 @@ class TimePunchController extends Controller
     }
 
     /**
+     * Write the word for the day: sick, paid time off, an unpaid absence —
+     * or worked, which takes a one-day entry off again.
+     *
+     * A stretch of leave booked on the Staff page is left alone: "worked" on
+     * one Tuesday of a fortnight's holiday is a correction to the Tuesday,
+     * not to the holiday, and shortening it is the Staff page's job.
+     */
+    private function markDay(User $user, string $date, ?string $countsAs, ?StaffTimeOff $offNow, string $reason, User $by): void
+    {
+        if ($countsAs === null || $countsAs === self::countsAs($offNow)) {
+            return;
+        }
+
+        if ($offNow && $offNow->until === null) {
+            $offNow->delete();
+        }
+
+        if ($countsAs === 'worked') {
+            return;
+        }
+
+        StaffTimeOff::create([
+            'user_id' => $user->id,
+            'date' => $date,
+            'kind' => 'all',
+            'reason' => match ($countsAs) { 'sick' => 'sick', 'pto' => 'vacation', default => 'other' },
+            'paid' => $countsAs !== 'unpaid',
+            'note' => self::COUNTS_AS[$countsAs].' · set on Staff attendance by '.$by->name.' — '.$reason,
+            'created_by' => $by->id,
+        ]);
+    }
+
+    /**
      * Everything the panel draws, in one shape, whether it was just opened or
      * just saved — so the panel after a save is the panel as it would be if
      * somebody opened it fresh, with nothing carried over from before.
@@ -269,45 +341,10 @@ class TimePunchController extends Controller
         $hm = fn (?int $minutes) => $minutes === null ? null : sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
 
         // Newest first: the entry just written is the one being looked for.
-        $history = $all
-            ->filter(fn (TimePunch $punch) => $punch->isCorrection() || $punch->isVoided())
-            ->sortByDesc(fn (TimePunch $punch) => ($punch->voided_at ?? $punch->created_at)->timestamp)
-            ->values()
-            ->map(function (TimePunch $punch) {
-                // A replacement carries its predecessor, so it tells the whole
-                // story in one line; a void with no replacement is a removal;
-                // anything else a supervisor wrote was an addition. A voided
-                // punch that was replaced is told by its replacement's line.
-                if ($punch->corrects) {
-                    return [
-                        'who' => $punch->recorder?->name,
-                        'when' => $punch->created_at->diffForHumans(),
-                        'reason' => $punch->reason,
-                        'what' => $punch->label().' '.$punch->corrects->time().' → '.$punch->time(),
-                    ];
-                }
-
-                if ($punch->isVoided()) {
-                    if (TimePunch::where('corrects_id', $punch->id)->exists()) {
-                        return null;
-                    }
-
-                    return [
-                        'who' => $punch->voider?->name,
-                        'when' => $punch->voided_at->diffForHumans(),
-                        'reason' => $punch->void_reason,
-                        'what' => $punch->label().' '.$punch->time().' removed',
-                    ];
-                }
-
-                return [
-                    'who' => $punch->recorder?->name,
-                    'when' => $punch->created_at->diffForHumans(),
-                    'reason' => $punch->reason,
-                    'what' => $punch->label().' missing → '.$punch->time(),
-                ];
-            })
-            ->filter()
+        // Worded by the clock, so the panel and the week's "Changes" list
+        // never describe the same act differently.
+        $history = $this->clock->changes($all)
+            ->map(fn (array $line) => ['who' => $line['who'], 'when' => $line['when'], 'reason' => $line['reason'], 'what' => $line['what']])
             ->values();
 
         // The grid cell this panel was opened from, painted by the grid's own
@@ -315,6 +352,18 @@ class TimePunchController extends Controller
         $grid = app(StaffTimesheetController::class);
         $from = $request->query('from', $when->copy()->startOfWeek()->toDateString());
         $to = $request->query('to', $when->copy()->endOfWeek()->toDateString());
+        $cell = $grid->cell($user, $date, $day);
+
+        // What the clock recorded, in a sentence, before anything is typed
+        // over it. The original punch is kept either way; this is the line
+        // that says so to the person about to change it.
+        $clock = fn (?int $minutes) => $minutes === null ? null : Carbon::today()->startOfDay()->addMinutes($minutes)->format('g:i A');
+        $orig = match (true) {
+            $day['first_in'] === null && $day['last_out'] === null => 'No punches on this day',
+            $day['first_in'] === null => 'No clock-in · out '.$clock($day['last_out']),
+            $day['open'] || $day['last_out'] === null => 'In '.$clock($day['first_in']).' · no clock-out',
+            default => 'In '.$clock($day['first_in']).' · out '.$clock($day['last_out']),
+        };
 
         return [
             'staff' => [
@@ -325,8 +374,17 @@ class TimePunchController extends Controller
             ],
             'date' => $date,
             'date_label' => $when->format('l, M j'),
+            'day_label' => $when->format('D M j'),
             'locked' => TimesheetPeriod::forDate($date)->isApproved(),
             'today' => $when->isToday(),
+            'orig' => $orig,
+            'sched' => $cell['sched'],
+            'room' => $cell['room'],
+            // Worked, paid time off, sick, or an unpaid absence — the office's
+            // word for a day with no hours on it. Read from the Staff page's
+            // time off, which is where the word is kept.
+            'counts_as' => self::countsAs(StaffTimeOff::where('user_id', $user->id)->onDate($date)->where('kind', 'all')->orderByDesc('id')->first()),
+            'counts_as_options' => self::COUNTS_AS,
             'punches' => $day['punches']->map(fn (TimePunch $punch) => [
                 'id' => $punch->id,
                 'type' => $punch->type,
@@ -353,8 +411,9 @@ class TimePunchController extends Controller
             'paid_break_cap' => (int) config('daycare.timesheet.clock.paid_break_cap'),
             'reasons' => TimePunch::REASONS,
             'history' => $history,
-            'cell' => $grid->cell($user, $date, $day),
+            'cell' => $cell,
             'hours' => $grid->hoursBetween($user, $from, $to),
+            'hours_label' => $grid->duration($grid->minutesBetween($user, $from, $to)),
         ];
     }
     public function amend(Request $request, TimesheetPeriod $period, User $user, TimePunch $punch)

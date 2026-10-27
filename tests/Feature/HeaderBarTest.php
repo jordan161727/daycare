@@ -21,7 +21,7 @@ class HeaderBarTest extends TestCase
     public function test_the_bar_does_not_greet_you_by_the_clock(): void
     {
         $response = $this->actingAs(User::factory()->create(['role' => 'admin', 'name' => 'Administrator']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk();
 
         // A window and a clock already said it.
@@ -36,7 +36,7 @@ class HeaderBarTest extends TestCase
     public function test_the_bar_is_one_line_and_sized_to_it(): void
     {
         $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 

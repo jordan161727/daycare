@@ -121,11 +121,12 @@ class ChildAlertsTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSee('Court Order: No pickup by Jordan Key')
-            ->assertSee('Allergy: Banana')
-            // Rose for a rule that must not be broken, amber for a thing to watch.
-            ->assertSee('bg-rose-100', false)
-            ->assertSee('bg-amber-100', false);
+            ->assertSee('No pickup by Jordan Key')
+            ->assertSee('Banana')
+            // Rose for a rule that must not be broken, amber for a thing to
+            // watch: the pill carries the kind as its class (Phase 2 list).
+            ->assertSee('pill court', false)
+            ->assertSee('pill allergy', false);
     }
 
     public function test_the_record_shows_them_above_the_paragraph(): void

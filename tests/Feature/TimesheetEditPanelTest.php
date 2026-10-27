@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\StaffTimesheetController;
 use App\Models\StaffShift;
+use App\Models\StaffTimeOff;
 use App\Models\TimePunch;
 use App\Models\TimesheetEntry;
 use App\Models\TimesheetPeriod;
@@ -222,10 +223,77 @@ class TimesheetEditPanelTest extends TestCase
         $cap = (int) config('daycare.timesheet.clock.paid_break_cap');
         $this->assertSame(9 * 60 - 15 + min(15, $cap), TimesheetEntry::first()->workedMinutes());
 
-        // And the panel's own script knows how to draw that gap.
+        // And the panel's own script knows about that gap: it closes the
+        // break on save and says so, rather than leaving a day that pays
+        // nothing with three fields that all look fine.
         $page = $this->actingAs($this->admin)->get(route('staff.timesheets'))->assertOk()->getContent();
-        $this->assertStringContainsString("rows.splice(index + 1, 0, {key: row.pair + 'end'", $page);
-        $this->assertStringContainsString('afterStart(row)', $page);
+        $this->assertStringContainsString("list.push({op: 'add', type: 'BREAK_END', at: this.danglingEnd(open)})", $page);
+        $this->assertStringContainsString('and never came back off it', $page);
+    }
+
+    // ---------------- what the day counts as ----------------
+
+    public function test_a_day_can_be_marked_sick_or_off_without_a_punch_to_change(): void
+    {
+        /*
+         * Somebody rostered who never came in and never will: the panel's
+         * "Counts as" writes the word for the day to the Staff page's time
+         * off, where the Schedule and the clock already read it. The word
+         * alone is a save; the reason still has to be given.
+         */
+        $json = $this->actingAs($this->admin)->postJson($this->url(), [
+            'reason' => 'other', 'note' => 'Rang in sick at 6:30', 'changes' => [], 'counts_as' => 'sick',
+        ])->assertOk()->json();
+
+        $this->assertSame('sick', $json['counts_as']);
+
+        $off = StaffTimeOff::where('user_id', $this->teacher->id)->onDate(self::DAY)->first();
+        $this->assertNotNull($off);
+        $this->assertSame('all', $off->kind);
+        $this->assertSame('sick', $off->reason);
+        $this->assertTrue($off->paid);
+        $this->assertSame($this->admin->id, $off->created_by);
+        $this->assertStringContainsString('Rang in sick', $off->note);
+
+        // Opened again, the panel says so; the grid calls the day off.
+        $this->assertSame('sick', $this->actingAs($this->admin)->getJson($this->url())->json('counts_as'));
+
+        // Marked worked again, the one-day entry comes off.
+        $this->actingAs($this->admin)->postJson($this->url(), [
+            'reason' => 'other', 'note' => 'Came in after all', 'changes' => [], 'counts_as' => 'worked',
+        ])->assertOk();
+
+        $this->assertNull(StaffTimeOff::where('user_id', $this->teacher->id)->onDate(self::DAY)->first());
+    }
+
+    public function test_the_word_for_the_day_alone_is_not_a_save_when_it_has_not_changed(): void
+    {
+        // Nothing typed and "Worked" left as it was: there is nothing to
+        // record, and a reason with no change behind it would be noise on
+        // the trail.
+        $this->actingAs($this->admin)->postJson($this->url(), [
+            'reason' => 'forgot_in', 'changes' => [], 'counts_as' => 'worked',
+        ])->assertStatus(422);
+    }
+
+    public function test_a_stretch_of_leave_is_not_shortened_from_the_panel(): void
+    {
+        // A fortnight's holiday booked on the Staff page covers this Tuesday.
+        // "Worked" on the Tuesday is a correction to the Tuesday, not to the
+        // holiday, so the entry is left for the Staff page to shorten.
+        StaffTimeOff::create([
+            'user_id' => $this->teacher->id, 'date' => '2026-08-17', 'until' => '2026-08-28',
+            'kind' => 'all', 'reason' => 'vacation', 'paid' => true, 'created_by' => $this->admin->id,
+        ]);
+
+        $this->assertSame('pto', $this->actingAs($this->admin)->getJson($this->url())->json('counts_as'));
+
+        $this->punch('07:00', TimePunch::IN);
+        $this->actingAs($this->admin)->postJson($this->url(), [
+            'reason' => 'forgot_out', 'changes' => [['op' => 'add', 'type' => TimePunch::OUT, 'at' => '16:00']], 'counts_as' => 'worked',
+        ])->assertOk();
+
+        $this->assertSame(1, StaffTimeOff::where('user_id', $this->teacher->id)->count());
     }
 
     // ---------------- what is refused ----------------

@@ -274,6 +274,10 @@ class CheckInController extends Controller
                 // cards are markup the browser only has to place.
                 'first_name' => $child->first_name,
                 'display' => trim($child->first_name.' '.$child->last_name),
+                // The alerts on the child's record — allergy, medical, court
+                // order — shown when the child is selected (Phase 0's approved
+                // behaviour, drawn from the Phase 2 record). Read-only here.
+                'alerts' => array_map(fn (array $a) => ['label' => $a['label'], 'text' => $a['text'], 'severity' => $a['severity'] ?? null], $child->alertList()),
                 'avatar' => preg_replace('/>\s+</', '><', trim(view('components.child-avatar', [
                     'child' => $child,
                     'size' => 'h-24 w-24',

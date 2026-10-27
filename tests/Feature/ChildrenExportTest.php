@@ -96,6 +96,8 @@ class ChildrenExportTest extends TestCase
             // so it travels with the rest of the record.
             'Where advertised', 'Who referred',
             'Import status',
+            // Phase 2, at the end so nothing above moves.
+            'Withdrawal reason', 'Withdrawal note', 'Could return', 'Enrollment note', 'Health', 'Custody note',
         ], $sheet->headings());
 
         $row = $sheet->map($child);
@@ -134,6 +136,9 @@ class ChildrenExportTest extends TestCase
             // their archiving — when, who, what they were — would be an empty
             // column on every row that is.
             'archived_at', 'archived_by', 'status_before_archive',
+            // When the enrollment note was last touched, and by whom the
+            // record was: facts about the record, like the timestamps.
+            'enrollment_note_at', 'updated_by',
         ];
 
         // The contact blocks moved to people and child_people and are on the

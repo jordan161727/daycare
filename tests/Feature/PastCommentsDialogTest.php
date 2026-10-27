@@ -123,12 +123,13 @@ class PastCommentsDialogTest extends TestCase
         $this->assertSame('2 on Friday', $result['latestCount']);
         $this->assertStringEndsWith('/comments?date=2026-10-16', $result['seeAll']);
 
-        // The cards: the day's times, a badge where there is a comment, and
-        // the chip narrows to the two with one.
+        // The cards: the day's times, a badge where there is a comment. The
+        // "With comments only" chip is parked (26 Oct 2026), so the click
+        // finds nothing and all three cards stay.
         $this->assertCount(3, $result['cardsBefore']);
         $this->assertContains('In 7:50a · Out 2:05p', $result['cardStates']);
         $this->assertSame(['1', '1'], $result['badges']);
-        $this->assertSame(['Ada Quill', 'Brinton Sanford'], $result['cardsWithComments']);
+        $this->assertCount(3, $result['cardsWithComments']);
 
         // A card opens on Past comments, scrolled to the day; no clock, no form.
         $this->assertTrue($result['dialog']);

@@ -40,14 +40,14 @@ class PrintAttendanceTest extends TestCase
 
         // This week always exists, so the button is there.
         $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSee('Print attendance')
             ->assertSee(route('attendance.print', ['date' => self::MONDAY]), false);
 
         // Next week has not been opened: nothing to print, so nothing offered.
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => '2026-09-14']))
+            ->get(route('attendance.classic', ['date' => '2026-09-14']))
             ->assertOk()
             ->assertDontSee('Print attendance');
     }
@@ -497,7 +497,7 @@ class PrintAttendanceTest extends TestCase
         app(WeekSchedule::class)->open(self::MONDAY);
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->getContent();
 

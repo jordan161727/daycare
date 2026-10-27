@@ -55,7 +55,7 @@ class KidIconTest extends TestCase
 
         // The three places a room is read: the sheet's filters, the roster, and
         // the page that sets each room's hours.
-        $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->assertSee('🦊', false);
+        $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->assertSee('🦊', false);
         $this->actingAs($admin)->get(route('children.index'))->assertOk()->assertSee('🦊', false);
         $this->actingAs($admin)->get(route('room-schedule.index'))->assertOk()->assertSee('🐢', false);
     }
@@ -86,7 +86,7 @@ class KidIconTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         $this->makeChild('Toddler');
 
-        $html = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringNotContainsString('boxWeather', $html);
 
@@ -107,7 +107,7 @@ class KidIconTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         $this->makeChild('Toddler');
 
-        $html = $this->actingAs($admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         // Handed to the browser from ClassroomAssignment rather than typed into
         // the script — see the next test for why that matters.

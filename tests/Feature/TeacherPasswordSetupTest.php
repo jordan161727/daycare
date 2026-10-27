@@ -18,7 +18,9 @@ class TeacherPasswordSetupTest extends TestCase
         $this->actingAs($this->admin())
             ->get(route('teachers.create'))
             ->assertOk()
-            ->assertSee('Email a temporary password');
+            ->assertDontSee('Email a temporary password') // parked 26 Oct 2026: the director types the first password
+            ->assertSee('name="send_invite" value="0"', false)
+            ->assertSee('name="password"', false);
     }
 
     public function test_creating_a_teacher_emails_a_temporary_password_and_flags_the_account(): void
@@ -31,7 +33,7 @@ class TeacherPasswordSetupTest extends TestCase
                 'email' => 'grace@example.com',
                 'send_invite' => '1',
             ])
-            ->assertRedirect(route('teachers.index'));
+            ->assertRedirect(route('staff.show', User::where('email', 'grace@example.com')->first()));
 
         $teacher = User::where('email', 'grace@example.com')->sole();
 
@@ -58,7 +60,7 @@ class TeacherPasswordSetupTest extends TestCase
                 'password' => 'chosen-by-hand-1',
                 'password_confirmation' => 'chosen-by-hand-1',
             ])
-            ->assertRedirect(route('teachers.index'));
+            ->assertRedirect(route('staff.show', User::where('email', 'grace@example.com')->first()));
 
         $teacher = User::where('email', 'grace@example.com')->sole();
 

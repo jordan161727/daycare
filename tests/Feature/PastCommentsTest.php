@@ -188,7 +188,7 @@ class PastCommentsTest extends TestCase
         $this->assertStringContainsString("day: '2026-10-16'", $html);
         $this->assertStringContainsString('Viewing Friday, Oct 16 — read only.', $html);
         $this->assertStringContainsString('data-latest-comments', $html);
-        $this->assertStringContainsString('data-with-comments', $html);
+        $this->assertStringNotContainsString('data-with-comments', $html); // parked 26 Oct 2026
         $this->assertStringContainsString('"body":"Ada was quiet","author":"Ms. Alvarez","author_role":"Teacher","time":"11:30 AM"', $data);
         $this->assertMatchesRegularExpression('/dayComments: JSON\.parse\(\'\[\{"id":\d+,"tag":"health".*?"child":"Ada Quill","room":"Toddler"\},\{"id":\d+,"tag":"other".*?"child":"Brinton Sanford"/s', $data);
 
@@ -201,7 +201,7 @@ class PastCommentsTest extends TestCase
         // Today: the day before Friday's note is Friday itself.
         $today = str_replace(chr(92).'u0022', '"',$this->actingAs($this->teacher)->get(route('check-in.index'))->assertOk()->getContent());
         $this->assertStringContainsString('"last_comment_on":"2026-10-16"', $today);
-        $this->assertStringContainsString('data-comments-log-link', $today);
+        $this->assertStringNotContainsString('data-comments-log-link', $today); // parked 26 Oct 2026
     }
 
     public function test_the_log_opens_on_today_and_the_presets_pick_the_day(): void

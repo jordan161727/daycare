@@ -25,7 +25,7 @@ class StaffShift extends Model
 
     protected $fillable = [
         'week_start', 'user_id', 'shift_date', 'day',
-        'starts_at', 'ends_at', 'classroom', 'role',
+        'starts_at', 'ends_at', 'classroom', 'role', 'covers_user_id',
     ];
 
     protected $casts = [
@@ -38,6 +38,12 @@ class StaffShift extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** The person this cover stands in for, when it was made from the floor plan. */
+    public function coversFor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'covers_user_id');
     }
 
     public function minutes(): int

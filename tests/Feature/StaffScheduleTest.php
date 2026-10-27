@@ -455,7 +455,7 @@ class StaffScheduleTest extends TestCase
             ->assertOk()
             ->assertSee('Infant')
             ->assertSee('8 children at peak')
-            ->assertSee('Under ratio');
+            ->assertSee('Short');
     }
 
     public function test_a_teacher_can_read_the_roster_and_regenerate_it(): void
@@ -488,35 +488,25 @@ class StaffScheduleTest extends TestCase
         $this->assertMatchesRegularExpression('/The \d+ shifts? on this week/', $html);
     }
 
-    public function test_the_week_grid_shows_the_children_under_the_staff_and_filters_by_room(): void
+    public function test_the_week_reads_by_teacher_and_by_room(): void
     {
+        // Phase 7 (Schedule.dc.html): two readings of one week. By teacher is
+        // a row per person with the day's reason where there is no shift; By
+        // room is one day, every room, with the tray of people not working.
+        // The children's week moved to Room Schedules with Phase 7.
         $admin = $this->admin();
         $this->teacher('Emily Carter', 'FT', 'Toddler');
         $this->teacher('Maria Santos', 'FT', 'Infant');
         $this->scheduler->generate(self::WEEK);
 
-        \App\Models\Child::create([
-            'lan' => '1001', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'status' => 'Active',
-            'classroom' => 'Toddler', 'schedule_days' => [1, 3], 'drop_off_time' => '08:00', 'pick_up_time' => '16:00',
-        ]);
-        \App\Models\Child::create([
-            'lan' => '1002', 'first_name' => 'Grace', 'last_name' => 'Hopper', 'status' => 'Inactive', 'classroom' => 'Toddler',
-        ]);
-
         $html = $this->actingAs($admin)->get(route('staff-schedule.index', ['week' => self::WEEK]))->assertOk()->getContent();
-        $this->assertStringContainsString('Staff scheduled', $html);
-        $this->assertStringContainsString('Students booked', $html);
-        $this->assertStringContainsString('Lovelace', $html);
-        $this->assertStringContainsString('8:00 AM – 4:00 PM', $html);
-        // On the roll but not coming: not a row on the week.
-        $this->assertStringNotContainsString('Hopper', $html);
-        // The week is named the way the toolbar reads it.
-        $this->assertStringContainsString('All rooms', $html);
-
-        // One room: the other room's teacher and children drop out.
-        $html = $this->actingAs($admin)->get(route('staff-schedule.index', ['week' => self::WEEK, 'room' => 'Infant']))->assertOk()->getContent();
-        $this->assertStringContainsString('Maria Santos', $html);
-        $this->assertStringNotContainsString('Lovelace', $html);
+        $this->assertStringContainsString('By teacher', $html);
+        $this->assertStringContainsString('By room', $html);
+        $this->assertStringContainsString('data-teacher-row', $html);
+        $this->assertStringContainsString('Emily Carter', $html);
+        $this->assertStringContainsString('Dotted = moves rooms that day', $html);
+        $this->assertStringContainsString('Not working', $html);
+        $this->assertStringContainsString('How the checks work', $html);
     }
 
     // ---------------------------------------------------------------- helpers

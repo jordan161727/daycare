@@ -39,6 +39,8 @@ class Child extends Model
         'expected_hours_per_week' => 'float',
         'schedule_days' => 'array',
         'alerts' => 'array',
+        'health' => 'array',
+        'enrollment_note_at' => 'datetime',
         'mother_ssn' => 'encrypted',
         'father_ssn' => 'encrypted',
     ];
@@ -52,6 +54,9 @@ class Child extends Model
         'status',
         'enrolled_on',
         'withdrawn_on',
+        'withdrawal_reason', 'withdrawal_note', 'could_return',
+        'enrollment_note', 'enrollment_note_at',
+        'health', 'custody_note',
         'expected_hours_per_week',
         'drop_off_time',
         'pick_up_time',
@@ -97,6 +102,12 @@ class Child extends Model
             }
 
             $child->classroom = $child->classroomOn();
+
+            // The footer's "last change by": whoever is signed in, when
+            // anybody is. A seeder or the nightly room sync leaves it as it was.
+            if ($child->exists && $child->isDirty() && auth()->id()) {
+                $child->updated_by = auth()->id();
+            }
         });
 
         // The first line of the history: added to the roll, as something.
@@ -109,7 +120,225 @@ class Child extends Model
             if ($child->wasChanged('status')) {
                 $child->recordStatus($child->getOriginal('status'), $child->status);
             }
+
+            /*
+             * The enrollment history (Phase 2.3) is every change to the
+             * child's place here, not only the status: the room they moved
+             * to, the days and hours changing, the subsidy starting. Written
+             * off the save itself so the nightly room sync and the edit form
+             * leave the same line.
+             */
+            if ($child->wasChanged('classroom') && filled($child->getOriginal('classroom')) && filled($child->classroom)) {
+                $child->recordEvent('room', $child->getOriginal('classroom').' → '.$child->classroom, $child->roomChangeNote);
+            }
+
+            if ($child->wasChanged(['schedule_days', 'drop_off_time', 'pick_up_time'])) {
+                $child->recordEvent('schedule', 'Schedule changed', $child->scheduleSummary());
+            }
+
+            if ($child->wasChanged('dss_case_no') && blank($child->getOriginal('dss_case_no')) && filled($child->dss_case_no)) {
+                $child->recordEvent('subsidy', 'Subsidy started', 'DSS case '.$child->dss_case_no.(filled($child->dss_cin) ? ' · CIN '.$child->dss_cin : ''));
+            }
         });
+    }
+
+    /** Why a room was set by hand, carried from the form to the history line. Not a column. */
+    public ?string $roomChangeNote = null;
+
+    /**
+     * One line of history that is not a status change: a room move, a
+     * schedule change, the subsidy starting, a withdrawal's reason.
+     */
+    public function recordEvent(string $event, string $summary, ?string $note = null): ChildStatusChange
+    {
+        return $this->statusChanges()->create([
+            'event' => $event,
+            'from_status' => $summary,
+            'to_status' => $this->status,
+            'note' => $note,
+            'changed_by' => auth()->id(),
+        ]);
+    }
+
+    /* ---- Phase 2: how the record reads on the list and the page ---- */
+
+    /** Inactive is what the column says; Withdrawn is what the screen says. */
+    public const STATUS_LABELS = ['Active' => 'Active', 'Pending' => 'Pending', 'Inactive' => 'Withdrawn', 'Archived' => 'Archived'];
+
+    public const WITHDRAWAL_REASONS = ['Moved out of the area', 'Changed provider', 'Started school / aged out', 'Subsidy ended', 'Family choice', 'Non-payment', 'Other'];
+
+    public const CANCEL_REASONS = ['Family changed plans', 'Chose another provider', 'Subsidy not approved', 'No space in the room', 'Other'];
+
+    public const COULD_RETURN = ['Yes', 'No', 'Not sure'];
+
+    /** The papers a record keeps, in the order the Documents card lists them. */
+    public const DOCUMENT_KINDS = [
+        'enrollment_packet' => 'Enrollment packet',
+        'medical_statement' => 'Medical statement (yearly)',
+        'immunization_record' => 'Immunization record',
+        'allergy_care_plan' => 'Allergy care plan',
+        'photo_consent' => 'Photo consent',
+        'sunscreen_consent' => 'Sunscreen & insect repellent consent',
+    ];
+
+    /** What "Records to finish" counts, keyed as the list filters them. */
+    public const GAPS = [
+        'guard' => 'No guardian',
+        'emerg' => 'No emergency contact',
+        'imm' => 'Immunizations due',
+        'photo' => 'Photo consent unsigned',
+        'hours' => 'Hours not agreed',
+    ];
+
+    public static function statusLabel(?string $status): string
+    {
+        return self::STATUS_LABELS[$status] ?? (string) $status;
+    }
+
+    public function isWithdrawn(): bool
+    {
+        return $this->status === 'Inactive';
+    }
+
+    public function isPending(): bool
+    {
+        return $this->status === 'Pending';
+    }
+
+    /** On the subsidy: either DSS number on file. */
+    public function isDss(): bool
+    {
+        return filled($this->dss_case_no) || filled($this->dss_cin);
+    }
+
+    /** Hours a week, worked out from the days and the times — never typed in. */
+    public function hoursPerWeek(): ?float
+    {
+        $days = $this->scheduleDays();
+
+        if (! $days || blank($this->drop_off_time) || blank($this->pick_up_time)) {
+            return null;
+        }
+
+        $minutes = Carbon::parse($this->drop_off_time)->diffInMinutes(Carbon::parse($this->pick_up_time), false);
+
+        return $minutes > 0 ? round($minutes / 60 * count($days), 1) : null;
+    }
+
+    /** "Mon–Fri 8:00 AM – 5:00 PM", for the history and the overview. */
+    public function scheduleSummary(): string
+    {
+        $days = $this->scheduleDaysLabel();
+        $days = $days === 'Every day' ? 'Mon–Fri' : $days;
+
+        return trim(($days ?? '').' '.($this->scheduleLabel() ?? ''));
+    }
+
+    /** The health facts beside the alerts: doctor, immunizations, medication. */
+    public function health(string $key): ?string
+    {
+        $value = $this->health[$key] ?? null;
+
+        return blank($value) ? null : (string) $value;
+    }
+
+    /** Due when nothing is on file, or the next date is past or within a month. */
+    public function immunizationsDue(): bool
+    {
+        $due = $this->health('immunizations_due');
+
+        if ($due === null) {
+            return true;
+        }
+
+        return Carbon::parse($due)->lte(Carbon::today()->addDays(30));
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(ChildDocument::class)->latest();
+    }
+
+    public function notes()
+    {
+        return $this->hasMany(ChildNote::class)->latest();
+    }
+
+    public function updatedBy()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /** The document of a kind, latest first, or null. Reads the loaded relation when there is one. */
+    public function document(string $kind): ?ChildDocument
+    {
+        return $this->documents->firstWhere('kind', $kind);
+    }
+
+    public function photoConsentOnFile(): bool
+    {
+        return $this->document('photo_consent') !== null;
+    }
+
+    /** The guardian link, first by call order. Reads the loaded personLinks. */
+    public function guardianLink(): ?ChildPerson
+    {
+        return $this->personLinks->filter(fn (ChildPerson $link) => $link->is_guardian)
+            ->sortBy(fn (ChildPerson $link) => $link->priority ?? 99)->first();
+    }
+
+    public function hasEmergencyContact(): bool
+    {
+        return $this->personLinks->contains(fn (ChildPerson $link) => $link->is_emergency);
+    }
+
+    /**
+     * What is still to be done on this record, keyed as GAPS.
+     *
+     * Reads personLinks and documents, so load both before asking down a roll.
+     *
+     * @return array<string, string>
+     */
+    public function missingItems(): array
+    {
+        $gaps = [];
+
+        if ($this->guardianLink() === null) {
+            $gaps['guard'] = self::GAPS['guard'];
+        }
+        if (! $this->hasEmergencyContact()) {
+            $gaps['emerg'] = self::GAPS['emerg'];
+        }
+        if ($this->immunizationsDue()) {
+            $gaps['imm'] = self::GAPS['imm'];
+        }
+        if (! $this->photoConsentOnFile()) {
+            $gaps['photo'] = self::GAPS['photo'];
+        }
+        if ($this->scheduleLabel() === null) {
+            $gaps['hours'] = self::GAPS['hours'];
+        }
+
+        return $gaps;
+    }
+
+    /** How much of the record is filled in, as the header's bar shows it. */
+    public function completeness(): int
+    {
+        $checks = [
+            $this->birthDate() !== null,
+            $this->enrolled_on !== null,
+            filled($this->classroom),
+            (bool) $this->scheduleDays(),
+            $this->scheduleLabel() !== null,
+            $this->guardianLink() !== null,
+            $this->hasEmergencyContact(),
+            ! $this->immunizationsDue(),
+            $this->photoConsentOnFile(),
+            $this->document('medical_statement') !== null,
+        ];
+
+        return (int) round(count(array_filter($checks)) / count($checks) * 100);
     }
 
     /**
@@ -351,6 +580,12 @@ class Child extends Model
                 'label' => $known['label'],
                 'classes' => $known['classes'],
                 'text' => $text,
+                // The record page's own entry (Phase 2.3): how bad, what
+                // happens, what to do, when the care plan was signed.
+                'severity' => $alert['severity'] ?? null,
+                'reaction' => $alert['reaction'] ?? null,
+                'action' => $alert['action'] ?? null,
+                'plan_on' => $alert['plan_on'] ?? null,
             ];
         }
 
@@ -611,7 +846,9 @@ class Child extends Model
     /** The links themselves, for the queries that are about the ticks. */
     public function personLinks()
     {
-        return $this->hasMany(ChildPerson::class);
+        // In the order they were added: without it the driver hands them
+        // back in whatever order the index it picked keeps them.
+        return $this->hasMany(ChildPerson::class)->orderBy('id');
     }
 
     /**
@@ -831,7 +1068,7 @@ class Child extends Model
     /** The day they became what they are now, or null for a record that predates the history. */
     public function statusSince(): ?\Illuminate\Support\Carbon
     {
-        return $this->statusChanges()->where('to_status', $this->status)->first()?->created_at;
+        return $this->statusChanges()->where('event', 'status')->where('to_status', $this->status)->first()?->created_at;
     }
 
     public function attendances()

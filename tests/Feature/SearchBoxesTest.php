@@ -41,10 +41,10 @@ class SearchBoxesTest extends TestCase
     public static function pages(): array
     {
         return [
-            'register' => ['attendance.index', 1],
+            'register' => ['attendance.classic', 1],
             'check in' => ['check-in.index', 1],
             'month sheet' => ['attendance.month-sheet', 1],
-            'children' => ['children.index', 2],   // one for the desktop line, one for the phone
+            'children' => ['children.index', 1],
             'teachers' => ['teachers.index', 1],
         ];
     }

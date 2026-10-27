@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // may hand back a roster as it was before the last correction.
         $middleware->web(append: [\App\Http\Middleware\FreshPages::class]);
 
+        // A parent's reply arrives from the SMS provider, which holds no
+        // session and no token. The route checks the provider's own
+        // signature instead — see MessageController::inbound().
+        $middleware->validateCsrfTokens(except: ['sms/inbound']);
+
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
             'password.change' => \App\Http\Middleware\RequirePasswordChange::class,

@@ -169,6 +169,12 @@
                                  large, because it is the fact being made. --}}
                             <p class="text-center text-[13px] uppercase tracking-[0.15em] text-slate-400" x-text="staff.since ?? 'Not started today'"></p>
 
+                            {{-- What the office planned for them today: the
+                                 shift, and any change the Staff page holds for
+                                 the date. The note reaches the person at the
+                                 clock, not only the director who wrote it. --}}
+                            <p x-show="staff.today" x-cloak class="mt-3 rounded-xl bg-sky-50 px-4 py-2.5 text-center text-[13px] text-sky-900 ring-1 ring-sky-200" data-today-line x-text="staff.today"></p>
+
                             <div class="mt-5 space-y-2.5">
                                 <template x-for="action in staff.actions" :key="action.action">
                                     <button type="button" @click="punch(action.action)" :disabled="sending"

@@ -88,7 +88,7 @@ class HolidayTest extends TestCase
         ]);
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => self::MONDAY]))
+            ->get(route('attendance.classic', ['date' => self::MONDAY]))
             ->assertOk()
             ->assertSee('Independence Day');
     }
@@ -402,7 +402,7 @@ class HolidayTest extends TestCase
 
         // And it is named on the board rather than silently grey.
         $this->actingAs($this->admin)
-            ->get(route('attendance.index', ['date' => $monday]))
+            ->get(route('attendance.classic', ['date' => $monday]))
             ->assertOk()
             ->assertSee('Bank Holiday');
     }

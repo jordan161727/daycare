@@ -157,7 +157,7 @@ class CanadianHolidayTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs($admin)
-            ->get(route('attendance.index', ['date' => '2026-09-07']))
+            ->get(route('attendance.classic', ['date' => '2026-09-07']))
             ->assertOk()
             ->assertSee('Labour Day');
     }

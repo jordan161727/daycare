@@ -56,6 +56,12 @@ class StaffSchedule
     /** @var array<int, int> The same, narrowed to the day being solved. */
     private array $leaveToday = [];
 
+    /** @var array<int, array<string, \App\Models\StaffTimeOff>> The Staff page's one-off changes this week, user → date. */
+    private array $timeOff = [];
+
+    /** The date the day loop is on, so a weekday can be turned back into a date. */
+    private ?string $dateToday = null;
+
     /** @var array<int, int> Operating days each person loses to leave this week. */
     private array $awayDays = [];
 
@@ -119,6 +125,14 @@ class StaffSchedule
             end($dates)->toDateString(),
         );
 
+        // And the director's one-off changes for the week — out all day, out
+        // until, leaving at, a window, an extra day. Each is a Must for its
+        // date only; windowFor() applies it after the rules.
+        $this->timeOff = \App\Models\StaffTimeOff::byUserAndDate(
+            $weekStart,
+            end($dates)->toDateString(),
+        );
+
         // Only ever operating days: workingDates() has already dropped the
         // weekends and the days the centre is shut, so a closure inside
         // somebody's holiday costs them nothing here either.
@@ -149,6 +163,10 @@ class StaffSchedule
                     $this->leaveToday[$userId] = $byDate[$date->toDateString()];
                 }
             }
+
+            // The date behind the weekday, so windowFor() can apply the one-off
+            // changes the Staff page keeps for it (Phase 5 Time off).
+            $this->dateToday = $date->toDateString();
 
             $shifts = $this->shiftsForDay($staff, $day, $targets);
 
@@ -298,7 +316,7 @@ class StaffSchedule
      * UNAVAILABLE_DAY or because the constraints have collapsed the window to
      * nothing.
      */
-    public function windowFor(User $person, string $day): ?array
+    public function windowFor(User $person, string $day, ?string $date = null): ?array
     {
         $rules = $person->staffRules->filter(fn (StaffRule $rule) => $rule->isHard());
 
@@ -312,7 +330,9 @@ class StaffSchedule
         );
 
         if ($blocked) {
-            return null;
+            // Shut by a rule — unless the Staff page opened it for this one
+            // date with an extra day.
+            return $this->applyTimeOff($person, $date ?? $this->dateToday, null);
         }
 
         $start = $this->open;
@@ -349,9 +369,43 @@ class StaffSchedule
             $end = (int) $fixedEnd->time_1;
         }
 
-        return $end > $start
+        $window = $end > $start
             ? ['start' => $start, 'end' => $end, 'fixed' => (bool) $fixed]
             : null;
+
+        return $this->applyTimeOff($person, $date ?? $this->dateToday, $window);
+    }
+
+    /**
+     * The one-off change the Staff page holds for this person on this date,
+     * applied last: out all day closes the day (even over a fixed shift —
+     * the director said so for that date), out until / leaving at / a window
+     * narrow it, and an extra day opens one the rules had shut.
+     *
+     * @param  array{start:int,end:int,fixed:bool}|null  $window
+     * @return array{start:int,end:int,fixed:bool}|null
+     */
+    private function applyTimeOff(User $person, ?string $date, ?array $window): ?array
+    {
+        if ($date === null) {
+            return $window;
+        }
+
+        $entry = $this->timeOff[$person->id][$date] ?? null;
+
+        if ($entry === null) {
+            return $window;
+        }
+
+        $narrowed = $entry->applyTo($window === null ? null : ['start' => $window['start'], 'end' => $window['end']]);
+
+        if ($narrowed === null) {
+            return null;
+        }
+
+        // The person's own blocked day, opened for one date: not a fixed shift,
+        // but the whole window is what they offered, so take it as given.
+        return ['start' => $narrowed['start'], 'end' => $narrowed['end'], 'fixed' => $window['fixed'] ?? ($entry->kind === 'extra')];
     }
 
     /**

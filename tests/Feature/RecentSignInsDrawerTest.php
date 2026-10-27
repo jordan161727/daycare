@@ -35,7 +35,7 @@ class RecentSignInsDrawerTest extends TestCase
         $this->signIn($this->makeChild());
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -54,7 +54,7 @@ class RecentSignInsDrawerTest extends TestCase
         $this->makeChild();
 
         $html = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->getContent();
 
@@ -76,7 +76,7 @@ class RecentSignInsDrawerTest extends TestCase
         $this->signIn($child);
 
         $recent = $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->viewData('recentAttendance');
 
@@ -85,7 +85,7 @@ class RecentSignInsDrawerTest extends TestCase
 
         // Sheet-sized time, the same shape the cells use.
         $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSee('9:31a');
     }
@@ -95,7 +95,7 @@ class RecentSignInsDrawerTest extends TestCase
         $this->makeChild();
 
         $this->actingAs($this->admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.classic'))
             ->assertOk()
             ->assertSee('Nobody has signed in yet today.')
             ->assertSee('Tap a cell on the sheet and they will appear here.');

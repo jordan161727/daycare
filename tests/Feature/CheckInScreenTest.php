@@ -1033,7 +1033,7 @@ class CheckInScreenTest extends TestCase
          * deliberately put back to what it was. If a chip or a picker turns up
          * on it again, that is a regression rather than a feature.
          */
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
         $this->assertStringNotContainsString('data-health', $html);
         $this->assertStringNotContainsString('chipHtml', $html);

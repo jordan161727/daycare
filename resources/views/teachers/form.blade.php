@@ -13,8 +13,13 @@
              default because it is the only version where nobody but the teacher
              ever knows their password; the hidden field keeps the choice in old
              input so a failed validation does not silently flip it back. --}}
-        <div class="sm:col-span-2" x-data="{ invite: {{ old('send_invite', '1') == '1' ? 'true' : 'false' }} }">
+        {{-- Parked (Jordan, 26 Oct 2026): the "Email a temporary password"
+             choice is off the form for now, so the director always types the
+             first password. The hidden send_invite=0 keeps the controller on
+             that path; flip the @if to true to bring the choice back. --}}
+        <div class="sm:col-span-2" x-data="{ invite: false }">
             <input type="hidden" name="send_invite" value="0">
+@if(false)
             <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white/60 p-4 dark:border-white/10 dark:bg-night-800/60">
                 <input type="checkbox" name="send_invite" value="1" x-model="invite" class="mt-0.5 h-4 w-4 rounded border-slate-300">
                 <span>
@@ -22,8 +27,9 @@
                     <span class="mt-1 block text-xs text-slate-500">We send the teacher a one-time password and make them choose their own the first time they sign in. Leave this off to set the password yourself and hand it over in person.</span>
                 </span>
             </label>
+@endif
 
-            <div class="mt-5 grid gap-5 sm:grid-cols-2" x-show="! invite" x-cloak>
+            <div class="grid gap-5 sm:grid-cols-2" x-show="! invite">
                 <label class="block"><span class="mb-2 block text-sm font-semibold">Password <span class="text-rose-500">*</span></span><input type="password" name="password" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password')" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password <span class="text-rose-500">*</span></span><input type="password" name="password_confirmation" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password_confirmation')" /></label>
             </div>
@@ -141,5 +147,5 @@
         </div>
     </fieldset>
 
-    <div class="mt-8 flex flex-wrap justify-end gap-3"><a href="{{ route('teachers.index') }}" class="rounded-xl px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</a><button class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700">{{ $submit }}</button></div>
+    <div class="mt-8 flex flex-wrap justify-end gap-3"><a href="{{ route('staff.index') }}" class="rounded-xl px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</a><button class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700">{{ $submit }}</button></div>
 </form>

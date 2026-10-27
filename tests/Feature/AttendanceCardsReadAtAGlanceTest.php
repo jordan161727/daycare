@@ -21,7 +21,7 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
 
     public function test_the_directors_register_opens_on_the_cards(): void
     {
-        $html = $this->page('attendance.index');
+        $html = $this->page('attendance.classic');
 
         $this->assertStringContainsString("mode: 'avatar',", $html);
         // The sheet is still offered, and still remembered once chosen.
@@ -30,7 +30,7 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
 
     public function test_the_directors_cards_fade_until_the_child_is_here_and_say_so_once_they_are(): void
     {
-        $html = $this->page('attendance.index');
+        $html = $this->page('attendance.classic');
 
         $this->assertStringContainsString(":data-presence=\"isHere(child) ? 'in' : (isDone(child) ? 'out' : 'absent')\"", $html);
         $this->assertStringContainsString(":class=\"isHere(child) ? '' : 'opacity-40 grayscale group-hover:opacity-70 group-hover:grayscale-0'\"", $html);
@@ -42,7 +42,7 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
 
     public function test_the_edit_switch_belongs_to_the_table_and_the_cards_leave_edit_mode(): void
     {
-        $html = $this->page('attendance.index');
+        $html = $this->page('attendance.classic');
 
         // The Live/Edit switch is drawn for Table view only.
         $this->assertStringContainsString("<div x-show=\"view === 'signin' && mode === 'sheet'\" class=\"att-mode\"", $html);
@@ -52,7 +52,7 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
 
     public function test_switching_to_the_table_shows_the_child_last_clocked_from_a_card(): void
     {
-        $html = $this->page('attendance.index');
+        $html = $this->page('attendance.classic');
 
         // Each table row is findable by its child.
         $this->assertStringContainsString('<tr :data-child-row="child.id"', $html);
