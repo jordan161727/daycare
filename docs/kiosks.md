@@ -188,11 +188,19 @@ exactly as a forgotten clock-out always has.
 
 ```bash
 php artisan migrate
-php artisan db:seed --class=StaffDemoSeeder      # staff with PINs, if the database has none
+php artisan db:seed --class=KioskStaffDemoSeeder  # Lana 3333 (PreK), Sultana 4444 (Toddler), Evana 5555 (Infant), Lana's shift today
 npm run build
 ```
 
-`DAYCARE_KIOSK=true` in `.env`. Log in as a director and:
+`DAYCARE_KIOSK=true` in `.env`. If a `public/hot` file is left over from an
+`npm run dev` that is no longer running, delete it: while it is there every
+page asks `localhost:5173` for its CSS and JavaScript, and the kiosks load
+as dead screens with nothing to press.
+
+(This line used to say `StaffDemoSeeder`. That one fills in staff details,
+rules and time off, and sets no PINs, so the test could not start.)
+
+Log in as a director and:
 
 1. **Settings → Rooms & hours.** Key a *Room tablet code* for PreK (`2104`)
    and UPK-4 (`2105`). Save.
@@ -205,9 +213,10 @@ npm run build
    browser profile (or two browsers): the clock link lands on `/clock`, the
    tablet link on `/room` with **Room tablet · PreK** in the header.
    - [ ] Rooms & hours now says "1 tablet · never used" against PreK.
-3. **Staff.** Make sure three teachers have PINs: say Lana (3333, home room
-   PreK), Sultana (4444, Toddler), Evana (5555, Infant). Give Lana a shift
-   today in PreK on the Schedule if you want *Your schedule* to come first.
+3. **Staff.** The seeder above made Lana (3333, home room PreK), Sultana
+   (4444, Toddler) and Evana (5555, Infant), and gave Lana a shift today in
+   PreK so *Your schedule* comes first. If it warned that a PIN was already
+   somebody else's, give that teacher another on the Staff page.
 4. **Director Attendance / Teacher Attendance.** Sign in eight PreK children
    and four Toddler children, so the rooms have ratios to be short of.
 
@@ -310,6 +319,15 @@ php artisan test --filter "KioskWalkthroughTest|DoorClockRoomsTest|RoomTabletTes
 real routes against a fresh database and printing the tick list as it goes.
 The three suites beside it test each **RULE** on its own; the clock's own
 twenty-three tests still pass.
+
+**In a real browser — 28 Oct 2026.** The same steps were also pressed
+through the actual screens in headless Chrome, a front door and a PreK
+tablet as two separate browsers, against a throwaway database set up with
+`KioskStaffDemoSeeder`. Everything held, with no JavaScript errors once two
+were fixed: the clock's problem banner read `problem.kind` while there was
+no problem, which threw on every load, and both headers showed the
+*device's* time instead of the centre's. An untouched card goes back to
+the keypad after 45 seconds, as the ticket does.
 
 **Last run — 28 Oct 2026, headless.** All 23 steps passed. The run caught
 one thing the unit tests had encoded wrongly: after a clock-out and a second

@@ -576,14 +576,16 @@ Route::middleware(['auth', 'password.change', 'can:see-dss'])->group(function ()
 Route::get('/floor-plan', [FloorPlanController::class, 'index'])->middleware(['auth', 'password.change', 'role:admin,teacher', 'never-cached'])->name('floor-plan.index');
 Route::post('/floor-plan/move', [FloorPlanController::class, 'move'])->middleware(['auth', 'password.change', 'role:admin'])->name('floor-plan.move');
 
-// Director Attendance (Phase 3, as DirectorAttendance.dc.html draws it): the
-// week as a grid, a tap per day, times typed in the cell. The register this
-// page was before — cards, the projection, the room cover, the recent
-// drawer — is kept whole as the classic register, one link away.
-Route::get('/attendance', [AttendanceController::class, 'week'])
+// Director Attendance is the register again (Jordan, 28 Oct 2026: "back to
+// old design"), always in edit, with no Live switch and no ⋯ menu. The
+// week grid drawn from DirectorAttendance.dc.html is kept whole at
+// /attendance/week; /attendance/classic still answers, as the same register.
+Route::get('/attendance', [AttendanceController::class, 'index'])
     ->name('attendance.index');
 Route::get('/attendance/classic', [AttendanceController::class, 'index'])
     ->name('attendance.classic');
+Route::get('/attendance/week', [AttendanceController::class, 'week'])
+    ->name('attendance.week');
 Route::post('/attendance/week/cell', [AttendanceController::class, 'cell'])
     ->name('attendance.week.cell');
 

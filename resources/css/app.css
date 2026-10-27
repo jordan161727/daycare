@@ -211,8 +211,11 @@
         align-items: center; justify-content: center;
     }
     .att-split .att-slot { min-height: 3.2667rem; }
+    /* 6.6667rem, up from 5.8667 (28 Oct 2026): the register is always in
+       Edit now, so every time carries the pencil, and "7:22a–5:17p" beside
+       it wrapped onto two lines. */
     .att-cell {
-        width: 5.8667rem; height: 1.7333rem; margin: 0 auto;
+        width: 6.6667rem; height: 1.7333rem; margin: 0 auto;
         display: flex; align-items: center;
         border-radius: 0.5333rem; border: 1px solid transparent;
         font-size: 0.7333rem; font-variant-numeric: tabular-nums; color: inherit;
@@ -220,8 +223,12 @@
         transition: background-color .12s ease, border-color .12s ease;
     }
     .att-cell.att-half { height: 1.5333rem; }
+    /* A half day carries an AM / PM tag as well as the pencil, so its
+       "8:04a–11:38a" gets a touch less type to stay on one line. */
+    .att-half .att-main { font-size: 0.6333rem; letter-spacing: -0.01em; }
+    .att-half .att-tag { width: 0.9rem; padding-left: 0.2rem; font-size: 0.6rem; }
     .att-cell:focus-visible { @apply outline-2 outline-offset-1 outline-indigo-500; }
-    .att-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
+    .att-main { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
     .att-tag { width: 1rem; flex: none; padding-left: 0.2667rem; font-size: 0.6667rem; text-align: left; @apply text-slate-400 dark:text-slate-500; }
     .att-pad { width: 1rem; flex: none; }
     /* Not attending.
@@ -296,7 +303,7 @@
     /* The strip on the right of a time, in Edit: press it to type the exact
        hour. It takes the box's own colour so it reads as part of the box. */
     .att-pencil {
-        width: 1.7333rem; height: 100%; flex: none;
+        width: 1.4667rem; height: 100%; flex: none;
         display: flex; align-items: center; justify-content: center;
         padding: 0; border: 0; border-left-width: 1px; border-left-style: solid; border-radius: 0;
         background: transparent; cursor: pointer;

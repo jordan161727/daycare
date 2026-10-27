@@ -239,9 +239,11 @@ function roomTablet() { return {
     },
 
     tick() {
+        // The centre's time, as on the front door clock.
         const at = new Date();
-        this.now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        this.today = at.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+        const zone = @js(config('app.timezone'));
+        this.now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: zone });
+        this.today = at.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', timeZone: zone });
     },
 
     press(key) {

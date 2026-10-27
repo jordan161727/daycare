@@ -17,7 +17,7 @@
     // $extra first: a chip's or an arrow's own value must win over the page's
     // current one. It was the other way round until 27 Oct 2026, so a room
     // chip and the week arrows pointed back at the page they were on.
-    $link = fn (array $extra = []) => route('attendance.index', array_filter($extra + ['date' => $date, 'room' => $room, 'q' => $q], fn ($v) => $v !== null && $v !== ''));
+    $link = fn (array $extra = []) => route('attendance.week', array_filter($extra + ['date' => $date, 'room' => $room, 'q' => $q], fn ($v) => $v !== null && $v !== ''));
 @endphp
 
 <div class="ch" x-data="attendanceWeek(@js(['w' => $w, 'room' => $room, 'q' => $q, 'url' => route('attendance.week.cell')]))" @keydown.escape.window="edit = null" style="display: flex; flex-direction: column; gap: 14px;">

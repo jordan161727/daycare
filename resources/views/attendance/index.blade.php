@@ -311,21 +311,10 @@
                              offers today and nothing else, because the commonest
                              mistake on a five-column grid is the column next to
                              the one you meant. --}}
-                        @if($canAmendAttendance || $canEditSchedule)
-                            {{-- Live or Edit, as a switch. The mode is a state the
-                                 whole sheet is in — every column changes with it —
-                                 and a switch says "in it" or "not" the way a button
-                                 labelled Edit never quite did. --}}
-                            {{-- Table view only. The cards are the live room — a face
-                                 a tap — and never offer Edit; see setMode(), which
-                                 drops back to Live on the way into them. --}}
-                            <div x-show="view === 'signin' && mode === 'sheet'" class="att-mode" :data-edit="editing ? 'true' : 'false'">
-                                <button type="button" role="switch" class="att-switch" :aria-checked="editing ? 'true' : 'false'" :aria-label="editing ? 'Edit mode' : 'Live mode'" @click="switchMode()">
-                                    <span class="att-knob" x-html="editing ? icons.edit : icons.lock"></span>
-                                </button>
-                                <span class="att-mode-name" x-text="editing ? 'Edit mode' : 'Live mode'"></span>
-                            </div>
-                        @endif
+                        {{-- No Live / Edit switch (Jordan, 28 Oct 2026, and HANDOFF
+                             §7.1: "Remove the Live mode completely. The page is
+                             always in edit mode"). Whoever may correct the register
+                             is always in Edit; see `editing` at the foot. --}}
 
                         {{-- Parked, not removed: see daycare.schedule_view. --}}
                         @if($canEditSchedule && config('daycare.schedule_view'))
@@ -348,6 +337,11 @@
                              The trigger stops its own click so the panel's
                              click-outside does not see it — otherwise opening the
                              menu would close it in the same gesture. --}}
+                        {{-- Parked (Jordan, 28 Oct 2026): the ⋯ button is off the
+                             register. Its one live control was Table / Card view,
+                             and the page is the table now. Flip to @if(true) to
+                             bring it back. --}}
+                        @if(false)
                         <div
                             x-data="{
                                 menu: false,
@@ -428,6 +422,7 @@
                             </div>
                             </template>
                         </div>
+                        @endif
                     </div>
                 </div>
 
@@ -1120,7 +1115,9 @@ function attendanceApp() { return {
      * Anybody without the power to edit lands in Live whatever the URL
      * says; the switch is not drawn for them either.
      */
-    editing: @js(request('mode') === 'edit' && ($canAmendAttendance || $canEditSchedule)),
+    // Always in Edit for whoever may correct the register: the Live switch
+    // came off the page (28 Oct 2026). Everybody else has only today.
+    editing: @js($canAmendAttendance || $canEditSchedule),
 
     /*
      * Attendance mode or avatar mode: the sheet, or the same children as a
@@ -1139,7 +1136,11 @@ function attendanceApp() { return {
     // kept once chosen. Stored under attendance.view — the older
     // attendance.mode key is left alone, so a sheet remembered from when the
     // sheet was the default does not stop the cards opening first.
-    mode: 'avatar',
+    //
+    // The table, always, since 28 Oct 2026: the ⋯ menu that held the
+    // Table / Card choice came off with the Live switch, and the cards
+    // have no Edit. init() only ever moves this to the sheet.
+    mode: 'sheet',
 
     setMode(mode) {
         this.mode = mode === 'avatar' ? 'avatar' : 'sheet';

@@ -134,9 +134,12 @@
                              the two tones the door kiosk uses for the same two
                              jobs. --}}
                         <p x-show="problem" x-cloak class="mt-4 rounded-xl px-4 py-3 text-center"
-                           :class="problem.kind === 'bad' ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'">
-                            <span class="block font-bold" x-text="problem.title"></span>
-                            <span class="text-[13px]" x-text="problem.detail"></span>
+                           :class="problem?.kind === 'bad' ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'">
+                            {{-- ?. because x-show only hides: Alpine still reads
+                                 these while problem is null, and threw on every
+                                 load until 28 Oct 2026. --}}
+                            <span class="block font-bold" x-text="problem?.title"></span>
+                            <span class="text-[13px]" x-text="problem?.detail"></span>
                         </p>
                     </div>
                 </template>
@@ -351,9 +354,12 @@ function staffClock() { return {
     },
 
     tick() {
+        // In the centre's time, not the device's: an iPad left on another
+        // zone showed 3:58 AM Wednesday over a punch stamped 3:58 PM Tuesday.
         const at = new Date();
-        this.now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        this.today = at.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+        const zone = @js(config('app.timezone'));
+        this.now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: zone });
+        this.today = at.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', timeZone: zone });
     },
 
     get firstName() {
