@@ -218,6 +218,11 @@ class StaffPresenceBoardTest extends TestCase
         // Who's where beside it. The front door clock frame was taken off
         // (Jordan, 29 Oct 2026: "remove this").
         $this->assertStringContainsString('Kiosks — room tablets', $board);
+        // The full-width layout's four counts and the room tiles.
+        foreach (['Children in rooms', 'Teachers in rooms', 'On break', 'Rooms open', 'Updates as teachers key in'] as $text) {
+            $this->assertStringContainsString($text, $board);
+        }
+        $this->assertStringContainsString('data-kiosk-stats', $board);
         $this->assertStringNotContainsString('<iframe src="'.route('clock.kiosk').'"', $board);
         $this->assertStringNotContainsString('Front door iPad', $board);
         $this->assertStringContainsString('<iframe src="'.route('room.kiosk').'"', $board);

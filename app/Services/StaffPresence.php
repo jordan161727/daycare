@@ -445,8 +445,7 @@ class StaffPresence
                 self::ON_BREAK => $onBreak[] = [
                     'name' => $user->name,
                     'since' => $status['since']?->format('g:i A') ?? '—',
-                    'last' => $status['last_room'] ?? 'office',
-                ],
+                    'last' => $status['last_room'] ?? 'office',                ],
                 // Placed in the office says since when; on the clock by a
                 // route that never asked for a room says so instead.
                 self::NO_ROOM => $office[] = [

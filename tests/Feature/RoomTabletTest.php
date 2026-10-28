@@ -281,6 +281,30 @@ class RoomTabletTest extends TestCase
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in'])->assertJson(['status' => 'expired']);
     }
 
+    public function test_the_strip_shows_this_rooms_teachers_children_and_ratio(): void
+    {
+        // Jordan's "Kiosks — full-width layout" mock-up, 29 Oct 2026.
+        Setting::put('rooms.PreK.ratio', 7);
+        $this->childrenIn('PreK', 8);
+        $this->pair($this->tablet);
+
+        $this->get(route('room.kiosk'))->assertOk()->assertSee('data-room-strip', false);
+        $this->getJson(route('room.kiosk.summary'))->assertExactJson(['room' => 'PreK', 'teachers' => 0, 'children' => 8, 'ratio' => 'Short 2', 'tone' => 'bad']);
+
+        // Lana keys in: one teacher, still one short.
+        $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $ticket = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->json('ticket');
+        if ($ticket) {
+            $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in']);
+        }
+        $this->getJson(route('room.kiosk.summary'))->assertJson(['teachers' => 1, 'ratio' => 'Short 1']);
+
+        // A tablet with no room yet has no strip to show; no names, ever.
+        $this->tablet->forceFill(['classroom' => null])->save();
+        $this->getJson(route('room.kiosk.summary'))->assertExactJson(['room' => null]);
+        $this->assertStringNotContainsString('Lana', $this->getJson(route('room.kiosk.summary'))->getContent());
+    }
+
     /* ---- helpers ---- */
 
     private function teacher(string $name, string $pin, string $room): User

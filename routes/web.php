@@ -107,6 +107,7 @@ Route::middleware('throttle:kiosk')->group(function () {
  */
 Route::middleware('throttle:kiosk')->group(function () {
     Route::get('/room', [RoomTabletController::class, 'index'])->name('room.kiosk');
+    Route::get('/room/summary', [RoomTabletController::class, 'summary'])->name('room.kiosk.summary');
     Route::post('/room/punch', [RoomTabletController::class, 'punch'])->name('room.kiosk.punch');
     Route::post('/room/identify', [RoomTabletController::class, 'identify'])
         ->middleware('throttle:kiosk-secret')->name('room.kiosk.identify');
