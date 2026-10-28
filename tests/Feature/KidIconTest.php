@@ -99,7 +99,8 @@ class KidIconTest extends TestCase
             $html,
             'the cell no longer shows the arrival time'
         );
-        $this->assertStringContainsString('return this.sessionSpan(childId, date, session);', $html);
+        // The hover says the whole session; more than one entry is counted.
+        $this->assertStringContainsString(': this.sessionSpan(childId, date, session);', $html);
     }
 
     public function test_the_rows_name_the_room_by_its_animal(): void

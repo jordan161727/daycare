@@ -19,7 +19,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Page not found | {{ $name }}</title>
-<link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/icon-angels-light-32.png') }}">
+@include('layouts.favicon')
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Grandstander:wght@700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">

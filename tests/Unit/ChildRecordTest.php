@@ -46,10 +46,11 @@ class ChildRecordTest extends TestCase
 
     public function test_the_date_of_birth_is_padded_so_a_column_of_them_lines_up(): void
     {
-        // Unpadded, 2023/6/15 and 2023/12/5 are different widths and the
-        // slashes stop lining up down a column of sixty.
-        $this->assertSame('2023/06/15', Child::ageLabelFor(Carbon::parse('2023-06-15')));
-        $this->assertSame('2023/12/05', Child::ageLabelFor(Carbon::parse('2023-12-05')));
+        // Month, day, year, as the centre writes it. Unpadded, 6/15/23 and
+        // 12/5/23 are different widths and the slashes stop lining up down a
+        // column of sixty.
+        $this->assertSame('06/15/23', Child::ageLabelFor(Carbon::parse('2023-06-15')));
+        $this->assertSame('12/05/23', Child::ageLabelFor(Carbon::parse('2023-12-05')));
         $this->assertNull(Child::ageLabelFor(null));
     }
 
