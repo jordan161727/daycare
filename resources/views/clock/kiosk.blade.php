@@ -43,28 +43,23 @@
     dismiss a screen for the person behind them, and nobody should read the
     previous person's hours.
 --}}
-<body class="kiosk-touch min-h-dvh bg-slate-100 text-slate-900 antialiased">
+<body class="kiosk-touch min-h-dvh bg-[#f4f6fb] text-[#1c2130] antialiased">
 
 <div x-data="staffClock()" x-init="focusEntry()" class="flex min-h-dvh flex-col">
 
-    {{-- ---- the masthead ---- --}}
-    <header class="bg-slate-900 px-5 py-3 text-white">
+    {{-- ---- the masthead ----
+         As the StaffFlow mock-up draws it (Jordan, 29 Oct 2026: "in front
+         door I want the exact UI"): a dark band, "Staff time clock" over
+         the screen's name, and the time on the right. --}}
+    <header class="bg-[#1d2333] px-[18px] py-3.5 text-white">
         <div class="mx-auto flex max-w-xl items-center justify-between gap-4">
-            <div class="flex min-w-0 items-center gap-3">
-                <img src="{{ asset('images/littleangels-logo.png') }}" alt="" width="531" height="228"
-                     class="h-7 w-auto shrink-0 brightness-0 invert">
-                <span class="min-w-0 border-l border-white/20 pl-3">
-                    <span class="block truncate text-[12px] font-semibold leading-tight">Staff time clock</span>
-                    <span class="block truncate text-[11px] leading-tight text-slate-400">{{ $device?->name ?? 'Not paired' }}</span>
-                </span>
+            <div class="flex min-w-0 flex-col">
+                <span class="truncate text-base font-bold leading-tight">Staff time clock</span>
+                <span class="truncate text-xs leading-tight text-[#aab3c8]">{{ $device?->name ?? 'Not paired' }}</span>
             </div>
-
-            <div class="shrink-0 text-right">
-                {{-- The wall clock. Tabular so the minute changing does not
-                     shuffle the digits beside it. --}}
-                <span class="block text-[22px] font-bold leading-none tabular-nums" x-text="now"></span>
-                <span class="block text-[11px] leading-tight text-slate-400" x-text="today"></span>
-            </div>
+            {{-- The wall clock. Tabular so the minute changing does not
+                 shuffle the digits beside it. --}}
+            <span class="shrink-0 text-lg font-semibold tabular-nums" x-text="now" data-clock-now></span>
         </div>
     </header>
 
@@ -76,78 +71,76 @@
             </div>
         </main>
     @else
-        <main class="flex flex-1 items-center justify-center p-5" @click="focusEntry()">
-            <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {{-- The keypad sits straight on the page near the top, as in the
+             mock-up; once somebody is on screen the card below takes over. --}}
+        <main class="flex flex-1 justify-center p-[18px]" :class="staff || done ? 'items-center' : 'items-start'" @click="focusEntry()">
 
-                {{-- The accent rule. Indigo at rest, and the state's own colour
-                     once somebody is on screen — the first thing seen from
-                     across the room, before any word is read. --}}
+            {{-- ---- the welcome screen: the mock-up's keypad ---- --}}
+            <template x-if="! staff && ! done">
+                <div class="flex w-full max-w-md flex-col items-center gap-3.5 pt-2.5" data-clock-welcome>
+                    @php($scanner = \App\Models\Setting::bool('kiosk.scanner', true))
+                    <h1 class="text-[22px] font-bold" x-text="greeting"></h1>
+                    {{-- Has to match what the screen will accept: with the
+                         scanner off, "Scan your card" is an instruction that fails. --}}
+                    <p class="text-center text-sm text-[#5f6676]">{{ $scanner ? 'Scan your card or key your 4-digit PIN' : 'Key your 4-digit PIN' }}</p>
+
+                    <form @submit.prevent="identify()" autocomplete="off" class="flex w-full flex-col items-center gap-3.5">
+                        {{-- One field for both, out of sight: a scanner is a
+                             keyboard that types fast and presses Enter, so it
+                             lands here and Enter submits; four keyed digits
+                             submit on their own. The dots say how many are in.
+                             inputmode none keeps the iPad's own keyboard away. --}}
+                        <input x-ref="entry" x-model="entry" type="text" inputmode="none"
+                               name="kiosk-entry" autocomplete="off" autocorrect="off" spellcheck="false"
+                               data-1p-ignore data-lpignore="true" data-form-type="other"
+                               aria-label="Scan your card or key your PIN"
+                               class="pointer-events-none absolute h-px w-px opacity-0">
+
+                        <div class="flex gap-3" aria-hidden="true" data-pin-dots>
+                            <template x-for="i in 4" :key="i">
+                                <span class="h-[15px] w-[15px] rounded-full border-2" :class="entry.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
+                            </template>
+                        </div>
+
+                        <div class="grid w-full max-w-[300px] grid-cols-3 gap-2.5">
+                            <template x-for="key in ['1','2','3','4','5','6','7','8','9']" :key="key">
+                                <button type="button" @click="press(key)"
+                                        class="h-14 rounded-[14px] border border-[#d5dbea] bg-white text-[22px] font-semibold text-[#1c2130] transition active:bg-[#eef1fb]"
+                                        x-text="key"></button>
+                            </template>
+                            <button type="button" @click="entry = ''"
+                                    class="h-14 rounded-[14px] border border-[#d5dbea] bg-[#f5f7fc] text-sm font-semibold text-[#5f6676] transition active:bg-[#eef1fb]">Clear</button>
+                            <button type="button" @click="press('0')"
+                                    class="h-14 rounded-[14px] border border-[#d5dbea] bg-white text-[22px] font-semibold text-[#1c2130] transition active:bg-[#eef1fb]">0</button>
+                            {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
+                            <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back
+                                    class="h-14 rounded-[14px] border border-[#d5dbea] bg-[#f5f7fc] text-sm font-semibold text-[#5f6676] transition active:bg-[#eef1fb]">⌫</button>
+                        </div>
+                    </form>
+
+                    {{-- Amber to try again, rose to go and ask somebody —
+                         the two tones the door kiosk uses for the same two
+                         jobs. --}}
+                    <p x-show="problem" x-cloak class="w-full max-w-[300px] rounded-xl px-4 py-3 text-center"
+                       :class="problem?.kind === 'bad' ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'">
+                        {{-- ?. because x-show only hides: Alpine still reads
+                             these while problem is null, and threw on every
+                             load until 28 Oct 2026. --}}
+                        <span class="block font-bold" x-text="problem?.title"></span>
+                        <span class="text-[13px]" x-text="problem?.detail"></span>
+                    </p>
+                </div>
+            </template>
+
+            <div x-show="staff || done" x-cloak class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+                {{-- The accent rule: the state's own colour once somebody is
+                     on screen — the first thing seen from across the room,
+                     before any word is read. --}}
                 <div class="h-1.5"
                      :class="staff
                         ? { working: 'bg-emerald-600', break: 'bg-amber-500', lunch: 'bg-amber-500', off: 'bg-slate-300' }[staff.state]
                         : (done ? (done.tone === 'stop' ? 'bg-rose-600' : done.tone === 'hold' ? 'bg-amber-500' : 'bg-emerald-600') : 'bg-indigo-600')"></div>
-
-                {{-- ---- the welcome screen ---- --}}
-                <template x-if="! staff && ! done">
-                    <div class="p-7">
-                        <div class="text-center">
-                            @php($scanner = \App\Models\Setting::bool('kiosk.scanner', true))
-                            {{-- The heading has to match what the screen will
-                                 actually accept. With the scanner off, "Scan
-                                 your card" is an instruction that fails. --}}
-                            <h1 class="text-xl font-bold">{{ $scanner ? 'Scan your card' : 'Enter your PIN' }}</h1>
-                            <p class="mt-1 text-[13px] text-slate-500">{{ $scanner ? 'or key your 4-digit PIN below' : 'key your 4-digit PIN below' }}</p>
-                        </div>
-
-                        <form @submit.prevent="identify()" autocomplete="off" class="mt-6">
-                            {{-- One field for both: a scanner is a keyboard
-                                 that types fast and presses Enter, so the same
-                                 box takes the card and the PIN and tells them
-                                 apart by what arrives. --}}
-                            {{-- Masked by CSS rather than type="password": a real password
-                                 field makes the browser read the kiosk as a login form and
-                                 offer to save the PIN. --}}
-                            <input x-ref="entry" x-model="entry" type="text" inputmode="numeric"
-                                   name="kiosk-entry" autocomplete="off" autocorrect="off" spellcheck="false"
-                                   data-1p-ignore data-lpignore="true" data-form-type="other"
-                                   style="-webkit-text-security: disc; text-security: disc;"
-                                   aria-label="Scan your card or key your PIN"
-                                   class="w-full rounded-xl border border-slate-300 bg-slate-50 px-6 py-4 text-center text-3xl tracking-[0.5em] text-slate-900 placeholder:tracking-[0.3em] placeholder:text-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-100"
-                                   placeholder="••••">
-
-                            <div class="mt-4 grid grid-cols-3 gap-2">
-                                <template x-for="key in ['1','2','3','4','5','6','7','8','9']" :key="key">
-                                    <button type="button" @click="press(key)"
-                                            class="min-h-16 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:border-indigo-300 active:bg-indigo-50"
-                                            x-text="key"></button>
-                                </template>
-                                <button type="button" @click="entry = ''"
-                                        class="min-h-16 rounded-xl border border-slate-200 bg-white text-sm font-semibold uppercase tracking-wide text-slate-400 transition active:scale-95 active:bg-slate-50">Clear</button>
-                                <button type="button" @click="press('0')"
-                                        class="min-h-16 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:border-indigo-300 active:bg-indigo-50">0</button>
-                                {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
-                                <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back
-                                        class="min-h-16 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-500 transition active:scale-95 active:bg-slate-50">⌫</button>
-                                {{-- Enter under the pad: four digits submit on their own,
-                                     so this is for a card scan or a slow finger. --}}
-                                <button type="submit" :disabled="entry.length < 4 || sending"
-                                        class="col-span-3 min-h-14 rounded-xl bg-indigo-600 text-sm font-bold uppercase tracking-wide text-white transition active:scale-95 active:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400">Enter</button>
-                            </div>
-                        </form>
-
-                        {{-- Amber to try again, rose to go and ask somebody —
-                             the two tones the door kiosk uses for the same two
-                             jobs. --}}
-                        <p x-show="problem" x-cloak class="mt-4 rounded-xl px-4 py-3 text-center"
-                           :class="problem?.kind === 'bad' ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'">
-                            {{-- ?. because x-show only hides: Alpine still reads
-                                 these while problem is null, and threw on every
-                                 load until 28 Oct 2026. --}}
-                            <span class="block font-bold" x-text="problem?.title"></span>
-                            <span class="text-[13px]" x-text="problem?.detail"></span>
-                        </p>
-                    </div>
-                </template>
 
                 {{-- ---- one person, and only what they can do ---- --}}
                 <template x-if="staff && ! done && step === 'card'">
@@ -324,6 +317,7 @@ function staffClock() { return {
     mode: 'in',     // why the picker is open: a clock-in, or somewhere else after a break
     now: '',
     today: '',
+    greeting: 'Good morning',   // by the centre's hour, set in tick()
     timer: null,
 
     init() {
@@ -365,6 +359,8 @@ function staffClock() { return {
         const zone = @js(config('app.timezone'));
         this.now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: zone });
         this.today = at.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', timeZone: zone });
+        const hour = Number(at.toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: zone }));
+        this.greeting = hour < 12 ? 'Good morning' : (hour < 17 ? 'Good afternoon' : 'Good evening');
     },
 
     get firstName() {

@@ -309,7 +309,13 @@ class StaffClockKioskTest extends TestCase
         $this->assertStringContainsString($device->name, $html);
         $this->assertStringContainsString('Staff time clock', $html);
         $this->assertStringContainsString('x-text="now"', $html);
-        $this->assertStringContainsString('x-text="today"', $html);
+        // The StaffFlow mock-up's front door (Jordan, 29 Oct 2026): no date
+        // in the masthead; a greeting, the instruction, four dots and the pad.
+        $this->assertStringNotContainsString('x-text="today"', $html);
+        $this->assertStringContainsString('x-text="greeting"', $html);
+        $this->assertStringContainsString('Scan your card or key your 4-digit PIN', $html);
+        $this->assertStringContainsString('data-pin-dots', $html);
+        $this->assertStringContainsString('data-key-back', $html);
     }
 
     public function test_five_wrong_pins_stop_that_number_being_answered(): void
