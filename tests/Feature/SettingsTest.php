@@ -145,7 +145,7 @@ class SettingsTest extends TestCase
 
     public function test_every_settings_tab_renders(): void
     {
-        foreach (['settings.company', 'settings.administrators', 'settings.devices', 'settings.history'] as $route) {
+        foreach (['settings.company', 'settings.administrators', 'settings.history'] as $route) {
             $this->actingAs($this->admin)->get(route($route))->assertOk();
         }
     }
@@ -170,37 +170,16 @@ class SettingsTest extends TestCase
             ->assertDontSee('Rachel Kim');
     }
 
-    public function test_devices_are_set_up_inside_settings(): void
+    public function test_devices_is_gone_from_settings(): void
     {
-        // The whole page, not a summary: adding, pairing, re-pairing and
-        // retiring all happen here now.
-        $html = $this->actingAs($this->admin)->get(route('settings.devices'))->assertOk()->getContent();
+        // Removed with its pairing QR (Jordan, 29 Oct 2026: the client does
+        // not want them). Kiosks pair themselves on first visit.
+        $html = $this->actingAs($this->admin)->get(route('settings.children'))->assertOk()->getContent();
 
-        $this->assertStringContainsString(route('devices.store'), $html);
-        $this->assertStringContainsString('Add a device', $html);
-    }
-
-    public function test_the_old_devices_page_lands_on_the_settings_tab(): void
-    {
-        // A director's bookmark to /devices should land on the devices page
-        // rather than on a 404.
-        $this->actingAs($this->admin)
-            ->get(route('devices.index'))
-            ->assertRedirect(route('settings.devices'));
-    }
-
-    public function test_devices_is_no_longer_its_own_sidebar_link(): void
-    {
-        // A screen opened twice a year does not belong beside the ones opened
-        // every morning.
-        $html = $this->actingAs($this->admin)->get(route('dashboard'))->assertOk()->getContent();
-
-        $nav = substr($html, (int) strpos($html, '<nav'), (int) strpos($html, '</nav>') - (int) strpos($html, '<nav'));
-
-        $this->assertStringNotContainsString(route('devices.index'), $nav);
-        // Settings is back on the director's sidebar (16 Oct 2026); Devices
-        // lives under it rather than beside it.
-        $this->assertStringContainsString(route('settings.children'), $nav);
+        $this->assertStringNotContainsString('>Devices<', $html);
+        $this->assertStringNotContainsString(url('/settings/devices'), $html);
+        $this->actingAs($this->admin)->get('/settings/devices')->assertNotFound();
+        $this->actingAs($this->admin)->get('/devices')->assertNotFound();
     }
 
     private function teacher(): User

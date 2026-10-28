@@ -70,21 +70,17 @@ class KioskWalkthroughTest extends TestCase
         $this->assertSame('2104', app(CentreSettings::class)->tabletCode('PreK'));
         $this->tick(1, 'PreK 2104 and UPK-4 2105 saved; every room says "No tablet yet"');
 
-        // 2. Settings → Devices: a clock and a PreK tablet, each paired in its own browser.
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Front desk', 'kind' => 'clock'])->assertRedirect(route('settings.devices'));
-        $this->door = StaffDevice::where('name', 'Front desk')->firstOrFail();
-        $this->assertStringStartsWith(url('/clock?token='), session('issued_device')['url']);
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'PreK iPad', 'kind' => 'room', 'classroom' => 'PreK'])->assertRedirect(route('settings.devices'));
-        $this->tablet = StaffDevice::where('name', 'PreK iPad')->firstOrFail();
-        $tabletLink = session('issued_device')['url'];
-        $this->assertStringStartsWith(url('/room?token='), $tabletLink);
-        $this->actingAs($this->admin)->get(route('settings.devices'))->assertOk()->assertSee('Room tablet · PreK')->assertSee('Front door clock');
+        // 2. A clock and a PreK tablet, each in its own browser. Settings →
+        // Devices is gone (29 Oct 2026); these two are already on the books,
+        // as a screen that pairs itself on first visit would be.
+        $this->door = tap(new StaffDevice(['name' => 'Front desk', 'kind' => StaffDevice::KIND_CLOCK, 'is_active' => true]))->issueToken();
+        $this->tablet = tap(new StaffDevice(['name' => 'PreK iPad', 'kind' => StaffDevice::KIND_ROOM, 'classroom' => 'PreK', 'is_active' => true]))->issueToken();
         $this->asTablet();
         $this->get(route('room.kiosk'))->assertOk()->assertSee('PreK iPad')->assertSee('Coming into');
         $this->asDoor();
         $this->get(route('clock.kiosk'))->assertOk()->assertSee('Front desk')->assertSee('Scan your card');
         $this->actingAs($this->admin)->get(route('settings.rooms'))->assertOk()->assertSee('1 tablet · never used');
-        $this->tick(2, 'clock link lands on /clock, tablet link on /room with "Room tablet · PreK"; Rooms & hours counts the tablet');
+        $this->tick(2, 'the clock opens on /clock, the PreK tablet on /room; Rooms & hours counts the tablet');
 
         // 3. Staff: PINs set above; Lana rostered in PreK today.
         StaffShift::create(['week_start' => '2026-10-12', 'user_id' => $this->staff['Lana Ortiz']->id, 'shift_date' => '2026-10-15', 'day' => 4, 'starts_at' => 7 * 60, 'ends_at' => 15 * 60, 'classroom' => 'PreK', 'role' => 'STAFF']);
@@ -256,12 +252,13 @@ class KioskWalkthroughTest extends TestCase
         $this->assertSame('No tablet yet', app(CentreSettings::class)->tabletsLine('PreK'));
         $this->tick(20, '0000 refused; 2105 makes it UPK-4; grey feed line; Rooms & hours counts it against UPK-4');
 
-        // 21. An unpaired browser.
+        // 21. A browser never paired: no pairing step any more (29 Oct 2026),
+        // it becomes a tablet of its own and the gear says which room.
         $this->flushSession();
-        $this->get(route('room.kiosk'))->assertOk()->assertSee('not set up yet');
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->assertJson(['status' => 'unpaired']);
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2104'])->assertJson(['status' => 'unpaired']);
-        $this->tick(21, 'an unpaired browser is told to see an administrator; PIN and code refused');
+        $this->get(route('room.kiosk'))->assertOk()->assertDontSee('not set up yet');
+        $this->postJson(route('room.kiosk.setup'), ['code' => '2104'])->assertJson(['status' => 'ok', 'room' => 'PreK']);
+        $this->assertSame(3, StaffDevice::count());
+        $this->tick(21, 'a new browser becomes its own tablet; 2104 makes it PreK');
 
         /* ---- Closing ---- */
 

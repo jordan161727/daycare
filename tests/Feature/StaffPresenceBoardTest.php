@@ -212,7 +212,8 @@ class StaffPresenceBoardTest extends TestCase
 
         $board = $this->actingAs($this->admin)->get(route('staff.presence'))->assertOk()->getContent();
         $this->assertStringContainsString('href="'.route('clock.kiosk').'" target="_blank"', $board);
-        $this->assertStringContainsString('href="'.route('settings.devices').'"', $board);
+        // No "Pair a kiosk" any more (29 Oct 2026): screens pair themselves.
+        $this->assertStringNotContainsString('data-pair-kiosk', $board);
 
         $teacher = $this->teacher('Lana Ortiz', 'PreK');
         $this->assertStringNotContainsString('data-kiosks-link', $this->actingAs($teacher)->get(route('dashboard'))->getContent());

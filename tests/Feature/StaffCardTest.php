@@ -125,134 +125,54 @@ class StaffCardTest extends TestCase
         $this->assertFalse($this->staff->fresh()->hasKioskPin());
     }
 
-    public function test_a_teacher_cannot_issue_cards_or_register_devices(): void
+    public function test_a_teacher_cannot_issue_cards(): void
     {
         $teacher = User::factory()->create(['role' => 'teacher']);
 
         $this->actingAs($teacher)->post(route('staff.card.issue', $this->staff))->assertForbidden();
-        $this->actingAs($teacher)->get(route('devices.index'))->assertForbidden();
-        $this->actingAs($teacher)->post(route('devices.store'), ['name' => 'Mine'])->assertForbidden();
     }
 
-    public function test_a_device_is_paired_once_and_the_link_is_shown_once(): void
+    public function test_the_devices_pages_and_pairing_qr_are_gone(): void
     {
-        $this->actingAs($this->admin)
-            ->post(route('devices.store'), ['name' => 'Front desk kiosk', 'location' => 'Lobby'])
-            ->assertRedirect(route('settings.devices'))
-            ->assertSessionHas('issued_device');
+        // Jordan, 29 Oct 2026: the client does not want Settings → Devices or
+        // its pairing QR. The addresses answer nothing at all.
+        foreach (['/settings/devices', '/devices', '/devices/1/link', '/devices/1/link.svg'] as $url) {
+            $this->actingAs($this->admin)->get($url)->assertNotFound();
+        }
 
-        $device = StaffDevice::firstOrFail();
+        $this->assertStringNotContainsString('Devices', $this->actingAs($this->admin)->get(route('settings.children'))->getContent());
+    }
 
+    public function test_a_kiosk_pairs_itself_and_the_token_is_not_plain_text(): void
+    {
+        config(['daycare.kiosk.enabled' => true]);
+
+        $this->get(route('clock.kiosk'))->assertOk()->assertCookie(StaffDevice::COOKIE);
+
+        $device = StaffDevice::sole();
         $this->assertTrue($device->is_active);
-
-        // The token is hashed like everything else here: a table of live ones
-        // would be a table of ways to open a clock from anywhere.
+        $this->assertSame(StaffDevice::KIND_CLOCK, $device->kind);
         $this->assertNotEmpty($device->token_hash);
 
-        $row = (array) \Illuminate\Support\Facades\DB::table('staff_devices')->first();
-        $link = session('issued_device')['url'] ?? '';
-        $token = (string) parse_url($link, PHP_URL_QUERY);
-
-        $this->assertNotSame('', $token);
-
-        foreach ($row as $column => $value) {
-            $this->assertStringNotContainsString(str_replace('token=', '', $token), (string) $value, "the pairing token is stored in plain text in {$column}");
-        }
-    }
-
-    public function test_a_pairing_link_can_be_looked_at_again(): void
-    {
-        // It used to be shown once and never again, which left an
-        // administrator at a tablet with no way to see the address they were
-        // meant to type — and re-pairing to find out would stop whichever
-        // screen was already working.
-        config(['daycare.kiosk.enabled' => true]);
-
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Front desk'])->assertRedirect();
-
-        $device = StaffDevice::firstOrFail();
-        $issued = session('issued_device')['url'];
-
-        $html = $this->actingAs($this->admin)->get(route('devices.link', $device))->assertOk()->getContent();
-
-        $this->assertStringContainsString($issued, $html, 'the link shown is the one that was issued');
-        $this->assertStringContainsString(route('devices.link.qr', $device), $html);
-
-        // And it still pairs, without anything having been re-issued.
-        $this->get($issued)->assertRedirect(route('clock.kiosk'));
-
-        // The QR is the same address, as something a tablet camera can read.
-        $svg = $this->actingAs($this->admin)->get(route('devices.link.qr', $device))->assertOk();
-        $this->assertSame('image/svg+xml', $svg->headers->get('Content-Type'));
-        $this->assertStringContainsString('no-store', (string) $svg->headers->get('Cache-Control'));
-    }
-
-    public function test_the_token_is_still_not_plain_text_in_the_database(): void
-    {
-        // Readable by the app, unreadable in a copied database: it is encrypted
-        // now rather than hashed, which is what makes showing it possible.
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Front desk'])->assertRedirect();
-
-        $token = str_replace(
-            route('clock.kiosk').'?token=',
-            '',
-            session('issued_device')['url']
-        );
-
+        // Readable by the app, unreadable in a copied database.
         $row = (array) \Illuminate\Support\Facades\DB::table('staff_devices')->first();
 
         foreach ($row as $column => $value) {
-            $this->assertStringNotContainsString($token, (string) $value, "the pairing token is stored in plain text in {$column}");
+            $this->assertStringNotContainsString($device->token, (string) $value, "the pairing token is stored in plain text in {$column}");
         }
-
-        // And the app can still read it back.
-        $this->assertSame($token, StaffDevice::firstOrFail()->token);
     }
 
-    public function test_a_teacher_cannot_see_a_pairing_link(): void
-    {
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Front desk'])->assertRedirect();
-
-        $device = StaffDevice::firstOrFail();
-        $teacher = User::factory()->create(['role' => 'teacher']);
-
-        $this->actingAs($teacher)->get(route('devices.link', $device))->assertForbidden();
-        $this->actingAs($teacher)->get(route('devices.link.qr', $device))->assertForbidden();
-    }
-
-    public function test_retiring_a_device_keeps_it_for_the_punches_it_recorded(): void
-    {
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Old iPad'])->assertRedirect();
-
-        $device = StaffDevice::firstOrFail();
-
-        $this->actingAs($this->admin)->delete(route('devices.destroy', $device))->assertRedirect();
-
-        // Months of hours were recorded by this row; deleting it would leave
-        // them recorded by nothing.
-        $this->assertDatabaseHas('staff_devices', ['id' => $device->id, 'is_active' => false]);
-    }
-
-    public function test_re_pairing_stops_the_old_tablet_working(): void
+    public function test_the_same_browser_stays_the_same_device(): void
     {
         config(['daycare.kiosk.enabled' => true]);
 
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Front desk'])->assertRedirect();
+        $this->get(route('clock.kiosk'))->assertOk();
+        $token = StaffDevice::sole()->token;
 
-        $first = session('issued_device')['url'];
-        $device = StaffDevice::firstOrFail();
+        // A new session (Monday morning) with the cookie still on the tablet.
+        $this->flushSession();
+        $this->withCookie(StaffDevice::COOKIE, $token)->get(route('clock.kiosk'))->assertOk();
 
-        $this->actingAs($this->admin)->post(route('devices.repair', $device))->assertRedirect();
-
-        // Read before anything else is requested: flash data survives exactly
-        // one request, and the assertions below are requests.
-        $second = session('issued_device')['url'];
-
-        $this->assertNotSame($first, $second);
-
-        // The point of re-pairing: a tablet that has walked off stops being a
-        // time clock.
-        $this->get($first)->assertForbidden();
-        $this->get($second)->assertRedirect(route('clock.kiosk'));
+        $this->assertSame(1, StaffDevice::count());
     }
 }

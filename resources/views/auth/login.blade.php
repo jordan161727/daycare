@@ -187,8 +187,8 @@
                 {{-- The staff kiosks, beside the families' one (Jordan, 28 Oct
                      2026: "connect the kiosk for staff"). Signed out like the
                      door: the PIN is the way in. Each opens as the device this
-                     browser was paired as; an unpaired browser is told to ask
-                     an administrator. Only offered when the kiosks are on —
+                     browser is, made on its first visit (no pairing step
+                     since 29 Oct 2026). Only offered when the kiosks are on —
                      otherwise these addresses answer 404. --}}
                 @if(config('daycare.kiosk.enabled'))
                     <div class="auth-rise grid grid-cols-2 gap-3" style="animation-delay:.18s" data-staff-kiosks>

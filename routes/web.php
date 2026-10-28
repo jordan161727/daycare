@@ -39,7 +39,6 @@ use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\StaffCardController;
 use App\Http\Controllers\StaffClockController;
-use App\Http\Controllers\StaffDeviceController;
 use App\Http\Controllers\StaffReportController;
 use App\Http\Controllers\StaffTimesheetController;
 use App\Http\Controllers\ProfileController;
@@ -424,19 +423,13 @@ Route::post('/children/{child}/withdraw', [ChildStatusController::class, 'withdr
 Route::post('/children/{child}/reenroll', [ChildStatusController::class, 'reenroll'])->name('children.reenroll')->whereNumber('child');
 // Moving a child between rooms moves them between teachers: director only.
 Route::post('/children/{child}/room', [ChildRecordController::class, 'room'])->name('children.room')->whereNumber('child');
-Route::get('/settings/devices', [SettingController::class, 'devices'])->name('settings.devices');
+// Settings → Devices and its pairing QR are gone (Jordan, 29 Oct 2026: the
+// client does not want them). A kiosk pairs itself on its first visit; see
+// PairsStaffDevice.
 Route::get('/settings/login-history', [SettingController::class, 'history'])->name('settings.history');
 
-Route::get('/devices', [StaffDeviceController::class, 'index'])->name('devices.index');
-Route::post('/devices', [StaffDeviceController::class, 'store'])->name('devices.store');
-Route::put('/devices/{device}', [StaffDeviceController::class, 'update'])->name('devices.update');
-Route::get('/devices/{device}/link', [StaffDeviceController::class, 'link'])->name('devices.link');
-Route::get('/devices/{device}/link.svg', [StaffDeviceController::class, 'qr'])->name('devices.link.qr');
-Route::post('/devices/{device}/repair', [StaffDeviceController::class, 'repair'])->name('devices.repair');
-Route::delete('/devices/{device}', [StaffDeviceController::class, 'destroy'])->name('devices.destroy');
-
 // Who's where: the staff presence board the kiosks feed (HANDOFF §5.3.1),
-// and the flags the office has to answer. Director only, like the devices.
+// and the flags the office has to answer. Director only.
 Route::get('/staff/whos-where', [StaffPresenceController::class, 'board'])->middleware('never-cached')->name('staff.presence');
 Route::post('/staff/whos-where/flags/{event}', [StaffPresenceController::class, 'resolve'])->name('staff.presence.resolve');
 

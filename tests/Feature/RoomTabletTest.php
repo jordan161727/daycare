@@ -67,11 +67,17 @@ class RoomTabletTest extends TestCase
         $this->get(route('room.kiosk'))->assertOk()->assertSee('PreK iPad')->assertSee('Coming into');
     }
 
-    public function test_an_unpaired_browser_is_not_a_room_tablet(): void
+    public function test_a_browser_never_paired_becomes_a_room_tablet_set_by_its_code(): void
     {
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->assertJson(['status' => 'unpaired']);
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2104'])->assertJson(['status' => 'unpaired']);
-        $this->get(route('room.kiosk'))->assertOk()->assertSee('not set up yet');
+        // No pairing step any more (Jordan, 29 Oct 2026): the tablet is a
+        // device on first visit, and the gear and room code say where it is.
+        $this->get(route('room.kiosk'))->assertOk()->assertDontSee('not set up yet');
+
+        $this->postJson(route('room.kiosk.setup'), ['code' => '2105'])->assertOk()->assertJson(['status' => 'ok', 'room' => 'UPK-4']);
+
+        $device = StaffDevice::latest('id')->first();
+        $this->assertNotSame($this->tablet->id, $device->id);
+        $this->assertSame([StaffDevice::KIND_ROOM, 'UPK-4'], [$device->kind, $device->classroom]);
     }
 
     public function test_the_gear_and_a_room_code_switch_the_room_and_log_it(): void
@@ -273,20 +279,6 @@ class RoomTabletTest extends TestCase
         $ticket = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->json('ticket');
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in'])->assertJson(['status' => 'ok']);
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in'])->assertJson(['status' => 'expired']);
-    }
-
-    public function test_devices_settings_can_add_a_room_tablet(): void
-    {
-        $admin = User::factory()->create(['role' => 'admin']);
-
-        $this->actingAs($admin)->post(route('devices.store'), ['name' => 'Toddler iPad', 'kind' => 'room', 'classroom' => 'Toddler'])
-            ->assertRedirect(route('settings.devices'));
-
-        $device = StaffDevice::where('name', 'Toddler iPad')->first();
-        $this->assertSame(['room', 'Toddler'], [$device->kind, $device->classroom]);
-        $this->assertStringStartsWith(url('/room?token='), session('issued_device')['url']);
-
-        $this->actingAs($admin)->get(route('settings.devices'))->assertOk()->assertSee('Room tablet · Toddler');
     }
 
     /* ---- helpers ---- */

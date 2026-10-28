@@ -66,10 +66,10 @@ class KioskWorkflowChecklistTest extends TestCase
         StaffShift::create(['week_start' => '2026-10-12', 'user_id' => $this->t['Lana Ortiz']->id, 'shift_date' => '2026-10-15', 'day' => 4, 'starts_at' => 7 * 60, 'ends_at' => 15 * 60, 'classroom' => 'PreK', 'role' => 'STAFF']);
 
         $this->actingAs($this->admin)->put(route('settings.rooms.update'), $this->roomsPayload(['PreK' => '2104', 'UPK-4' => '2105']))->assertSessionHasNoErrors();
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'Front desk', 'kind' => 'clock'])->assertRedirect();
-        $this->actingAs($this->admin)->post(route('devices.store'), ['name' => 'PreK iPad', 'kind' => 'room', 'classroom' => 'PreK'])->assertRedirect();
-        $this->door = StaffDevice::where('name', 'Front desk')->firstOrFail();
-        $this->tablet = StaffDevice::where('name', 'PreK iPad')->firstOrFail();
+        // Settings → Devices is gone (29 Oct 2026): the two screens are on the
+        // books as they would be after pairing themselves on first visit.
+        $this->door = tap(new StaffDevice(['name' => 'Front desk', 'kind' => StaffDevice::KIND_CLOCK, 'is_active' => true]))->issueToken();
+        $this->tablet = tap(new StaffDevice(['name' => 'PreK iPad', 'kind' => StaffDevice::KIND_ROOM, 'classroom' => 'PreK', 'is_active' => true]))->issueToken();
         $this->childrenIn('PreK', 8);
         $this->childrenIn('Toddler', 4);
         Setting::put('rooms.PreK.ratio', 7);

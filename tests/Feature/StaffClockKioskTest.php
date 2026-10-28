@@ -53,9 +53,9 @@ class StaffClockKioskTest extends TestCase
         $this->assertStringContainsString('href="'.route('clock.kiosk').'" data-staff-clock', $html);
         $this->assertStringContainsString('href="'.route('room.kiosk').'" data-room-tablet', $html);
 
-        // Both open without signing in.
-        $this->get(route('clock.kiosk'))->assertOk()->assertSee('not set up yet');
-        $this->get(route('room.kiosk'))->assertOk()->assertSee('not set up yet');
+        // Both open without signing in, and without pairing (29 Oct 2026).
+        $this->get(route('clock.kiosk'))->assertOk()->assertDontSee('not set up yet');
+        $this->get(route('room.kiosk'))->assertOk()->assertDontSee('not set up yet');
 
         config(['daycare.kiosk.enabled' => false]);
         $this->assertStringNotContainsString('data-staff-kiosks', $this->get(route('login'))->getContent());
@@ -220,21 +220,24 @@ class StaffClockKioskTest extends TestCase
         ]);
     }
 
-    public function test_an_unpaired_screen_neither_identifies_nor_punches(): void
+    public function test_a_screen_never_paired_pairs_itself_and_takes_a_punch(): void
     {
-        [, $card] = $this->staffWithCard();
+        // No pairing step any more (Jordan, 29 Oct 2026): the card or PIN is
+        // what authenticates, and the screen becomes a device on first use.
+        [$staff, $card] = $this->staffWithCard();
 
-        // The address on its own must not be a time clock anybody on the
-        // network can press.
-        $this->postJson(route('clock.kiosk.identify'), ['card' => $card])
+        $ticket = $this->postJson(route('clock.kiosk.identify'), ['card' => $card])
             ->assertOk()
-            ->assertJson(['status' => 'unpaired']);
+            ->assertJson(['status' => 'ok'])
+            ->json('ticket');
 
-        $this->postJson(route('clock.kiosk.punch'), ['ticket' => 'x', 'action' => 'clock_in'])
+        $this->postJson(route('clock.kiosk.punch'), ['ticket' => $ticket, 'action' => 'clock_in', 'room' => 'office'])
             ->assertOk()
-            ->assertJson(['status' => 'unpaired']);
+            ->assertJson(['status' => 'ok']);
 
-        $this->assertSame(0, TimePunch::count());
+        $punch = TimePunch::sole();
+        $this->assertSame($staff->id, $punch->user_id);
+        $this->assertSame(StaffDevice::sole()->id, $punch->staff_device_id);
     }
 
     public function test_a_wrong_pairing_token_is_refused(): void
@@ -485,7 +488,7 @@ class StaffClockKioskTest extends TestCase
         $this->assertSame($device->id, session('staff_clock.device'), 'The cheap lookup is seeded again, so the hash check is not paid per press.');
     }
 
-    public function test_a_retired_device_is_cut_off_at_once_despite_its_cookie(): void
+    public function test_a_retired_device_is_not_picked_up_again_by_its_cookie(): void
     {
         [$device, $token] = $this->device();
 
@@ -493,17 +496,18 @@ class StaffClockKioskTest extends TestCase
 
         $this->flushSession();
 
-        $this->withCookie('staff_clock_device', $token)
-            ->postJson(route('clock.kiosk.identify'), ['pin' => '1234'])
-            ->assertOk()
-            ->assertJson(['status' => 'unpaired']);
+        $this->withCookie('staff_clock_device', $token)->get('/clock')->assertOk();
+
+        $this->assertNotSame($device->id, session('staff_clock.device'), 'A new screen, not the retired one.');
     }
 
-    public function test_a_made_up_cookie_pairs_nothing(): void
+    public function test_a_made_up_cookie_is_a_new_screen_not_somebody_elses(): void
     {
-        $this->withCookie('staff_clock_device', 'not-a-real-token')
-            ->postJson(route('clock.kiosk.identify'), ['pin' => '1234'])
-            ->assertOk()
-            ->assertJson(['status' => 'unpaired']);
+        [$device] = $this->device();
+
+        $this->withCookie('staff_clock_device', 'not-a-real-token')->get('/clock')->assertOk();
+
+        $this->assertNotSame($device->id, session('staff_clock.device'));
+        $this->assertSame(2, StaffDevice::count());
     }
 }

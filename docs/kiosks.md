@@ -55,7 +55,7 @@ tablets. A centre without room tablets yet sees the dashboard it always had.
 | Who's where + flags | `/staff/whos-where` · `StaffPresenceController` · `resources/views/staff/presence.blade.php` |
 | Pairing shared by both screens | `app/Http/Controllers/Concerns/PairsStaffDevice.php` |
 | Room tablet codes, tablets per room | Settings → Rooms & hours · `CentreSettings::tabletCode()` |
-| Device kind and room | Settings → Devices · `staff_devices.kind`, `.classroom` |
+| Device kind and room | Made on first visit · `staff_devices.kind`, `.classroom` (set by the gear) |
 | Check-ins | `staff_room_checkins` · `App\Models\StaffRoomCheckin` |
 | Activity feed and flags | `kiosk_events` · `App\Models\KioskEvent` |
 | Closing-time safety net | `php artisan staff:close-day`, scheduled 15 min after the centre closes |
@@ -69,7 +69,7 @@ at a tablet rather than the door.
 
 1. **Keypad.** "Scan your card" (or "Enter your PIN" when the scanner is off).
    The same errors as before: not recognised, locked, ambiguous, expired,
-   stale, unpaired.
+   stale.
 2. **Staff card.** Name, a pill — *Not on the clock* / *Working* / *On
    break* — and one sentence that is always about *now*:
    - Working: "On the clock since 8:31 AM · in PreK" (or "· office / no room")
@@ -145,13 +145,14 @@ wrong room is obvious from the door.
 
    **RULES:** codes are four digits, one room per code, set in Settings →
    Rooms & hours (directors only), and **never equal to a staff PIN** — the
-   save refuses it. The tablet has to be a paired device; a random browser
-   at `/room` is told to see an administrator. The code only chooses the
+   save refuses it. There is no pairing step (29 Oct 2026): any browser
+   at `/room` becomes a tablet of its own on first visit, with no room until
+   the gear sets one. The code only chooses the
    room; it records nothing.
 
 ## Who's where (HANDOFF §5.3.1)
 
-`/staff/whos-where` (director only; also linked from the Devices page) is the
+`/staff/whos-where` (director only) is the
 right-hand column of the mock-up:
 
 - **Room by room:** who is checked in and since when, and the pill
@@ -208,10 +209,10 @@ Log in as a director and:
      be the same as a staff PIN."
    - [ ] Trying the same code on two rooms is refused.
    - [ ] Each room shows "No tablet yet".
-2. **Settings → Devices.** Add *Front desk* as a **Front door clock**. Add
-   *PreK iPad* as a **Room tablet** in PreK. Open each pairing link in its own
-   browser profile (or two browsers): the clock link lands on `/clock`, the
-   tablet link on `/room` with **Room tablet · PreK** in the header.
+2. **The screens.** Open `/clock` in one browser profile and `/room` in
+   another. Each pairs itself on first visit (Settings → Devices and its QR
+   were removed 29 Oct 2026). On the tablet, tap the gear and key 2104: it
+   becomes the PreK tablet.
    - [ ] Rooms & hours now says "1 tablet · never used" against PreK.
 3. **Staff.** The seeder above made Lana (3333, home room PreK), Sultana
    (4444, Toddler) and Evana (5555, Infant), and gave Lana a shift today in
@@ -295,9 +296,8 @@ Log in as a director and:
       the keypad reads "Coming into UPK-4?". Who's where has a grey line
       "Room tablet set to UPK-4 (was PreK)". Rooms & hours now counts the
       tablet against UPK-4.
-21. Open `/room` in a browser that was never paired.
-    - [ ] "This tablet is not set up yet"; a PIN and a code are both
-      refused.
+21. Open `/room` in a browser that was never used.
+    - [ ] It opens as a new tablet; the gear and 2104 make it PreK.
 
 ### Closing
 
@@ -348,8 +348,9 @@ asks for.
   clock-out is not flagged by a 6:00 PM job.
 - Room codes are stored **plain** in Settings (directors read them back to
   hand to whoever moves a tablet); they choose a room and nothing else.
-- The pairing cookie is shared by both screens: a tablet paired once is
-  paired for whichever page its kind sends it to.
+- No pairing step: a browser that opens `/clock` or `/room` is made a device
+  on first visit and keeps a long cookie; the PIN or card is what
+  authenticates. The cookie is shared by both screens.
 - **Kiosk-mode exit with a director passcode** (§5.3, last bullet) is not
   built: the tablets are plain web pages, and locking the browser into them
   is the tablet's own guided-access setting.

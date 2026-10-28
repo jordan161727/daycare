@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Child;
 use App\Models\LoginEvent;
 use App\Models\Setting;
-use App\Models\StaffDevice;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -185,24 +184,6 @@ class SettingController extends Controller
         return view('settings.administrators', [
             'tab' => 'administrators',
             'admins' => User::where('role', 'admin')->orderBy('name')->get(),
-        ]);
-    }
-
-    /**
-     * The screens staff punch at — set up here and nowhere else.
-     *
-     * This used to be its own top-level page with a link in the sidebar, which
-     * put a screen opened twice a year beside the ones opened every morning.
-     * The old routes still carry the actions; only the page moved.
-     */
-    public function devices()
-    {
-        return view('settings.devices', [
-            'tab' => 'devices',
-            'devices' => StaffDevice::orderByDesc('is_active')->orderBy('name')->get(),
-            // Shown once, immediately after pairing, and never again — see
-            // StaffDevice::issueToken.
-            'issued' => session('issued_device'),
         ]);
     }
 
