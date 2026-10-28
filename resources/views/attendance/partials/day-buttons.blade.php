@@ -56,8 +56,13 @@
         <template x-for="session in child.sessions" :key="session">
             <div>
                 {{-- The hour being typed. --}}
+                {{-- On a recorded arrival the pencil opens two boxes, the
+                     arrival and the departure (Jordan, 28 Oct 2026: "I can
+                     edit the in and out"). Tab moves between them; Enter, or
+                     leaving the cell, saves both; Esc puts them back. --}}
                 <template x-if="isRetiming(child.id, '{{ $iso }}', session)">
-                    <div class="att-cell att-editing" :class="child.sessions.length > 1 ? 'att-half' : ''">
+                    <div class="att-cell att-editing" :class="[child.sessions.length > 1 ? 'att-half' : '', retimingBoth ? 'att-both' : '']"
+                         @focusout="if (! $el.contains($event.relatedTarget)) commitRetime(child.id, '{{ $iso }}', session)">
                         <span x-show="session !== 'FULL'" class="att-tag" x-text="session"></span>
                         <input
                             type="text"
@@ -66,7 +71,7 @@
                             x-model="draft"
                             x-init="$nextTick(() => { $el.focus(); $el.select(); })"
                             :placeholder="session === 'FULL' ? '8:00 AM' : '8:00a'"
-                            @keydown.enter.prevent="$event.target.blur()"
+                            @keydown.enter.prevent="commitRetime(child.id, '{{ $iso }}', session)"
                             @keydown.escape.prevent="cancelRetime()"
                             {{-- The correction being made is usually "a bit
                                  earlier than that" rather than a time somebody
@@ -76,13 +81,30 @@
                             @keydown.down.prevent="nudgeDraft($event.shiftKey ? -60 : -1)"
                             @keydown.page-up.prevent="nudgeDraft(60)"
                             @keydown.page-down.prevent="nudgeDraft(-60)"
-                            @blur="commitRetime(child.id, '{{ $iso }}', session)"
                             {{-- The same field, two jobs. On a day still to
                                  come it is the hour they are booked in for,
                                  and saying "arrival time" there would tell a
                                  screen reader the opposite of the truth. --}}
                             :aria-label="child.name + ('{{ $iso }}' > today ? ', booked in for ' : ', arrival time ') + sessionLabel(session) + ' {{ $date->format('M j') }}'"
                         >
+                        <template x-if="retimingBoth">
+                            <span class="att-dash" aria-hidden="true">–</span>
+                        </template>
+                        <template x-if="retimingBoth">
+                            <input
+                                type="text"
+                                inputmode="numeric"
+                                autocomplete="off"
+                                x-model="draftOut"
+                                placeholder="out"
+                                @focus="$el.select()"
+                                @keydown.enter.prevent="commitRetime(child.id, '{{ $iso }}', session)"
+                                @keydown.escape.prevent="cancelRetime()"
+                                @keydown.up.prevent="nudgeDraft($event.shiftKey ? 60 : 1, 'draftOut')"
+                                @keydown.down.prevent="nudgeDraft($event.shiftKey ? -60 : -1, 'draftOut')"
+                                :aria-label="child.name + ', leaving time ' + sessionLabel(session) + ' {{ $date->format('M j') }}'"
+                            >
+                        </template>
                     </div>
                 </template>
 

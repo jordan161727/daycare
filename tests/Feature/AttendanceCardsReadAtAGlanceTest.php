@@ -19,11 +19,13 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_the_directors_register_opens_on_the_cards(): void
+    public function test_the_directors_register_opens_on_the_table(): void
     {
         $html = $this->page('attendance.classic');
 
-        $this->assertStringContainsString("mode: 'avatar',", $html);
+        // The table, since 28 Oct 2026: the ⋯ menu that offered the cards
+        // came off with the Live switch (Jordan: "back to old design").
+        $this->assertStringContainsString("mode: 'sheet',", $html);
         // The sheet is still offered, and still remembered once chosen.
         $this->assertStringContainsString("if (localStorage.getItem('attendance.view') === 'sheet') this.mode = 'sheet';", $html);
     }
@@ -40,13 +42,15 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
         $this->assertStringContainsString('>Checked out</span>', $html);
     }
 
-    public function test_the_edit_switch_belongs_to_the_table_and_the_cards_leave_edit_mode(): void
+    public function test_there_is_no_edit_switch_and_the_cards_would_leave_edit_mode(): void
     {
         $html = $this->page('attendance.classic');
 
-        // The Live/Edit switch is drawn for Table view only.
-        $this->assertStringContainsString("<div x-show=\"view === 'signin' && mode === 'sheet'\" class=\"att-mode\"", $html);
-        // And choosing Card view while in Edit mode drops back to Live.
+        // No Live / Edit switch at all now (28 Oct 2026): the table is
+        // always in Edit for a director.
+        $this->assertStringNotContainsString('class="att-switch"', $html);
+        $this->assertStringContainsString('editing: true,', $html);
+        // The cards still leave Edit on the way in, should they come back.
         $this->assertStringContainsString("if (this.mode === 'avatar' && this.editing) this.switchMode();", $html);
     }
 

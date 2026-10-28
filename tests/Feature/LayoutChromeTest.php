@@ -115,15 +115,18 @@ class LayoutChromeTest extends TestCase
     {
         $admin = User::factory()->create(['role' => 'admin', 'must_change_password' => false]);
 
-        // The key belongs to the classic register's sheet; the week grid
-        // (Phase 3) carries its own key under the header.
-        $this->actingAs($admin)
-            ->get(route('attendance.classic'))
-            ->assertOk()
-            ->assertSee("\$dispatch('attendance-key')", false);
+        // The key belongs to the register's sheet, which is Director
+        // Attendance again (28 Oct 2026); the week grid at its own address
+        // carries its own key under the header.
+        foreach (['attendance.index', 'attendance.classic'] as $register) {
+            $this->actingAs($admin)
+                ->get(route($register))
+                ->assertOk()
+                ->assertSee("\$dispatch('attendance-key')", false);
+        }
 
         $this->actingAs($admin)
-            ->get(route('attendance.index'))
+            ->get(route('attendance.week'))
             ->assertOk()
             ->assertDontSee("\$dispatch('attendance-key')", false)
             ->assertSee('Tap a day to change it');

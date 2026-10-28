@@ -668,6 +668,8 @@ Route::middleware('role:admin,teacher')->group(function () {
     // _method spoofing out of form parameters, which a JSON body does not
     // populate. A DELETE route here would 405 every time.
     Route::post('/attendance/sign-in/remove', [AttendanceController::class, 'removeSignIn'])->name('attendance.signin.remove');
+    // Director Attendance's tap: time → dot → Absent → the same time back.
+    Route::post('/attendance/step', [AttendanceController::class, 'step'])->name('attendance.step');
     // Moving the hour on an arrival. Same door as removing one: it rewrites
     // a figure the centre bills from, and the same people may do it.
     Route::post('/attendance/sign-in/retime', [AttendanceController::class, 'retime'])->name('attendance.signin.retime');

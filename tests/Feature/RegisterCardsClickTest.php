@@ -26,8 +26,23 @@ class RegisterCardsClickTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Why these three are skipped (28 Oct 2026): Director Attendance is the
+     * table, always in Edit, with no ⋯ menu (Jordan: "back to old design",
+     * HANDOFF §7.1). The cards were reached only from that menu, and the Live
+     * table's in-then-out taps only with the switch off — so nothing a person
+     * can press reaches what these click. The code is kept, parked; flip the
+     * menu back on in attendance/index.blade.php and remove this skip. The
+     * table's new tap is DirectorAttendanceCycleTest.
+     */
+    private function skipWhileParked(): void
+    {
+        $this->markTestSkipped('The cards and the Live table are parked with the ⋯ menu and the Live switch (28 Oct 2026).');
+    }
+
     public function test_six_taps_take_a_school_age_child_through_both_sessions_and_back(): void
     {
+        $this->skipWhileParked();
         $node = $this->node();
 
         if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {
@@ -142,6 +157,7 @@ class RegisterCardsClickTest extends TestCase
          * next tap must open on the PM with the AM switched off, so the
          * afternoon does not land in the morning's row.
          */
+        $this->skipWhileParked();
         $node = $this->node();
 
         if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {
@@ -209,6 +225,7 @@ class RegisterCardsClickTest extends TestCase
          * out is the same requests a card makes, a session at a time, and
          * each box reading both of its hours once it has them.
          */
+        $this->skipWhileParked();
         $node = $this->node();
 
         if (! $node || ! is_file(base_path('node_modules/jsdom/package.json'))) {

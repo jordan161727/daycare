@@ -56,12 +56,12 @@ class DirectorAttendanceWeekTest extends TestCase
         DssDayMark::create(['child_id' => $this->ava->id, 'marked_on' => '2026-10-14', 'mark' => DssDayMark::ABSENT, 'created_by' => $this->admin->id]);
         ClosureDay::create(['closed_on' => '2026-10-16', 'reason' => 'Staff training']);
 
-        $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
+        $html = $this->actingAs($this->admin)->get(route('attendance.week'))->assertOk()->getContent();
         $this->assertStringContainsString('data-week-grid', $html);
         $this->assertStringContainsString('Oct 12 – 16', $html);
         $this->assertStringContainsString('Linked to Teacher Attendance', $html);
 
-        $w = $this->actingAs($this->admin)->get(route('attendance.index'))->viewData('w');
+        $w = $this->actingAs($this->admin)->get(route('attendance.week'))->viewData('w');
         $ava = collect($w['rows'])->firstWhere('id', $this->ava->id);
 
         $this->assertSame('7:45a – 5:30p', $ava['hours']);
@@ -215,8 +215,8 @@ class DirectorAttendanceWeekTest extends TestCase
 
     public function test_the_room_chips_filter_and_the_more_menu_is_gone(): void
     {
-        $html = $this->actingAs($this->admin)->get(route('attendance.index', ['room' => 'Toddler']))->assertOk()->getContent();
-        $w = $this->actingAs($this->admin)->get(route('attendance.index', ['room' => 'Toddler']))->viewData('w');
+        $html = $this->actingAs($this->admin)->get(route('attendance.week', ['room' => 'Toddler']))->assertOk()->getContent();
+        $w = $this->actingAs($this->admin)->get(route('attendance.week', ['room' => 'Toddler']))->viewData('w');
 
         $this->assertSame(['Cruz, Ava'], array_column($w['rows'], 'name'));
         $this->assertSame(2, $w['total']);
@@ -229,16 +229,16 @@ class DirectorAttendanceWeekTest extends TestCase
         // Each chip points at its own room, and the arrows at their own weeks
         // (the links kept the page's own values until 27 Oct 2026, so a chip
         // on a filtered page went nowhere).
-        $this->assertStringContainsString(e(route('attendance.index', ['room' => 'School Age', 'date' => today()->toDateString()])), $html);
-        $this->assertStringContainsString(e(route('attendance.index', ['date' => '2026-10-05', 'room' => 'Toddler'])), $html, 'the previous-week arrow keeps the room');
-        $this->assertStringContainsString(e(route('attendance.index', ['date' => today()->toDateString()])), $html, 'All drops the room');
+        $this->assertStringContainsString(e(route('attendance.week', ['room' => 'School Age', 'date' => today()->toDateString()])), $html);
+        $this->assertStringContainsString(e(route('attendance.week', ['date' => '2026-10-05', 'room' => 'Toddler'])), $html, 'the previous-week arrow keeps the room');
+        $this->assertStringContainsString(e(route('attendance.week', ['date' => today()->toDateString()])), $html, 'All drops the room');
 
         // The LAN and Student headers sort the rows on the page.
         $this->assertStringContainsString('data-sort-lan', $html);
         $this->assertStringContainsString('data-sort-name', $html);
 
         // The old address by room still works: ?toddler.
-        $w = $this->actingAs($this->admin)->get(route('attendance.index').'?toddler')->assertOk()->viewData('w');
+        $w = $this->actingAs($this->admin)->get(route('attendance.week').'?toddler')->assertOk()->viewData('w');
         $this->assertSame(['Cruz, Ava'], array_column($w['rows'], 'name'));
 
         $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->assertSee('x-data="attendanceApp()"', false);

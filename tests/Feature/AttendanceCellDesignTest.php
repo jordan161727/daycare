@@ -173,8 +173,10 @@ class AttendanceCellDesignTest extends TestCase
         // walks the full cycle and the time it lands on is an arrival; on a day
         // still to come a tap is only the yes/no, and the hour lives on the
         // pencil because it is the plan rather than a record.
-        $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time.', $html);
-        $this->assertStringContainsString('the pencil sets the hour they are due — which is the plan, not an arrival', $html);
+        // Since 28 Oct 2026 the cycle on a day gone or today is Jordan's:
+        // time → dot → Absent → the same time back.
+        $this->assertStringContainsString('Tap a time to cycle it: time → dot → Absent → the same time back.', $html);
+        $this->assertStringContainsString('the pencil sets the hour they are due', $html);
         $this->assertStringContainsString("'Only ' + this.todayLabel + ' can be changed.'", $html);
 
         // Read on the first morning and never again, so the sheet does not open

@@ -61,19 +61,17 @@ class AttendanceSheetTest extends TestCase
      * card each for today — a second rendering of one set of rows on this
      * page, switched from the ⋯ menu and remembered for the viewer.
      */
-    public function test_the_register_switches_between_attendance_and_avatar_mode(): void
+    public function test_the_register_opens_on_the_table_with_the_view_menu_parked(): void
     {
         $this->makeChild('Lovelace', 'Ada', 'Toddler');
 
         $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
-        // Opens on the cards; the ⋯ menu offers both, ticking the one in use.
-        $this->assertStringContainsString("mode: 'avatar',", $html);
-        // The two options by their keys, not their words: what they are called
-        // is the centre's to change (and has been changed more than once),
-        // while what they switch is not.
-        $this->assertMatchesRegularExpression("/x-for=\"option in \[\['sheet', '[^']+'\], \['avatar', '[^']+'\]\]\"/", $html);
-        $this->assertStringContainsString('@click="setMode(option[0]); menu = false"', $html);
+        // The table, and no ⋯ menu to change it (Jordan, 28 Oct 2026). The
+        // menu's markup is parked behind @if(false), so it is not sent.
+        $this->assertStringContainsString("mode: 'sheet',", $html);
+        $this->assertStringNotContainsString('aria-label="More"', $html);
+        $this->assertStringNotContainsString('@click="setMode(option[0]); menu = false"', $html);
 
         // The sheet's two layouts step aside for the cards.
         $this->assertStringContainsString('<template x-if="mode === \'avatar\'">', $html);
@@ -387,9 +385,8 @@ class AttendanceSheetTest extends TestCase
         // it keep theirs and the row stays on one line for longer.
         $this->assertStringContainsString('min-w-0', $label);
         $this->assertStringContainsString('flex-1', $label);
-        // Jumping to a far-off week is behind the overflow menu, so the line
-        // holds only what is used on every visit.
-        $this->assertStringContainsString('aria-label="More"', $html);
+        // The overflow menu is off the line altogether now (28 Oct 2026).
+        $this->assertStringNotContainsString('aria-label="More"', $html);
     }
 
     public function test_each_child_carries_the_sessions_their_room_uses(): void
@@ -556,10 +553,9 @@ class AttendanceSheetTest extends TestCase
         $this->assertStringContainsString('if (date === this.today) return true;', $html);
         $this->assertStringContainsString('return this.editing && this.canAmend && date < this.today;', $html);
 
-        // Off by default: the sheet a teacher stands in front of all day offers
-        // today and nothing else, because the commonest mistake on a
-        // five-column grid is the column next to the one you meant.
-        $this->assertStringContainsString('editing: false,', $html);
+        // On for whoever may correct the register, with no switch to throw
+        // (HANDOFF §7.1, 28 Oct 2026). Tomorrow is still never a time.
+        $this->assertStringContainsString('editing: true,', $html);
     }
 
     /**

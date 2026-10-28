@@ -83,6 +83,29 @@ class AttendanceController extends Controller
         return response()->json(['saved' => true] + $week->build($request->user(), Carbon::parse($data['date']), null, ''));
     }
 
+    /**
+     * Director Attendance's tap on today or a day gone: time → dot → Absent →
+     * the same time back. See AttendanceWeek::step.
+     */
+    public function step(Request $request, \App\Services\AttendanceWeek $week)
+    {
+        $data = $request->validate([
+            'child_id' => ['required', 'integer'],
+            'date' => ['required', 'date_format:Y-m-d'],
+            'session' => ['required', 'in:AM,PM,FULL'],
+        ]);
+
+        // Who may correct the register, as index() decides it.
+        abort_unless($request->user()->isAdmin() || $request->user()->role === 'teacher', 403);
+        $child = Child::visibleTo($request->user())->findOrFail($data['child_id']);
+
+        try {
+            return response()->json($week->step($request->user(), $child, $data['date'], $data['session']));
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
     public function index(WeekSchedule $weeks, AttendanceProjection $projector)
     {
             $user = request()->user();
@@ -198,6 +221,14 @@ class AttendanceController extends Controller
             // box, and most days have no hour at all.
             $plannedMap = [];
 
+            // The word on a day with no times — absent, or not coming after
+            // all — so the register can draw Absent, and a dot a tap made
+            // stays a dot in a week whose ticks are frozen (28 Oct 2026).
+            $markMap = [];
+            foreach (\App\Models\DssDayMark::whereBetween('marked_on', [$weekDates->first()->toDateString(), $weekDates->last()->toDateString()])->get() as $mark) {
+                $markMap[$mark->child_id][$mark->marked_on->toDateString()] = $mark->mark;
+            }
+
             foreach (ScheduleSlot::where('week_start', $weekStartDate)->get() as $slot) {
                 $date = $slot->slot_date->toDateString();
 
@@ -293,6 +324,7 @@ class AttendanceController extends Controller
                 'selectedDate',
                 'scheduleWeek',
                 'scheduleMap',
+                'markMap',
                 'canEditSchedule',
                 'plannedMap',
                 'canOpenWeek',

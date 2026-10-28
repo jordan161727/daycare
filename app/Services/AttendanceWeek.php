@@ -298,6 +298,119 @@ class AttendanceWeek
     }
 
     /**
+     * One tap on Director Attendance, on today or a day gone by.
+     *
+     * Jordan, 28 Oct 2026: "when I click the time it changes to a dot; when
+     * I click it again it changes to Absent; if I click it once more it
+     * should return to the previous time." So:
+     *
+     *   time    → dot      the rows come off, remembered on a "none" mark
+     *   dot     → Absent   the mark turns absent, still remembering them
+     *   Absent  → time     the mark goes and the remembered rows come back
+     *
+     * A day that never had a time goes dot → Absent → booked; the register
+     * signs a booked day in itself, as it always has. The marks are a day's,
+     * as on the DSS sheet, so a School Age morning and afternoon step
+     * together. The next state is read off the record, never the screen,
+     * so a double tap or a second screen cannot skip a step.
+     *
+     * @return array{mark: ?string, sessions: array<string, array{in: ?string, out: ?string, scheduled: bool}>}
+     */
+    public function step(User $user, Child $child, string $date, string $session): array
+    {
+        abort_unless($user->canAccessClassroom($child->classroom), 403);
+
+        if ($date > today()->toDateString()) {
+            throw new \InvalidArgumentException('A day still to come is booked, not marked.');
+        }
+        if (! $child->isEnrolledOn($date)) {
+            throw new \InvalidArgumentException($child->displayName().' is not enrolled on that day.');
+        }
+        if (in_array($date, ClosureDay::inWeek(ScheduleWeek::startOf($date)), true)) {
+            throw new \InvalidArgumentException('The centre is closed that day.');
+        }
+
+        $this->weeks->open(ScheduleWeek::startOf($date), $user);
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($user, $child, $date, $session) {
+            $rows = Attendance::where('child_id', $child->id)->whereDate('attendance_date', $date)->whereNotNull('signed_in_at')->get();
+            $mark = DssDayMark::where('child_id', $child->id)->whereDate('marked_on', $date)->first();
+
+            if ($rows->isNotEmpty()) {
+                // time → dot, remembering every session's times.
+                $kept = $rows->map(fn (Attendance $row) => [
+                    'session' => $row->session ?? 'FULL',
+                    'in' => $row->signed_in_at->toIso8601String(),
+                    'out' => $row->signed_out_at?->toIso8601String(),
+                ])->values()->all();
+
+                foreach ($rows as $row) {
+                    AttendanceAmendment::record(AttendanceAmendment::REMOVED, $row, $user, $row->signed_in_at);
+                    $row->delete();
+                }
+                $mark?->delete();
+                DssDayMark::create(['child_id' => $child->id, 'marked_on' => $date, 'mark' => DssDayMark::NONE, 'kept' => $kept, 'created_by' => $user->id]);
+                foreach ($child->sessions() as $s) {
+                    $this->tick($child, $date, $s, false);
+                }
+
+                return;
+            }
+
+            if ($mark?->mark === DssDayMark::ABSENT) {
+                // Absent → the times it remembered, or booked if it has none.
+                $mark->delete();
+                if (! empty($mark->kept)) {
+                    $this->putBack($user, $child, $date, $mark->kept);
+                    foreach (collect($mark->kept)->pluck('session')->unique() as $s) {
+                        $this->tick($child, $date, $s, true);
+                    }
+                } else {
+                    $this->tick($child, $date, $session, true);
+                }
+
+                return;
+            }
+
+            // dot → Absent, carrying any times a "none" mark remembered.
+            $mark?->delete();
+            DssDayMark::create(['child_id' => $child->id, 'marked_on' => $date, 'mark' => DssDayMark::ABSENT, 'kept' => $mark?->kept ?: null, 'created_by' => $user->id]);
+            foreach ($child->sessions() as $s) {
+                $this->tick($child, $date, $s, false);
+            }
+        });
+
+        return $this->dayFor($child, $date);
+    }
+
+    /**
+     * The day as the register keeps it in the browser: the mark, and per
+     * session the arrival, the departure and the tick.
+     *
+     * @return array{mark: ?string, sessions: array<string, array{in: ?string, out: ?string, scheduled: bool}>}
+     */
+    public function dayFor(Child $child, string $date): array
+    {
+        $rows = Attendance::where('child_id', $child->id)->whereDate('attendance_date', $date)->whereNotNull('signed_in_at')->get()->keyBy(fn ($r) => $r->session ?? 'FULL');
+        $ticks = ScheduleSlot::where('child_id', $child->id)->whereDate('slot_date', $date)->pluck('is_scheduled', 'session');
+        $sessions = [];
+
+        foreach ($child->sessions() as $s) {
+            $row = $rows->get($s);
+            $sessions[$s] = [
+                'in' => $row ? Child::timeShort($row->signed_in_at->timezone($this->tz)) : null,
+                'out' => $row?->signed_out_at ? Child::timeShort($row->signed_out_at->timezone($this->tz)) : null,
+                'scheduled' => (bool) ($ticks[$s] ?? false),
+            ];
+        }
+
+        return [
+            'mark' => DssDayMark::where('child_id', $child->id)->whereDate('marked_on', $date)->value('mark'),
+            'sessions' => $sessions,
+        ];
+    }
+
+    /**
      * The rows an Absent mark remembered, written again — only where the
      * day has nothing on it now, and with an amendment for a day gone by.
      *

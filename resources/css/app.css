@@ -276,6 +276,9 @@
        and on a locked column, where both go grey, the two shapes were the
        only difference and the difference meant nothing. The fill and the
        time inside are what say "they came"; the outline just says "box". */
+    /* Absent: the tap after the dot (28 Oct 2026). Solid, not dashed — it is
+       a fact about the day, like an arrival, not a plan. */
+    .att-absent { border-width: 2px; font-weight: 600; @apply border-solid border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-400/40 dark:bg-rose-500/15 dark:text-rose-200; }
     .att-time { border-width: 2px; @apply border-dashed border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-200; }
     .att-time .att-tag { @apply text-emerald-700 dark:text-emerald-200; }
     .att-time.att-unplanned { @apply border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-400/50 dark:bg-amber-500/15 dark:text-amber-100; }
@@ -465,6 +468,12 @@
         font: inherit; font-size: 0.7333rem; text-align: center; outline: none;
         @apply text-emerald-800 dark:text-emerald-100;
     }
+    /* In and out side by side (28 Oct 2026). Each box lights up when it is
+       the one being typed in, so it is plain which hour is moving. */
+    .att-cell.att-editing.att-both input { padding: 0.1333rem 0; border-radius: 0.3333rem; }
+    .att-cell.att-editing.att-both input:focus { @apply bg-white dark:bg-white/10; }
+    .att-cell.att-editing .att-dash { flex: none; font-size: 0.6667rem; @apply text-emerald-600 dark:text-emerald-300; }
+    .att-half.att-editing.att-both input { font-size: 0.6333rem; }
 
     /* Live / Edit as a switch: the mode is a state the whole sheet is in, and
        a switch says "in" or "out" the way a button labelled Edit does not.

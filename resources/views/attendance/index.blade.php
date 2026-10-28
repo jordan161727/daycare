@@ -1603,7 +1603,7 @@ function attendanceApp() { return {
 
     get hint() {
         return this.editing
-            ? 'Tap a cell to cycle not attending → expected → time. On a day still to come a tap is just expected ↔ not attending, and the pencil sets the hour they are due — which is the plan, not an arrival.'
+            ? 'Tap a time to cycle it: time → dot → Absent → the same time back. A booked day with nothing on it signs in at a tap. On a day still to come a tap is just expected ↔ not attending, and the pencil sets the hour they are due.'
             : 'Only ' + this.todayLabel + ' can be changed.';
     },
     // Which cells in this week were put right by hand rather than tapped on
@@ -1668,6 +1668,10 @@ function attendanceApp() { return {
     // ...] by the same keys. What lets a card print 8:05a–11:30a, 1:10p–.
     returns: @js((object) $returnsMap),
     schedule: @js($scheduleMap),
+    // child => date => 'absent' | 'none': the word on a day with no times.
+    // A mark beats the tick, so a dot a tap made stays a dot (28 Oct 2026).
+    marks: @js((object) $markMap),
+    dayMark(childId, date) { return this.marks?.[childId]?.[date] ?? null; },
 
     // The hour a day still to come is booked for, where one has been agreed.
     // Sparse on purpose: most booked days have no hour, and this is read on
@@ -2199,7 +2203,9 @@ function attendanceApp() { return {
 
     /* ---- the hour being typed, if any ---- */
     retiming: null,   // 'child|date|session' of the cell that is a field right now
-    draft: '',        // what has been typed into it
+    draft: '',        // what has been typed into it — the arrival
+    draftOut: '',     // and the departure, when the cell is a recorded arrival
+    retimingBoth: false,
 
     cellKey(childId, date, session) {
         return childId + '|' + date + '|' + session;
@@ -2229,14 +2235,18 @@ function attendanceApp() { return {
 
         if (present ? ! this.canRetime(childId, date, session) : ! (this.editing && this.canSignIn(date))) return;
 
-        // The arrival alone: the field types one hour, and the box's own
-        // text may by now carry the departure on the end of it.
+        // A recorded arrival opens both hours, in and out (28 Oct 2026); a
+        // box with nothing in it yet types the arrival alone.
         this.draft = present ? this.sessionTime(childId, date, session) : '';
+        this.draftOut = present ? (this.outTime(childId, date, session) || '') : '';
+        this.retimingBoth = present;
         this.retiming = this.cellKey(childId, date, session);
     },
     cancelRetime() {
         this.retiming = null;
         this.draft = '';
+        this.draftOut = '';
+        this.retimingBoth = false;
     },
     endRetime() { this.cancelRetime(); },
 
@@ -2248,7 +2258,14 @@ function attendanceApp() { return {
         if (! this.isRetiming(childId, date, session)) return;
 
         const value = this.normalizeTime(this.draft);
+        const outValue = this.retimingBoth ? this.normalizeTime(this.draftOut) : '';
         this.cancelRetime();
+
+        // Both hours of a recorded arrival go together, either one alone
+        // being enough; an empty box leaves its hour as it was.
+        if (this.isPresent(childId, date, session) && date <= this.today) {
+            return (value || outValue) ? this.retime(childId, date, session, value, outValue) : undefined;
+        }
 
         if (! value) return;
 
@@ -2317,15 +2334,15 @@ function attendanceApp() { return {
      * An empty field starts from the hour the centre opens, so the first press
      * lands near the morning it is about to record rather than at midnight.
      */
-    nudgeDraft(minutes) {
-        const from = this.normalizeTime(this.draft) || @js(\App\Models\Child::DAY_OPENS_AT);
+    nudgeDraft(minutes, field = 'draft') {
+        const from = this.normalizeTime(this[field]) || @js(\App\Models\Child::DAY_OPENS_AT);
         const [hours, mins] = from.split(':').map(Number);
 
         // Modulo twice: JavaScript's % keeps the sign, so a step below zero
         // would come back negative and format as "-1:59".
         const total = ((hours * 60 + mins + minutes) % 1440 + 1440) % 1440;
 
-        this.draft = String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+        this[field] = String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
     },
 
     /** "9:04a" as the field wants it: "09:04". */
@@ -2537,6 +2554,10 @@ function attendanceApp() { return {
             html += '<span>' + this.esc(this.displayTime(child.id, date, session)) + '</span>';
         } else if (closed) {
             html += '<span aria-hidden="true">&mdash;</span>';
+        } else if (this.dayMark(child.id, date) === 'absent') {
+            html += '<span>Absent</span>';
+        } else if (this.dayMark(child.id, date) === 'none') {
+            html += '<span class="att-dot" aria-hidden="true"></span>';
         } else if (this.isPlanned(child.id, date, session)) {
             // The hour a day to come is agreed for, inside the same dashed box
             // an expected day already wears. It is the box that says "coming";
@@ -2645,6 +2666,10 @@ function attendanceApp() { return {
             if (this.isUnplanned(childId, date, session)) classes.push('att-unplanned');
         } else if (this.isClosed(date)) {
             classes.push('att-closed');
+        } else if (this.dayMark(childId, date) === 'absent') {
+            classes.push('att-absent');
+        } else if (this.dayMark(childId, date) === 'none') {
+            classes.push('att-none');
         } else if (this.isScheduled(childId, date, session)) {
             classes.push('att-expected');
         } else {
@@ -3104,23 +3129,62 @@ function attendanceApp() { return {
             return;
         }
 
-        if (present) {
-            if (! this.canRemove(childId, date, session)) return;
+        /*
+         * Today or a day gone (Jordan, 28 Oct 2026): time → dot → Absent →
+         * the same time back. The server keeps the times while the day is a
+         * dot or Absent and decides each step from the record — see
+         * AttendanceWeek::step. Only a booked day with nothing on it is
+         * signed in here, the way it always was.
+         */
+        if (! this.editing || ! this.canAmend) return;
 
-            this.removeSignIn(childId, date, session);
-            if (expected && this.canSetExpected(date)) this.toggleOne(childId, date, session);
-
-            return;
-        }
-
-        if (! expected && this.canSetExpected(date)) {
-            this.toggleOne(childId, date, session);
+        if (present || this.dayMark(childId, date) || ! expected) {
+            this.step(childId, date, session);
 
             return;
         }
 
         if (this.canSignIn(date)) this.signIn(childId, date, session);
     },
+
+    async step(childId, date, session) {
+        if (this.stepping) return;
+        this.stepping = true;
+
+        try {
+            const response = await this.post("{{ route('attendance.step') }}", { child_id: childId, date, session });
+
+            if (! response.ok) {
+                const problem = await response.json().catch(() => ({}));
+                throw new Error(problem.message || 'Could not change that day.');
+            }
+
+            const day = await response.json();
+
+            // The whole day comes back — both sessions of a School Age child,
+            // and the mark — so the screen is the record's, not a guess.
+            for (const map of ['attendance', 'out', 'schedule']) {
+                this[map][childId] ??= {};
+                this[map][childId][date] ??= {};
+            }
+            for (const [s, v] of Object.entries(day.sessions)) {
+                if (v.in) this.attendance[childId][date][s] = v.in; else delete this.attendance[childId][date][s];
+                if (v.out) this.out[childId][date][s] = v.out; else delete this.out[childId][date][s];
+                this.schedule[childId][date][s] = v.scheduled;
+            }
+            this.marks[childId] ??= {};
+            if (day.mark) this.marks[childId][date] = day.mark; else delete this.marks[childId][date];
+
+            // Spread so Alpine sees a new object and every box redraws.
+            this.attendance = {...this.attendance};
+            this.marks = {...this.marks};
+        } catch (error) {
+            this.notice = error.message;
+        } finally {
+            this.stepping = false;
+        }
+    },
+    stepping: false,
     /** "Monday, Sep 14" — the sheet shows five columns, so a day needs naming. */
     dayLabel(date) {
         return new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
@@ -3135,16 +3199,21 @@ function attendanceApp() { return {
      * decision, and a question after it would only ask the same thing twice.
      * The old hour is kept server-side in the amendment, not here.
      */
-    async retime(childId, date, session, value) {
-        if (! this.canRetime(childId, date, session) || ! value) return;
-        if (value === this.timeValue(this.sessionTime(childId, date, session))) return;
+    async retime(childId, date, session, value, outValue = '') {
+        if (! this.canRetime(childId, date, session)) return;
+
+        // Only what changed is sent.
+        const inChanged = value && value !== this.timeValue(this.sessionTime(childId, date, session));
+        const outChanged = outValue && outValue !== this.timeValue(this.outTime(childId, date, session) || '');
+        if (! inChanged && ! outChanged) return;
 
         try {
             const response = await this.post("{{ route('attendance.signin.retime') }}", {
                 child_id: childId,
                 attendance_date: date,
                 session,
-                signed_in_time: value,
+                ...(inChanged ? { signed_in_time: value } : {}),
+                ...(outChanged ? { signed_out_time: outValue } : {}),
             });
 
             if (! response.ok) {
@@ -3157,6 +3226,13 @@ function attendanceApp() { return {
             const data = await response.json();
 
             this.attendance[childId][date][session] = data.time;
+            // The departure too, now that the pencil can move it.
+            if (data.out_time) {
+                this.out[childId] ??= {};
+                this.out[childId][date] ??= {};
+                this.out[childId][date][session] = data.out_time;
+                this.out = {...this.out};
+            }
             if (data.amendment) this.amended[this.cellKey(childId, date, session)] = data.amendment;
             this.endRetime();
 

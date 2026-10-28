@@ -552,16 +552,17 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString('role="switch" class="att-switch"', $html);
-        // The switch reloads the sheet in the other mode — see ModeSwitchReloadsTest.
-        $this->assertStringContainsString('@click="switchMode()"', $html);
-        $this->assertStringContainsString("x-text=\"editing ? 'Edit mode' : 'Live mode'\"", $html);
+        // No switch since 28 Oct 2026 (HANDOFF §7.1, "always in edit mode"):
+        // a director's sheet opens in Edit and stays there.
+        $this->assertStringNotContainsString('role="switch" class="att-switch"', $html);
+        $this->assertStringContainsString('editing: true,', $html);
+        $this->assertStringNotContainsString('Live mode', $html);
 
         // Locked columns say so in their header rather than by being grey.
         $this->assertStringContainsString('class="att-lock" x-html="icons.lock"', $html);
 
-        // And the hint under the sheet says what a tap does in this mode.
-        $this->assertStringContainsString('Tap a cell to cycle not attending → expected → time', $html);
+        // And the hint under the sheet says what a tap does.
+        $this->assertStringContainsString('Tap a time to cycle it: time → dot → Absent → the same time back.', $html);
     }
     /**
      * A week nobody ever opened has no cells in it, so the mode is not offered
@@ -598,8 +599,8 @@ class AttendanceCorrectionTest extends TestCase
         // The plan for a week that is over is over � no ticking, no copying.
         $this->assertStringContainsString('the schedule is locked', $html);
 
-        // The record of what happened in it is not.
-        $this->assertStringContainsString('@click="switchMode()"', $html);
+        // The record of what happened in it is not: the sheet opens in Edit.
+        $this->assertStringContainsString('editing: true,', $html);
     }
 
     /**
@@ -618,10 +619,14 @@ class AttendanceCorrectionTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        // Ahead: plan only. Today or gone: dot → expected → time → dot.
+        // Ahead: plan only. Today or gone: time → dot → Absent → the same
+        // time back, decided on the server (28 Oct 2026, see
+        // DirectorAttendanceCycleTest); a booked day with nothing on it
+        // still signs in at a tap.
         $this->assertStringContainsString('return this.cycle(childId, date, session);', $html);
         $this->assertStringContainsString('if (date > this.today) {', $html);
-        $this->assertStringContainsString('this.removeSignIn(childId, date, session);', $html);
+        $this->assertStringContainsString('this.step(childId, date, session);', $html);
+        $this->assertStringContainsString(route('attendance.step'), $html);
         $this->assertStringContainsString('if (this.canSignIn(date)) this.signIn(childId, date, session);', $html);
 
         // No dialog left on the page, in markup or in script.

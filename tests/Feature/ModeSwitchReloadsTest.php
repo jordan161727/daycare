@@ -45,11 +45,12 @@ class ModeSwitchReloadsTest extends TestCase
         app(WeekSchedule::class)->open('2026-09-21');
     }
 
-    public function test_the_sheet_opens_in_live_mode_by_default(): void
+    public function test_a_directors_sheet_opens_in_edit_with_nothing_in_the_address(): void
     {
+        // Always in Edit since 28 Oct 2026 (HANDOFF §7.1) — no switch.
         $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('editing: false,', $html);
+        $this->assertStringContainsString('editing: true,', $html);
     }
 
     public function test_mode_edit_in_the_address_opens_the_sheet_in_edit_mode(): void
@@ -76,12 +77,13 @@ class ModeSwitchReloadsTest extends TestCase
         $this->assertStringContainsString('editing: false,', $html);
     }
 
-    public function test_the_switch_reloads_with_the_mode_in_the_address(): void
+    public function test_no_switch_is_drawn_and_its_reload_is_kept_for_the_cards(): void
     {
         $html = $this->actingAs($this->admin)->get(route('attendance.classic'))->assertOk()->getContent();
 
-        // The button calls the switch, and the switch is a navigation.
-        $this->assertStringContainsString('@click="switchMode()"', $html);
+        // Nothing on the page calls the switch any more (28 Oct 2026). The
+        // reload itself is kept: the cards still leave Edit by it.
+        $this->assertStringNotContainsString('@click="switchMode()"', $html);
         $this->assertStringContainsString("url.searchParams.set('mode', 'edit');", $html);
         $this->assertStringContainsString("url.searchParams.delete('mode');", $html);
         $this->assertStringContainsString('window.location.assign(url.toString());', $html);
