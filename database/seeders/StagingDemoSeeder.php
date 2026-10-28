@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\StaffSchedule;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * The staging server, filled as the mock-ups show it — one command.
@@ -39,6 +40,14 @@ class StagingDemoSeeder extends Seeder
 
         $step('1/10 Accounts, rooms and room hours (admin@daycare.test / password)…');
         $this->call(DatabaseSeeder::class);
+        // Pay is the Director's alone, so staging needs one to show it; the
+        // seeded admin stays an office admin, who sees who can instead.
+        User::updateOrCreate(['email' => 'director@daycare.test'], [
+            'name' => 'Ray Kader',
+            'password' => Hash::make('password'),
+            'role' => 'admin',
+            'job_role' => 'Director',
+        ]);
 
         $step('2/10 The roll: the mock-ups\' children, this week ticked…');
         $this->call(DemoScenarioSeeder::class);
@@ -75,6 +84,6 @@ class StagingDemoSeeder extends Seeder
         $step('10/10 Child attendance: last month to yesterday, register and door…');
         $this->call(ChildAttendanceDemoSeeder::class);
 
-        $this->command?->info('Staging demo ready. Log in as admin@daycare.test (password "password"); the room teachers are <room>.teacher@daycare.test.');
+        $this->command?->info('Staging demo ready. Log in as admin@daycare.test, or director@daycare.test to see pay (password "password"); the room teachers are <room>.teacher@daycare.test.');
     }
 }
