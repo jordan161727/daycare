@@ -106,15 +106,28 @@ class StaffDevice extends Model
     }
 
     /**
-     * The one cookie both kinds of screen pair by.
-     *
-     * One name on purpose: a tablet paired at /clock and then opened at /room
-     * is the same paired tablet, and the kind on the row says which page it
-     * should be on. See StaffClockController::PAIRED_DAYS for why a cookie.
+     * The front door clock's cookie (and, before 29 Oct 2026, every
+     * tablet's). Room tablets now have their own, ROOM_COOKIE, so the clock
+     * and a tablet can share a browser — the Kiosks page shows both. See
+     * StaffClockController::PAIRED_DAYS for why a cookie.
      */
     public const COOKIE = 'staff_clock_device';
 
     public const SESSION_KEY = 'staff_clock.device';
+
+    /** A room tablet's own cookie (29 Oct 2026), so one browser can be both. */
+    public const ROOM_COOKIE = 'staff_room_device';
+
+    public static function cookieFor(?string $kind): string
+    {
+        return $kind === self::KIND_ROOM ? self::ROOM_COOKIE : self::COOKIE;
+    }
+
+    public static function sessionKeyFor(?string $kind): string
+    {
+        // Not under SESSION_KEY: the session reads dots as nesting.
+        return $kind === self::KIND_ROOM ? 'staff_room.device' : self::SESSION_KEY;
+    }
 
     /** Whether this is the device the token belongs to. */
     public function tokenMatches(string $token): bool

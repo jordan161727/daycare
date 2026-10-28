@@ -175,4 +175,18 @@ class StaffCardTest extends TestCase
 
         $this->assertSame(1, StaffDevice::count());
     }
+
+    public function test_one_browser_can_be_the_clock_and_a_room_tablet_at_once(): void
+    {
+        // The Kiosks page frames both in the director's browser; they must
+        // stay two devices, or the tablet's room would land on the clock.
+        config(['daycare.kiosk.enabled' => true]);
+
+        $this->get(route('clock.kiosk'))->assertOk();
+        $this->get(route('room.kiosk'))->assertOk();
+        $this->get(route('clock.kiosk'))->assertOk();
+        $this->get(route('room.kiosk'))->assertOk();
+
+        $this->assertEqualsCanonicalizing([StaffDevice::KIND_CLOCK, StaffDevice::KIND_ROOM], StaffDevice::pluck('kind')->all());
+    }
 }

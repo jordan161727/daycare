@@ -191,16 +191,15 @@
                      since 29 Oct 2026). Only offered when the kiosks are on —
                      otherwise these addresses answer 404. --}}
                 @if(config('daycare.kiosk.enabled'))
-                    <div class="auth-rise grid grid-cols-2 gap-3" style="animation-delay:.18s" data-staff-kiosks>
+                    {{-- The room tablet link is off the sign-in page (Jordan,
+                         29 Oct 2026: "in login remain the staff link, remove
+                         the room"). /room still answers, and the Kiosks page
+                         shows it beside the clock. --}}
+                    <div class="auth-rise" style="animation-delay:.18s" data-staff-kiosks>
                         <a href="{{ route('clock.kiosk') }}" data-staff-clock
                            class="flex flex-col items-center justify-center gap-0.5 rounded-[14px] border border-slate-200 bg-white/70 px-3 py-[14px] text-center transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md hover:shadow-slate-300/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:hover:shadow-none">
                             <span class="text-[15px] font-semibold text-slate-700 dark:text-slate-200">Staff time clock</span>
                             <span class="text-[12px] text-slate-500 dark:text-slate-400">Front door · clock in &amp; out</span>
-                        </a>
-                        <a href="{{ route('room.kiosk') }}" data-room-tablet
-                           class="flex flex-col items-center justify-center gap-0.5 rounded-[14px] border border-slate-200 bg-white/70 px-3 py-[14px] text-center transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md hover:shadow-slate-300/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:hover:shadow-none">
-                            <span class="text-[15px] font-semibold text-slate-700 dark:text-slate-200">Room tablet</span>
-                            <span class="text-[12px] text-slate-500 dark:text-slate-400">Check into a room</span>
                         </a>
                     </div>
                 @endif

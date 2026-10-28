@@ -51,7 +51,8 @@ class StaffClockKioskTest extends TestCase
         $this->assertStringNotContainsString('Open check-in kiosk', $html);
         $this->get(route('kiosk.index'))->assertOk();
         $this->assertStringContainsString('href="'.route('clock.kiosk').'" data-staff-clock', $html);
-        $this->assertStringContainsString('href="'.route('room.kiosk').'" data-room-tablet', $html);
+        // The room tablet is off the sign-in page (29 Oct 2026); its page still answers.
+        $this->assertStringNotContainsString('data-room-tablet', $html);
 
         // Both open without signing in, and without pairing (29 Oct 2026).
         $this->get(route('clock.kiosk'))->assertOk()->assertDontSee('not set up yet');

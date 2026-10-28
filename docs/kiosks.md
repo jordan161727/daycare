@@ -152,8 +152,15 @@ wrong room is obvious from the door.
 
 ## Who's where (HANDOFF §5.3.1)
 
-`/staff/whos-where` (director only) is the
-right-hand column of the mock-up:
+`/staff/whos-where` (director only; the sidebar's **Kiosks** button) is laid
+out as the StaffFlow mock-up (29 Oct 2026): the real `/room` screen framed
+as an iPad, and Who's where beside it, refreshed in place every 5 seconds so
+a PIN typed on the tablet shows up without reloading it. The mock-up's front
+door clock frame was taken off at Jordan's request; the clock is at `/clock`.
+The clock and the room tablet keep separate cookies, so one browser can be
+both devices. The mock-up's Mock time / +15 min / Reset
+demo are left out. The sign-in page offers only the Staff time clock; `/room`
+is not linked there. The right-hand column is:
 
 - **Room by room:** who is checked in and since when, and the pill
   "1 teacher · need 2 · 7 kids" — red when short, green when covered, grey

@@ -211,9 +211,20 @@ class StaffPresenceBoardTest extends TestCase
         $this->assertStringContainsString('href="'.route('staff.presence').'" data-kiosks-link', $html);
 
         $board = $this->actingAs($this->admin)->get(route('staff.presence'))->assertOk()->getContent();
-        $this->assertStringContainsString('href="'.route('clock.kiosk').'" target="_blank"', $board);
         // No "Pair a kiosk" any more (29 Oct 2026): screens pair themselves.
         $this->assertStringNotContainsString('data-pair-kiosk', $board);
+
+        // Laid out as the StaffFlow mock-up: the real room tablet framed,
+        // Who's where beside it. The front door clock frame was taken off
+        // (Jordan, 29 Oct 2026: "remove this").
+        $this->assertStringContainsString('Kiosks — room tablets', $board);
+        $this->assertStringNotContainsString('<iframe src="'.route('clock.kiosk').'"', $board);
+        $this->assertStringNotContainsString('Front door iPad', $board);
+        $this->assertStringContainsString('<iframe src="'.route('room.kiosk').'"', $board);
+        $this->assertStringContainsString('Room tablet · ratios', $board);
+        $this->assertStringContainsString('data-live', $board);
+        $this->assertStringContainsString('Who’s where right now', $board);
+        $this->assertStringContainsString('href="'.route('dashboard').'"', $board);
 
         $teacher = $this->teacher('Lana Ortiz', 'PreK');
         $this->assertStringNotContainsString('data-kiosks-link', $this->actingAs($teacher)->get(route('dashboard'))->getContent());
