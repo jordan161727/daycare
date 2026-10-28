@@ -37,10 +37,11 @@
 
     {{-- The front door clock frame is off this page (Jordan, 29 Oct 2026:
          "remove this"); the clock lives at /clock and on the sign-in page. --}}
-    {{-- The tablet takes the width; Who's where is a narrow column beside
-         it, in the mock-up's list design (Jordan, 29 Oct 2026: "same design,
-         just make the width smaller, then the tablet width more"). --}}
-    <div class="mt-5 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+    {{-- The tablet at the mock-up's iPad width (440px, as StaffFlow draws
+         it), Who's where a narrow column beside it in the mock-up's list
+         design (Jordan, 29 Oct 2026: wider than the column, but not the
+         whole page). --}}
+    <div class="mt-5 grid items-start gap-5 lg:grid-cols-[440px_minmax(0,400px)]">
         {{-- A room tablet. The gear and a room code say which room. --}}
         <div data-kiosk-frame="room">
             <div class="mb-2 ml-1.5 flex items-baseline justify-between gap-2">
