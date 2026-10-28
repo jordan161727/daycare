@@ -10,7 +10,7 @@
          Collapsed, the logo goes and the toggle centres in the rail. There is
          no room for both: the rail is eighty pixels wide, and a mark beside the
          toggle overflowed it rather than sitting in it. --}}
-    <div :class="collapsed ? 'desktop:justify-center' : ''" class="flex h-20 items-center justify-between px-3 lg:h-24">
+    <div :class="collapsed ? 'desktop:justify-center' : ''" class="flex h-20 items-center justify-between px-3 lg:h-[88px]">
         {{-- flex-1 so the logo centres in the space the toggle leaves, rather
              than sitting hard against the left edge.
 
@@ -45,7 +45,7 @@
          flex-1 and overflow-y-auto alone left the nav as tall as its links and
          went on pushing the account block below off the bottom of the screen —
          the scrollbar never appeared because there was nothing to overflow. --}}
-    <nav class="sidebar-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-3 py-2">
+    <nav class="sidebar-scroll min-h-0 flex-1 space-y-px overflow-y-auto overscroll-contain px-3 py-1">
         {{-- The menu as Phase 1.1 of docs/work.md orders it (24 Oct 2026):
              the day's screens, then Staff, Families and Only you as sections,
              then Reports and Settings. Modules the mock-ups mark NEW wear the
@@ -59,7 +59,7 @@
         {{-- @php($new = '<span x-show="!collapsed" class="ml-auto rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">New</span>') --}}
         @php($new = '')
         {{-- Tighter headings and links (the client, 29 Oct 2026: too much spacing). --}}
-        @php($section = fn (string $label) => '<p x-show="!collapsed" class="px-3 pb-0.5 pt-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">'.$label.'</p>')
+        @php($section = fn (string $label) => '<p x-show="!collapsed" class="px-3 pb-0 pt-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">'.$label.'</p>')
         @php($icon = fn (string $d) => '<svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="'.$d.'"/></svg>')
         @php($link = fn (string $route, string $active, string $label, string $d, string $badge = '') => '<a href="'.route($route).'" class="nav-link '.(request()->routeIs(...explode('|', $active)) ? 'nav-link-active' : '').'">'.$icon($d).'<span x-show="!collapsed">'.$label.'</span>'.$badge.'</a>')
 
@@ -108,7 +108,7 @@
             {!! $link('dss.index', 'dss.*', 'DSS', 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', '<span x-show="!collapsed" class="ml-auto rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Private</span>') !!}
         @endcan
 
-        <div class="pt-1.5"></div>
+        <div class="pt-1"></div>
         {!! $link('reports.index', 'reports.*', 'Reports', 'M4 19V9m5 10V5m5 14v-7m5 7V3', $new) !!}
         @if($isAdmin)
             {!! $link('settings.children', 'settings.*', 'Settings', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z') !!}

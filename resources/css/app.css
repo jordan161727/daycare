@@ -166,8 +166,8 @@
     .glass-card { @apply border border-white/70 bg-white/80 shadow-sm shadow-slate-200/60 backdrop-blur-xl dark:border-white/10 dark:bg-night-900/70 dark:shadow-none; }
     /* Tight on purpose. A director's sidebar carries fourteen links, and at the
        old size the last of them fell off the bottom of a laptop screen. */
-    /* py-1.5, not py-2: the client found the menu too spaced out (29 Oct 2026). */
-    .nav-link { @apply flex items-center gap-2.5 rounded-xl px-3 py-1.5 text-[13px] font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white; }
+    /* py-1, not py-2: the client found the menu too spaced out, twice (29 Oct 2026). */
+    .nav-link { @apply flex items-center gap-2.5 rounded-lg px-3 py-1 text-[13px] font-medium text-slate-700 transition duration-200 hover:translate-x-1 hover:bg-white/55 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white; }
     .nav-link-active { @apply bg-white/70 text-slate-950 shadow-sm ring-1 ring-white/70 dark:bg-night-700 dark:text-night-950 dark:ring-white/15; }
 
     /* Ruled columns for the week sheets.
