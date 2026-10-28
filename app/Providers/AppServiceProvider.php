@@ -24,13 +24,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        /*
-         * Everything anyone does, logged (Ray, 28 Oct 2026). Hung off the
-         * models' own events, so no screen or command can save a record
-         * without a line being written — see App\Services\ActivityLog.
-         */
-        \App\Services\ActivityLog::watch();
-
         // Who sees the DSS page (Phase 8.1, "Only you"): the users named in
         // DAYCARE_DSS_USERS, or any director when nobody is named.
         \Illuminate\Support\Facades\Gate::define('see-dss', function (\App\Models\User $user) {

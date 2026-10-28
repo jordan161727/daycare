@@ -414,7 +414,7 @@ class StaffPresence
      */
     /**
      * The feed shows the 12 newest lines (QA spec F2, 28 Oct 2026). The full
-     * history is kept and read on Staff → Activity.
+     * history stays in kiosk_events.
      */
     public const FEED_LINES = 12;
 

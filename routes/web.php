@@ -440,9 +440,6 @@ Route::delete('/devices/{device}', [StaffDeviceController::class, 'destroy'])->n
 Route::get('/staff/whos-where', [StaffPresenceController::class, 'board'])->middleware('never-cached')->name('staff.presence');
 Route::post('/staff/whos-where/flags/{event}', [StaffPresenceController::class, 'resolve'])->name('staff.presence.resolve');
 
-// Activity: everything anyone did, one line each (Ray, 28 Oct 2026).
-// Director only — it names who fixed what.
-Route::get('/staff/activity', [\App\Http\Controllers\ActivityLogController::class, 'index'])->middleware('never-cached')->name('staff.activity');
 
 Route::post('/teachers/{staff}/card', [StaffCardController::class, 'issue'])->name('staff.card.issue');
 Route::get('/teachers/{staff}/card.svg', [StaffCardController::class, 'show'])->name('staff.card.show');

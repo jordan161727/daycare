@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Activity;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\KioskEvent;
@@ -193,13 +192,6 @@ class KioskWorkflowChecklistTest extends TestCase
         $this->assertTrue(collect($board['on_break'])->contains('name', 'Evana Roy'));
         $this->assertTrue(collect($board['not_in'])->contains(fn ($row) => $row['name'] === 'Lana Ortiz' && str_starts_with($row['note'], 'Clocked out')));
         $this->tick('5', 'Who’s where: rooms with badges, Evana on break, Lana “Clocked out …”');
-
-        $activity = $this->actingAs($this->admin)->get(route('staff.activity'))->assertOk()->getContent();
-        foreach (['Lana Ortiz clocked in @ 10:30 AM', 'Lana Ortiz checked into PreK', 'Flag for the office: Ratio: PreK short after Lana Ortiz left', 'Sultana Begum clocked in @'] as $line) {
-            $this->assertStringContainsString($line, $activity);
-        }
-        $this->assertGreaterThan(10, Activity::count());
-        $this->tick('5', 'Staff → Activity: every kiosk action as a sentence');
 
         $this->assertSame(
             [TimePunch::IN, TimePunch::BREAK_START, TimePunch::BREAK_END, TimePunch::BREAK_START, TimePunch::BREAK_END, TimePunch::OUT],
