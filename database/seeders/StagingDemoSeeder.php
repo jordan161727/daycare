@@ -38,7 +38,7 @@ class StagingDemoSeeder extends Seeder
     {
         $step = fn (string $what) => $this->command?->info($what);
 
-        $step('1/10 Accounts, rooms and room hours (admin@daycare.test / password)…');
+        $step('1/11 Accounts, rooms and room hours (admin@daycare.test / password)…');
         $this->call(DatabaseSeeder::class);
         // Pay is the Director's alone, so staging needs one to show it; the
         // seeded admin stays an office admin, who sees who can instead.
@@ -49,41 +49,47 @@ class StagingDemoSeeder extends Seeder
             'job_role' => 'Director',
         ]);
 
-        $step('2/10 The roll: the mock-ups\' children, this week ticked…');
+        $step('2/11 The roll: the mock-ups\' children, this week ticked…');
         $this->call(DemoScenarioSeeder::class);
 
-        $step('3/10 Child records: every card filled, every tab with someone in it…');
+        $step('3/11 Child records: every card filled, every tab with someone in it…');
         $this->call(ChildRecordDemoSeeder::class);
         // Enough staff for this roll (step 1 ran this before any child was in).
         $this->call(RoomCoverSeeder::class);
 
-        $step('4/10 Guardians for the door kiosk…');
+        $step('4/11 Guardians for the door kiosk…');
         $this->call(KioskDemoSeeder::class);
 
-        $step('5/10 Today\'s floor and the mock-ups\' staff (first pass, so they are on the books)…');
+        $step('5/11 Today\'s floor and the mock-ups\' staff (first pass, so they are on the books)…');
         $this->call(FloorPlanDemoSeeder::class);
 
-        $step('6/10 Staff details, rules, time off, and a face for each…');
+        $step('6/11 Staff details, rules, time off, and a face for each…');
         $this->call(StaffDemoSeeder::class);
         $this->call(StaffAvatarSeeder::class);
 
         $weekStart = StaffScheduleWeek::startOf(today()->toDateString());
         $admin = User::where('role', 'admin')->orderBy('id')->first();
-        $step("7/10 Generating and publishing the schedule for the week of {$weekStart}…");
+        $step("7/11 Generating and publishing the schedule for the week of {$weekStart}…");
         $week = $scheduler->generate($weekStart, $admin);
         $week->forceFill(['published_at' => now(), 'published_by' => $admin?->id, 'edits' => 0])->save();
         $warnings = count($week->warnings ?? []);
         $this->command?->line('    '.($warnings === 0 ? 'No conflicts.' : "{$warnings} thing".($warnings === 1 ? '' : 's').' to look at on the Schedule page.'));
 
-        $step('8/10 Today\'s floor again, over the published week (Sultana late, LaQuora free to cover)…');
+        $step('8/11 Today\'s floor again, over the published week (Sultana late, LaQuora free to cover)…');
         $this->call(FloorPlanDemoSeeder::class);
 
-        $step('9/10 Staff attendance: last week and this week\'s days gone…');
+        $step('9/11 Staff attendance: last week and this week\'s days gone…');
         $this->call(StaffAttendanceDemoSeeder::class);
 
-        $step('10/10 Child attendance: last month to yesterday, register and door…');
+        $step('10/11 Child attendance: last month to yesterday, register and door…');
         $this->call(ChildAttendanceDemoSeeder::class);
 
-        $this->command?->info('Staging demo ready. Log in as admin@daycare.test, or director@daycare.test to see pay (password "password"); the room teachers are <room>.teacher@daycare.test.');
+        // Last, so nothing above resets them: one login per room with its own
+        // password (Jordan, 29 Oct 2026), e.g. infant.teacher@daycare.test /
+        // Infant#2026. Other teacher accounts are left as they are.
+        $step('11/11 Room teacher logins, one password per room…');
+        $this->call(ClassroomTeacherSeeder::class);
+
+        $this->command?->info('Staging demo ready. Log in as admin@daycare.test, or director@daycare.test to see pay (password "password"); each room teacher is <room>.teacher@daycare.test with the room\'s own password, e.g. Infant#2026.');
     }
 }

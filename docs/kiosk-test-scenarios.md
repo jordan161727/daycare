@@ -13,7 +13,20 @@ screens work is in [kiosks.md](kiosks.md).
   php artisan db:seed --class=StagingDemoSeeder --force
   ```
 
-- As **director@daycare.test** (password `password`), go to Settings → Rooms & hours and set these room codes:
+- Logins (the seed sets them; the room teachers come from `ClassroomTeacherSeeder`, its last step):
+
+  | Account | Email | Password |
+  |---|---|---|
+  | Director (sees pay) | `director@daycare.test` | `password` |
+  | Office admin | `admin@daycare.test` | `password` |
+  | Infant teacher | `infant.teacher@daycare.test` | `Infant#2026` |
+  | Transition teacher | `transition.teacher@daycare.test` | `Transition#2026` |
+  | Toddler teacher | `toddler.teacher@daycare.test` | `Toddler#2026` |
+  | PreK teacher | `prek.teacher@daycare.test` | `PreK#2026` |
+  | UPK-4 teacher | `upk4.teacher@daycare.test` | `UPK4#2026` |
+  | School Age teacher | `schoolage.teacher@daycare.test` | `SchoolAge#2026` |
+
+- As **director@daycare.test**, go to Settings → Rooms & hours and set these room codes:
   - **PreK 2104**
   - **UPK-4 2105**
   - **Toddler 2107**
@@ -95,7 +108,7 @@ screens work is in [kiosks.md](kiosks.md).
 | WW-3 | Key 2 digits on the **framed** tablet, then wait 10 seconds | The digits are still there; the refresh doesn't touch the tablet. | |
 | WW-4 | Click **Seen to** on a red office line | The line goes from For the office, and the feed shows it struck through. | |
 | WW-5 | Click **Full screen ↗** | `/room` opens in its own tab. | |
-| WW-6 | Sign in as a teacher | No Kiosks button; `/staff/whos-where` is refused. | |
+| WW-6 | Sign in as a teacher (e.g. `prek.teacher@daycare.test` / `PreK#2026`) | No Kiosks button; `/staff/whos-where` is refused. | |
 
 ## 7. Sign-in page and set-up
 
