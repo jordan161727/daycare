@@ -59,26 +59,6 @@
         </div>
     </header>
 
-    {{-- This room in three numbers (Jordan's mock-up, 29 Oct 2026). Counts
-         only, never names: anybody can read a tablet. --}}
-    <div x-show="summary?.room && step !== 'setup'" x-cloak class="border-b border-slate-200/70 bg-white/50 px-5 py-2.5" data-room-strip>
-        <div class="mx-auto grid max-w-xl grid-cols-3 gap-2">
-            <div class="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
-                <p class="text-[10px] font-bold uppercase tracking-[.06em] text-slate-500">Teachers</p>
-                <p class="text-lg font-bold leading-tight tabular-nums" x-text="summary?.teachers"></p>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
-                <p class="text-[10px] font-bold uppercase tracking-[.06em] text-slate-500">Children</p>
-                <p class="text-lg font-bold leading-tight tabular-nums" x-text="summary?.children"></p>
-            </div>
-            <div class="rounded-xl border px-3 py-1.5"
-                 :class="{ ok: 'border-emerald-200 bg-emerald-50 text-emerald-800', bad: 'border-rose-200 bg-rose-50 text-rose-800', mut: 'border-slate-200 bg-white text-slate-600' }[summary?.tone] ?? ''">
-                <p class="text-[10px] font-bold uppercase tracking-[.06em] opacity-80">Ratio</p>
-                <p class="text-[15px] font-bold leading-tight" x-text="summary?.ratio"></p>
-            </div>
-        </div>
-    </div>
-
     @if(! $device)
         <main class="flex flex-1 items-center justify-center p-5">
             <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
@@ -239,7 +219,6 @@
 <script>
 function roomTablet() { return {
     room: @js($device?->classroom),
-    summary: @js($summary ?? null),
     entry: '',
     code: '',
     sending: false,
@@ -255,18 +234,7 @@ function roomTablet() { return {
     init() {
         this.tick();
         setInterval(() => this.tick(), 10000);
-        setInterval(() => this.loadSummary(), 15000);
         this.holdScreenAwake();
-    },
-
-    // The strip under the masthead: asked again on a timer and after any
-    // press that moves somebody, so it never sits wrong for long.
-    async loadSummary() {
-        if (document.hidden) return;
-        try {
-            const response = await fetch(@js(route('room.kiosk.summary')), { headers: { Accept: 'application/json' }, cache: 'no-store' });
-            if (response.ok) this.summary = await response.json();
-        } catch {}
     },
 
     get colour() {
@@ -325,7 +293,6 @@ function roomTablet() { return {
 
             if (data.status === 'ok') {
                 this.room = data.room;
-                this.loadSummary();
                 this.done = {
                     tone: 'ok',
                     title: `This tablet is now ${data.room}`,
@@ -364,7 +331,6 @@ function roomTablet() { return {
 
             if (data.status === 'done') {
                 // Clocked in for them, placed here, nothing to pick.
-                this.loadSummary();
                 this.done = data.done;
                 this.step = 'done';
                 this.hold(10000);
@@ -397,7 +363,6 @@ function roomTablet() { return {
             const data = await response.json();
 
             if (data.status === 'ok') {
-                this.loadSummary();
                 this.done = data.done;
                 this.staff = null;
                 this.step = 'done';

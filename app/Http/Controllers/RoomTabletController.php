@@ -38,42 +38,11 @@ class RoomTabletController extends Controller
             return $this->pairFromToken($request, $token, 'room.kiosk');
         }
 
-        $device = $this->pairedDevice($request);
-
+        // The Teachers / Children / Ratio strip that sat under the masthead
+        // was taken off again (Jordan, 29 Oct 2026: "remove this").
         return view('room.kiosk', [
-            'device' => $device,
-            'summary' => $this->strip($device?->classroom),
+            'device' => $this->pairedDevice($request),
         ]);
-    }
-
-    /**
-     * The tablet's own room in three numbers: teachers, children, ratio
-     * (Jordan's "Kiosks — full-width layout" mock-up, 29 Oct 2026). Polled
-     * by the tablet, and asked again after every press that changes them.
-     * Counts only — no names — because anybody can read a tablet.
-     */
-    public function summary(Request $request)
-    {
-        abort_unless(config('daycare.kiosk.enabled'), 404);
-
-        return response()->json($this->strip($this->pairedDevice($request)?->classroom) ?? ['room' => null]);
-    }
-
-    private function strip(?string $room): ?array
-    {
-        if (blank($room)) {
-            return null;
-        }
-
-        $s = $this->presence->roomSummary($room);
-
-        return [
-            'room' => $s['room'],
-            'teachers' => $s['teachers'],
-            'children' => $s['children'],
-            'ratio' => $s['children'] === 0 ? 'No children' : ($s['short'] ? 'Short '.($s['needed'] - $s['teachers']) : 'In ratio'),
-            'tone' => $s['children'] === 0 ? 'mut' : ($s['short'] ? 'bad' : 'ok'),
-        ];
     }
 
     /**
