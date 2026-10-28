@@ -37,6 +37,10 @@
         'Pay rate' => $teacher->pay_rate ? '$'.number_format((float) $teacher->pay_rate, 2).' / hr' : null,
         'Evaluation' => $teacher->evaluation_score,
     ];
+    // Pay is the director's alone (User::canSeePay).
+    if (! auth()->user()->canSeePay()) {
+        unset($profile['Direct deposit'], $profile['Pay rate']);
+    }
 @endphp
 
 @section('content')

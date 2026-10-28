@@ -215,7 +215,7 @@ class Reports
                 if ($change && in_array($change->kind, ['until', 'window'], true) && $change->from_minute !== null && $due !== null) {
                     $due = max($due, $change->from_minute);
                 }
-                $lateBy = $due !== null && $d['first_in'] > $due + StaffController::LATE_GRACE ? $d['first_in'] - $due : 0;
+                $lateBy = $due !== null && $d['first_in'] > $due + PaidHours::lateGrace() ? $d['first_in'] - $due : 0;
                 $edited = $d['punches']->contains(fn ($p) => $p->isCorrection());
                 $paid = (int) $d['worked'];
                 $br = (int) $d['unpaid_break'];

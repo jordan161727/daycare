@@ -311,7 +311,9 @@ class Timesheet
                 // Time and a half on the overtime. Null when no rate is on
                 // file — an estimate of zero would read as "this person is
                 // owed nothing", which is a different and much worse claim.
-                'estimated_gross' => $user->pay_rate === null ? null : round(
+                // Not worked out at all for anyone but the director.
+                'pay_hidden' => ! self::seesPay(),
+                'estimated_gross' => $user->pay_rate === null || ! self::seesPay() ? null : round(
                     ($regular / 60) * (float) $user->pay_rate
                     + ($overtime / 60) * (float) $user->pay_rate * 1.5
                     + ($paidLeave / 60) * (float) $user->pay_rate,
@@ -437,7 +439,7 @@ class Timesheet
                 number_format($line['paid_leave_hours'], 2, '.', ''),
                 number_format($line['unpaid_leave_hours'], 2, '.', ''),
                 number_format($line['paid_hours'], 2, '.', ''),
-                $user->pay_rate === null ? '' : number_format((float) $user->pay_rate, 2, '.', ''),
+                $user->pay_rate === null || ! self::seesPay() ? '' : number_format((float) $user->pay_rate, 2, '.', ''),
                 $line['estimated_gross'] === null ? '' : number_format($line['estimated_gross'], 2, '.', ''),
                 (string) $line['unconfirmed_days'],
                 (string) $line['clock_exceptions'],
@@ -471,7 +473,18 @@ class Timesheet
             'paid_hours' => round($withHours->sum('paid_hours'), 2),
             'unconfirmed_days' => $withHours->sum('unconfirmed_days'),
             'estimated_gross' => round($withHours->sum(fn ($line) => $line['estimated_gross'] ?? 0), 2),
-            'missing_rates' => $withHours->filter(fn ($line) => $line['estimated_gross'] === null)->count(),
+            'missing_rates' => self::seesPay() ? $withHours->filter(fn ($line) => $line['estimated_gross'] === null)->count() : 0,
         ];
+    }
+
+    /**
+     * Whether pay comes out of here: the director, or no one signed in at all
+     * (a console command building payroll).
+     */
+    private static function seesPay(): bool
+    {
+        $user = auth()->user();
+
+        return $user === null || $user->canSeePay();
     }
 }

@@ -348,6 +348,28 @@ return [
             'paid_break_cap' => 20,
 
             /**
+             * The unpaid break taken off a day nobody punched a lunch on.
+             *
+             * Only what is worked past the threshold comes off, and never more
+             * than the maximum: 6h04 pays 6h00, 6h20 pays 6h00, 9h04 pays
+             * 8h34. A cliff at six hours paid 6h00 for six hours and 5h34 for
+             * six hours and four minutes, which nobody could explain to the
+             * person holding the pay slip. A punched lunch is the real break
+             * and wins; this is for the days without one.
+             *
+             * From a date, so pay already worked out the old way stays as it
+             * was paid. See App\Services\PaidHours.
+             */
+            'auto_break' => [
+                'after_minutes' => 360,
+                'max_minutes' => 30,
+                'from' => '2026-11-01',
+            ],
+
+            /** Minutes after the scheduled start before a clock-in is late. */
+            'late_grace' => 5,
+
+            /**
              * A worked day longer than this is flagged rather than paid
              * quietly. It is not a limit on what somebody may work — it is the
              * length at which a day is more likely to be a missed punch than a

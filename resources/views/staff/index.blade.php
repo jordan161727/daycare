@@ -183,8 +183,14 @@
                     </div>
 
                     {{-- Pay: director only, and hidden until asked for, so a
-                         screen shared over a shoulder shows dots. --}}
-                    @if($isAdmin)
+                         screen shared over a shoulder shows dots. Anyone
+                         else is sent no values at all (User::canSeePay). --}}
+                    @if($isAdmin && ! auth()->user()->canSeePay())
+                    <div class="sec pay" style="padding: 18px;" data-pay data-pay-locked>
+                        <div class="sech"><h2 style="font-size: 14px;">Pay</h2><span class="pill must">Director only</span></div>
+                        <span style="font-size: 13.5px;" class="muted">Only {{ \App\Models\User::payViewerName() ?? 'the director' }} can view pay.</span>
+                    </div>
+                    @elseif($isAdmin)
                     <div class="sec pay" style="padding: 18px;" data-pay>
                         <div class="sech"><h2 style="font-size: 14px;">Pay</h2><span class="pill must">Director only</span></div>
                         <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px;">
@@ -335,7 +341,7 @@
                         </tbody>
                     </table>
                 </div>
-                <span style="font-size: 12.5px;" class="faint">Late is more than {{ \App\Http\Controllers\StaffController::LATE_GRACE }} minutes after the scheduled start. Fix → opens the day on the timesheet, where the original punch is kept and the change is logged.</span>
+                <span style="font-size: 12.5px;" class="faint">Late is more than {{ \App\Services\PaidHours::lateGrace() }} minutes after the scheduled start. Fix → opens the day on the timesheet, where the original punch is kept and the change is logged.</span>
             </div>
             @endif
 

@@ -144,7 +144,7 @@ class TimeClock
     /**
      * Everything a day amounts to: hours, breaks, and what does not add up.
      *
-     * @return array{punches: Collection, state: string, worked: int, paid_break: int, unpaid_break: int, first_in: ?int, last_out: ?int, problems: array<int, string>, broken: bool, open: bool, so_far: int}
+     * @return array{punches: Collection, state: string, worked: int, paid_break: int, unpaid_break: int, auto_break: int, first_in: ?int, last_out: ?int, problems: array<int, string>, broken: bool, open: bool, so_far: int}
      */
     public function day(int $userId, string $date, ?Collection $punches = null): array
     {
@@ -436,6 +436,14 @@ class TimeClock
         // A short break is hours worked, so it goes back in.
         $worked += $paidBreak;
 
+        // No lunch punched: the unpaid break comes off by the rule instead.
+        // See PaidHours — the one place this is worked out.
+        $lunchPunched = $punches->contains(fn (TimePunch $punch) => $punch->type === TimePunch::LUNCH_START);
+        $raw = $worked;
+        $autoBreak = PaidHours::deduction($raw, $date, $lunchPunched);
+        $worked -= $autoBreak;
+        $unpaidBreak += $autoBreak;
+
         $open = $state !== self::OFF;
         $today = Carbon::parse($date)->isToday();
 
@@ -462,7 +470,8 @@ class TimeClock
         $soFar = $worked;
 
         if ($open && $today && $state === self::WORKING) {
-            $soFar += max(0, (now()->hour * 60 + now()->minute) - $since);
+            $running = $raw + max(0, (now()->hour * 60 + now()->minute) - $since);
+            $soFar = PaidHours::paid($running, $date, $lunchPunched);
         }
 
         return [
@@ -471,6 +480,7 @@ class TimeClock
             'worked' => $worked,
             'paid_break' => $paidBreak,
             'unpaid_break' => $unpaidBreak,
+            'auto_break' => $autoBreak,
             'first_in' => $firstIn,
             'last_out' => $lastOut,
             'problems' => $problems,

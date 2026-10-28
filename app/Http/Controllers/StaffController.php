@@ -10,6 +10,7 @@ use App\Models\StaffTimeOff;
 use App\Models\TimesheetPeriod;
 use App\Models\User;
 use App\Services\ClassroomAssignment;
+use App\Services\PaidHours;
 use App\Services\StaffSchedule;
 use App\Services\TemporaryPassword;
 use App\Services\TimeClock;
@@ -35,9 +36,6 @@ use Illuminate\Validation\ValidationException;
 class StaffController extends Controller
 {
     public const TABS = ['details', 'rules', 'attendance', 'off'];
-
-    /** Minutes after a shift starts before the list says "late". */
-    public const LATE_GRACE = 5;
 
     public function __construct(private TimeClock $clock) {}
 
@@ -108,6 +106,12 @@ class StaffController extends Controller
         }
         $data['classrooms'] = $rooms;
         $data['direct_deposit'] = $request->boolean('direct_deposit');
+
+        // Pay is the director's to see and so the director's to change. Not
+        // refused — the rest of the form is fine — just left as it was.
+        if (! $request->user()->canSeePay()) {
+            unset($data['pay_rate'], $data['direct_deposit']);
+        }
 
         $staff->update($data);
 
@@ -251,9 +255,17 @@ class StaffController extends Controller
             $shift = $shifts->get($person->id)?->first();
             $change = $off->get($person->id);
 
+            // Clocked out with a later shift still to come is due back, not
+            // done — the same reading as Staff attendance's Live list.
+            $later = $day['first_in'] !== null && ! $day['open']
+                ? $shifts->get($person->id)?->first(fn (StaffShift $s) => $s->starts_at > (int) $day['last_out'])
+                : null;
+
             $out[$person->id] = match (true) {
-                $day['open'] => ['key' => 'in', 'dot' => '#10b981', 'text' => 'In since '.Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A'), 'tone' => 'ok'],
-                $day['first_in'] !== null => ['key' => 'done', 'dot' => '#5b8fd6', 'text' => 'Worked earlier today', 'tone' => 'info'],
+                $day['open'] => ['key' => 'in', 'dot' => '#10b981', 'text' => 'In since '.Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A'), 'tone' => 'ok', 'since' => Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A')],
+                $later !== null && $now > $later->starts_at + PaidHours::lateGrace() => ['key' => 'late', 'dot' => '#f43f5e', 'text' => 'Late · not back yet', 'tone' => 'bad'],
+                $later !== null => ['key' => 'due', 'dot' => '#cfd3de', 'text' => 'Due back '.StaffRule::formatTime($later->starts_at), 'tone' => 'mut'],
+                $day['first_in'] !== null => ['key' => 'done', 'dot' => '#5b8fd6', 'text' => 'Done for today', 'tone' => 'info'],
                 $change?->kind === 'all' => ['key' => 'off', 'dot' => '#e7e9f0', 'text' => 'Off today · '.strtolower($change->reasonLabel()), 'tone' => 'mut'],
                 $shift === null => ['key' => 'off', 'dot' => '#e7e9f0', 'text' => $person->isOffSchedule() ? 'Not on the schedule' : 'Off today', 'tone' => 'mut'],
                 default => (function () use ($shift, $change, $now) {
@@ -262,7 +274,7 @@ class StaffController extends Controller
                         $start = max($start, $change->from_minute);
                     }
 
-                    return $now > $start + self::LATE_GRACE
+                    return $now > $start + PaidHours::lateGrace()
                         ? ['key' => 'late', 'dot' => '#f43f5e', 'text' => 'Late · not in yet', 'tone' => 'bad']
                         : ['key' => 'due', 'dot' => '#cfd3de', 'text' => 'Due '.StaffRule::formatTime($start), 'tone' => 'mut'];
                 })(),
@@ -347,7 +359,7 @@ class StaffController extends Controller
                     $row['in'] = Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A');
                     $row['status'] = 'Today · on shift';
                     $row['tone'] = 'info';
-                } elseif ($window && $now > $window['start'] + self::LATE_GRACE) {
+                } elseif ($window && $now > $window['start'] + PaidHours::lateGrace()) {
                     $row['status'] = 'Late · not in';
                     $row['tone'] = 'bad';
                 } else {
@@ -390,7 +402,7 @@ class StaffController extends Controller
             $minutes += (int) $day['worked'];
 
             $lateBy = $window && $day['first_in'] !== null ? $day['first_in'] - $window['start'] : 0;
-            if ($lateBy > self::LATE_GRACE) {
+            if ($lateBy > PaidHours::lateGrace()) {
                 $late++;
                 $row['status'] = 'Late '.$lateBy.' min';
                 $row['tone'] = 'warn';

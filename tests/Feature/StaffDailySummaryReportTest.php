@@ -30,7 +30,7 @@ class StaffDailySummaryReportTest extends TestCase
 
         // A Wednesday, so a default period has days behind and ahead in it.
         $this->travelTo(Carbon::parse('2026-09-23 10:00:00'));
-        $this->admin = User::factory()->create(['role' => 'admin', 'name' => 'Administrator']);
+        $this->admin = User::factory()->create(['role' => 'admin', 'name' => 'Administrator', 'job_role' => 'Director']);
     }
 
     public function test_a_days_worked_hours_are_printed_in_their_own_column(): void

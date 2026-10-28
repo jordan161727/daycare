@@ -47,7 +47,7 @@ class StaffAttendanceScenarioTest extends TestCase
 
         $this->tz = config('app.timezone');
         $this->travelTo(Carbon::parse(self::TODAY.' 10:30:00', $this->tz));
-        $this->admin = User::factory()->create(['role' => 'admin', 'name' => 'Administrator']);
+        $this->admin = User::factory()->create(['role' => 'admin', 'name' => 'Administrator', 'job_role' => 'Director']);
 
         $this->rachel = User::factory()->create(['role' => 'teacher', 'name' => 'Rachel Kim', 'job_role' => 'Lead Teacher', 'classroom' => 'Toddler', 'title' => 'Toddler', 'pay_rate' => 24, 'employment' => 'FT']);
         $this->omar = User::factory()->create(['role' => 'teacher', 'name' => 'Omar Haddad', 'job_role' => 'Assistant', 'classroom' => 'PreK', 'title' => 'PreK', 'pay_rate' => 18, 'employment' => 'FT']);

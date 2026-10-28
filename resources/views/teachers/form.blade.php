@@ -128,18 +128,22 @@
                 <input name="aspire_id" value="{{ old('aspire_id', $teacher->aspire_id) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                 <x-input-error :messages="$errors->get('aspire_id')" /></label>
 
+            @if(auth()->user()->canSeePay())
             <label class="block"><span class="mb-2 block text-sm font-semibold">Pay rate ($ / hour)</span>
                 <input type="number" step="0.01" min="0" name="pay_rate" value="{{ old('pay_rate', $teacher->pay_rate) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                 <x-input-error :messages="$errors->get('pay_rate')" /></label>
+            @endif
 
             <label class="block"><span class="mb-2 block text-sm font-semibold">Latest evaluation (0–5)</span>
                 <input type="number" step="0.1" min="0" max="5" name="evaluation_score" value="{{ old('evaluation_score', $teacher->evaluation_score) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                 <x-input-error :messages="$errors->get('evaluation_score')" /></label>
 
+            @if(auth()->user()->canSeePay())
             <label class="flex items-center gap-3 sm:col-span-2 lg:col-span-3">
                 <input type="hidden" name="direct_deposit" value="0">
                 <input type="checkbox" name="direct_deposit" value="1" @checked(old('direct_deposit', $teacher->direct_deposit)) class="h-4 w-4 rounded border-slate-300">
                 <span class="text-sm font-semibold">On direct deposit</span></label>
+            @endif
 
             <label class="block sm:col-span-2 lg:col-span-3"><span class="mb-2 block text-sm font-semibold">Notes</span>
                 <textarea name="staff_notes" rows="3" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">{{ old('staff_notes', $teacher->staff_notes) }}</textarea>

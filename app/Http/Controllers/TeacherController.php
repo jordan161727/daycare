@@ -235,6 +235,12 @@ class TeacherController extends Controller
 
         $data['direct_deposit'] = $request->boolean('direct_deposit');
 
+        // Pay is the director's alone (see User::canSeePay); anyone else's
+        // save leaves it as it was.
+        if (! $request->user()->canSeePay()) {
+            unset($data['pay_rate'], $data['direct_deposit']);
+        }
+
         if (blank($data['password'] ?? null)) {
             unset($data['password']);
         } else {

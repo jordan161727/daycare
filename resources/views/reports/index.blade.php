@@ -159,7 +159,7 @@
                     </tbody>
                 </table>
             </div>
-            <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;" class="muted"><span><span style="color: #be123c; font-weight: 700;">late</span> = clocked in more than {{ \App\Http\Controllers\StaffController::LATE_GRACE }} min after the schedule</span><span><span style="color: #c2410c;">✎</span> time fixed by the director (see Staff attendance → History)</span><span>Time off comes from Staff → Time off</span></div>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;" class="muted"><span><span style="color: #be123c; font-weight: 700;">late</span> = clocked in more than {{ \App\Services\PaidHours::lateGrace() }} min after the schedule</span><span><span style="color: #c2410c;">✎</span> time fixed by the director (see Staff attendance → History)</span><span>Time off comes from Staff → Time off</span></div>
         </section>
     @endif
 

@@ -189,25 +189,53 @@ class StaffTimeOff extends Model
             return ['tag' => 'Schedule', 'tone' => 'ok', 'text' => 'Not on the schedule that day — nothing to fix.'];
         }
 
-        $room = $shift['room'] ?: 'their room';
-        $was = StaffRule::formatTime($shift['start']).' – '.StaffRule::formatTime($shift['end']);
+        $room = $shift['room'] ?: 'Their room';
+        $was = StaffRule::formatRange($shift['start'], $shift['end']);
+
+        if ($this->kind === 'all') {
+            return ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.' in '.$room.' on '.$this->date->format('D, M j').'. Saving removes the shift and the Schedule shows who could cover.'];
+        }
+
+        // What is left of the shift, and the pieces of it nobody is in for.
         $left = $this->applyTo(['start' => $shift['start'], 'end' => $shift['end']]);
 
+        if ($left === null) {
+            return ['tag' => 'Conflict', 'tone' => 'bad', 'text' => $firstName.' isn’t available for any of '.$was.'. '.$room.' needs cover '.$was.'.'];
+        }
+
+        $gaps = array_filter([
+            $left['start'] > $shift['start'] ? StaffRule::formatRange($shift['start'], $left['start']) : null,
+            $left['end'] < $shift['end'] ? StaffRule::formatRange($left['end'], $shift['end']) : null,
+        ]);
+
+        if ($gaps === []) {
+            return ['tag' => 'OK', 'tone' => 'ok', 'text' => 'Inside '.$was.' already — no change to the shift.'];
+        }
+
+        return ['tag' => 'Conflict', 'tone' => 'bad', 'text' => $firstName.'’s only available '.StaffRule::formatRange($left['start'], $left['end']).'. '.$room.' needs cover '.implode(' and ', $gaps).'.'];
+    }
+
+    /**
+     * The entry as a line of text, where the striped bar used to be:
+     * "Out 9:00 AM – 3:00 PM · back 3:00 PM".
+     *
+     * @param  array{start:int,end:int}|null  $shift
+     */
+    public function timeline(?array $shift): string
+    {
+        $open = (int) config('daycare.open');
+        $close = (int) config('daycare.close');
+        $start = $shift['start'] ?? $open;
+        $end = $shift['end'] ?? $close;
+        $t = fn (?int $m) => StaffRule::formatTime($m);
+
         return match ($this->kind) {
-            'all' => ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.' in '.$room.' on '.$this->date->format('D, M j').'. Saving removes the shift and the Schedule shows who could cover.'],
-            'until' => match (true) {
-                $this->from_minute >= $shift['end'] => ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.'. None of it is left — '.$room.' needs cover for the whole shift.'],
-                $this->from_minute > $shift['start'] => ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.'. Only '.StaffRule::formatTime($this->from_minute).' – '.StaffRule::formatTime($shift['end']).' can stay — '.$room.' needs cover '.StaffRule::formatTime($shift['start']).' – '.StaffRule::formatTime($this->from_minute).'.'],
-                default => ['tag' => 'OK', 'tone' => 'ok', 'text' => 'Already starts after that — no change.'],
-            },
-            'leave' => match (true) {
-                $this->to_minute <= $shift['start'] => ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.'. None of it is left — '.$room.' needs cover for the whole shift.'],
-                $this->to_minute < $shift['end'] => ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.'. Shift will end at '.StaffRule::formatTime($this->to_minute).' — '.$room.' needs cover '.StaffRule::formatTime($this->to_minute).' – '.StaffRule::formatTime($shift['end']).'.'],
-                default => ['tag' => 'OK', 'tone' => 'ok', 'text' => 'Already leaves before that — no change.'],
-            },
-            default => $left === null
-                ? ['tag' => 'Conflict', 'tone' => 'bad', 'text' => 'Scheduled '.$was.'. None of it fits the window — '.$room.' needs cover for the whole shift.']
-                : ['tag' => 'Check', 'tone' => 'warn', 'text' => 'Scheduled '.$was.'. Any part outside '.StaffRule::formatTime($this->from_minute).' – '.StaffRule::formatTime($this->to_minute).' is flagged on the Schedule.'],
+            'all' => 'Out all day',
+            'until' => 'Out '.$t($start).' – '.$t($this->from_minute).' · back '.$t($this->from_minute),
+            'leave' => 'In until '.$t($this->to_minute).' · out '.$t($this->to_minute).' – '.$t($end),
+            'window' => 'In '.$t($this->from_minute).' – '.$t($this->to_minute).' only',
+            'extra' => 'Extra day · in '.$t($this->from_minute).' – '.$t($this->to_minute),
+            default => $this->describe(),
         };
     }
 

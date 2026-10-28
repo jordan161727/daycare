@@ -317,6 +317,10 @@ Route::get('/timesheets/panel/{user}/{date}', [TimePunchController::class, 'pane
     ->name('timesheets.panel')->whereNumber('user')->where('date', '\d{4}-\d{2}-\d{2}');
 Route::post('/timesheets/panel/{user}/{date}', [TimePunchController::class, 'savePanel'])
     ->name('timesheets.panel.save')->whereNumber('user')->where('date', '\d{4}-\d{2}-\d{2}');
+// What the panel's changes would pay, before they are saved: the break and the
+// paid hours, worked out by the clock rather than by the browser.
+Route::post('/timesheets/panel/{user}/{date}/preview', [TimePunchController::class, 'previewPanel'])
+    ->name('timesheets.panel.preview')->whereNumber('user')->where('date', '\d{4}-\d{2}-\d{2}');
 
 // One address that lands on the grid with a person's day already open in the
 // edit panel — what a report row, or anything else that names a day, links

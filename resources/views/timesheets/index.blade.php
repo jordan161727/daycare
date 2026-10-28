@@ -190,7 +190,9 @@
                         <td class="px-3 py-2.5 text-right tabular-nums text-slate-500">{{ number_format($line['paid_leave_hours'], 2) }}</td>
                         <td class="px-3 py-2.5 text-right font-bold tabular-nums">{{ number_format($line['paid_hours'], 2) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">
-                            @if($line['estimated_gross'] === null)
+                            @if($line['pay_hidden'] ?? false)
+                                <span class="text-slate-400" title="Only the director can view pay">—</span>
+                            @elseif($line['estimated_gross'] === null)
                                 <span class="text-amber-600 dark:text-amber-300" title="No pay rate on this record">no rate</span>
                             @else
                                 ${{ number_format($line['estimated_gross'], 2) }}

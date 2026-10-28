@@ -223,7 +223,7 @@
                 </table>
             </div>
             <div style="padding: 10px 20px; border-top: 1px solid #f0f1f5; font-size: 12.5px;" class="faint">
-                Click any day to correct it. Amber and red days need a fix; late is more than {{ Grid::LATE_GRACE }} minutes after the scheduled start. Every change keeps the original punch and records who made it and why.
+                Click any day to correct it. Amber and red days need a fix; late is more than {{ \App\Services\PaidHours::lateGrace() }} minutes after the scheduled start. Every change keeps the original punch and records who made it and why.
             </div>
         </section>
 

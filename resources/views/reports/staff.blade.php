@@ -189,7 +189,7 @@
             @endif
 
             <div class="ml-auto flex flex-wrap items-center gap-3">
-                @if($meta['pay'])
+                @if($meta['pay'] && auth()->user()->canSeePay())
                     {{-- A rate on screen by default is payroll left open on a desk.
                          It is switched on when somebody is working on pay. --}}
                     <label class="inline-flex min-h-[44px] cursor-pointer items-center gap-2 text-sm font-semibold text-la-ink dark:text-slate-200">

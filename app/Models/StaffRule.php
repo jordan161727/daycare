@@ -283,4 +283,15 @@ class StaffRule extends Model
 
         return ($hour === 0 ? 12 : $hour).sprintf(':%02d ', $minutes % 60).$suffix;
     }
+
+    /** "3:00–6:00 PM", or "9:00 AM–3:00 PM" across noon. */
+    public static function formatRange(int $from, int $to): string
+    {
+        $a = self::formatTime($from);
+        $b = self::formatTime($to);
+
+        return substr($a, -2) === substr($b, -2)
+            ? substr($a, 0, -3).'–'.$b
+            : $a.'–'.$b;
+    }
 }

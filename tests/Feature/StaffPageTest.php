@@ -106,6 +106,9 @@ class StaffPageTest extends TestCase
 
     public function test_details_save_and_the_home_room_becomes_the_first_assigned_classroom(): void
     {
+        // Pay is the director's to change (User::canSeePay).
+        $this->admin->update(['job_role' => 'Director']);
+
         $this->actingAs($this->admin)
             ->put(route('staff.update', $this->zameera), [
                 'name' => 'Zameera Khan', 'email' => $this->zameera->email, 'legal_name' => 'Zameera A. Khan',
@@ -252,7 +255,7 @@ class StaffPageTest extends TestCase
         $this->assertStringContainsString('data-time-off-entry="'.$entry->id.'"', $html);
         $this->assertStringContainsString('Appointment', $html);
         $this->assertStringContainsString('Unpaid', $html);
-        $this->assertStringContainsString('Only 3:00 PM – 6:00 PM can stay — Transition needs cover 9:00 AM – 3:00 PM.', $html);
+        $this->assertStringContainsString('Zameera’s only available 3:00–6:00 PM. Transition needs cover 9:00 AM–3:00 PM.', $html);
         $this->assertStringContainsString('Added by Administrator', $html);
 
         // The day after, it is in Past with a total, not under Coming up.

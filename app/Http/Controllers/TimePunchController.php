@@ -8,6 +8,7 @@ use App\Models\TimesheetPeriod;
 use App\Models\User;
 use App\Models\StaffShift;
 use App\Models\StaffTimeOff;
+use App\Services\PaidHours;
 use App\Services\TimeClock;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -211,27 +212,7 @@ class TimePunchController extends Controller
             }
         }
 
-        // What the day would be. Unsaved models are enough for walk(): it reads
-        // type and time and nothing else, so the same code that decides what a
-        // day pays decides whether these changes are allowed.
-        $proposed = $live->map(fn (TimePunch $punch) => $punch->replicate()->forceFill(['id' => $punch->id]));
-
-        foreach ($data['changes'] as $change) {
-            if ($change['op'] === 'move') {
-                $proposed[$change['id']]->punched_at = $this->moment($date, $change['at']);
-            } elseif ($change['op'] === 'remove') {
-                $proposed->forget($change['id']);
-            } else {
-                $proposed->push(new TimePunch([
-                    'user_id' => $user->id,
-                    'work_date' => $date,
-                    'punched_at' => $this->moment($date, $change['at']),
-                    'type' => $change['type'],
-                ]));
-            }
-        }
-
-        $dry = $this->clock->day($user->id, $date, $proposed->values());
+        $dry = $this->propose($live, $data['changes'], $user, $date);
 
         if ($dry['broken']) {
             return response()->json([
@@ -291,6 +272,67 @@ class TimePunchController extends Controller
         });
 
         return response()->json(['saved' => true] + $this->panelPayload($request, $user, $date));
+    }
+
+    /**
+     * The panel's numbers as it is typed: the break and the paid hours the
+     * changes would produce, from the same walk a save makes. Nothing is
+     * written; the panel calls this on every change of a time.
+     */
+    public function previewPanel(Request $request, User $user, string $date)
+    {
+        validator(['date' => $date], ['date' => ['required', 'date_format:Y-m-d']])->validate();
+
+        $data = $request->validate([
+            'changes' => ['present', 'array', 'max:40'],
+            'changes.*.op' => ['required', Rule::in(['move', 'add', 'remove'])],
+            'changes.*.id' => ['required_if:changes.*.op,move,remove', 'nullable', 'integer'],
+            'changes.*.type' => ['required_if:changes.*.op,add', 'nullable', Rule::in(array_keys(TimePunch::LABELS))],
+            'changes.*.at' => ['required_if:changes.*.op,move,add', 'nullable', 'date_format:H:i'],
+        ]);
+
+        $live = $this->clock->punches($user->id, $date)->keyBy('id');
+        $changes = array_values(array_filter($data['changes'], fn (array $c) => $c['op'] === 'add' || $live->has($c['id'])));
+        $dry = $this->propose($live, $changes, $user, $date);
+
+        return response()->json([
+            'worked' => $dry['worked'],
+            'paid_label' => intdiv($dry['worked'], 60).'h '.str_pad((string) ($dry['worked'] % 60), 2, '0', STR_PAD_LEFT).'m',
+            'unpaid_break' => $dry['unpaid_break'],
+            'auto_break' => $dry['auto_break'],
+            'paid_break' => $dry['paid_break'],
+            'broken' => $dry['broken'],
+            'problems' => $dry['problems'],
+        ]);
+    }
+
+    /**
+     * What the day would be with the changes applied.
+     *
+     * Unsaved models are enough for walk(): it reads type and time and nothing
+     * else, so the same code that decides what a day pays decides whether
+     * these changes are allowed — and what the panel shows before a save.
+     */
+    private function propose($live, array $changes, User $user, string $date): array
+    {
+        $proposed = $live->map(fn (TimePunch $punch) => $punch->replicate()->forceFill(['id' => $punch->id]));
+
+        foreach ($changes as $change) {
+            if ($change['op'] === 'move') {
+                $proposed[$change['id']]->punched_at = $this->moment($date, $change['at']);
+            } elseif ($change['op'] === 'remove') {
+                $proposed->forget($change['id']);
+            } else {
+                $proposed->push(new TimePunch([
+                    'user_id' => $user->id,
+                    'work_date' => $date,
+                    'punched_at' => $this->moment($date, $change['at']),
+                    'type' => $change['type'],
+                ]));
+            }
+        }
+
+        return $this->clock->day($user->id, $date, $proposed->values());
     }
 
     /**
@@ -409,6 +451,16 @@ class TimePunchController extends Controller
                 'ends_at' => $hm((int) $shifts->max('ends_at')),
             ],
             'paid_break_cap' => (int) config('daycare.timesheet.clock.paid_break_cap'),
+            // The unpaid break on a day with no lunch punched: the panel shows
+            // it as the default, and asks preview for the live figure.
+            'break_rule' => [
+                'after' => PaidHours::threshold(),
+                'max' => PaidHours::maxBreak(),
+                'applies' => PaidHours::appliesOn($date),
+                'auto_break' => $day['auto_break'],
+            ],
+            'late_grace' => PaidHours::lateGrace(),
+            'week_label' => self::weekLabel($from, $to),
             'reasons' => TimePunch::REASONS,
             'history' => $history,
             'cell' => $cell,
@@ -453,6 +505,19 @@ class TimePunchController extends Controller
         );
 
         return back()->with('success', $punch->label().' moved from '.$original.' to '.$replacement->time().'. Both are on the record.');
+    }
+
+    /** "Oct 5–9", "Oct 27 – Nov 2": the days the grid is showing, for its change log. */
+    public static function weekLabel(string $from, string $to): string
+    {
+        $a = Carbon::parse($from);
+        $b = Carbon::parse($to);
+
+        return match (true) {
+            $a->isSameDay($b) => $a->format('M j'),
+            $a->isSameMonth($b) => $a->format('M j').'–'.$b->format('j'),
+            default => $a->format('M j').' – '.$b->format('M j'),
+        };
     }
 
     /** A date and a wall-clock time, in the centre's own timezone. */

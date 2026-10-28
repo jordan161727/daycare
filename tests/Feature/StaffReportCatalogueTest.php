@@ -35,7 +35,7 @@ class StaffReportCatalogueTest extends TestCase
         $this->travelTo(Carbon::parse('2026-09-23 10:00:00'));
 
         $this->admin = User::factory()->create([
-            'role' => 'admin', 'name' => 'Administrator', 'employment' => 'FT',
+            'role' => 'admin', 'name' => 'Administrator', 'employment' => 'FT', 'job_role' => 'Director',
         ]);
 
         $this->rachel = $this->staff('Rachel Kim');

@@ -8,6 +8,7 @@ use App\Models\StaffShift;
 use App\Models\StaffTimeOff;
 use App\Models\TimePunch;
 use App\Models\User;
+use App\Services\PaidHours;
 use App\Services\TimeClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -58,9 +59,6 @@ class StaffTimesheetController extends Controller
      * amber or red: "corrected" says "fine now", and it is not.
      */
     public const EDITED = 'edited';
-
-    /** Minutes after the scheduled start before a day is called late. */
-    public const LATE_GRACE = StaffController::LATE_GRACE;
 
     /**
      * How many days the grid will draw.
@@ -373,6 +371,15 @@ class StaffTimesheetController extends Controller
         $today = $days[today()->toDateString()] ?? null;
         $with = fn (string $flag) => count(array_filter($days, fn ($day) => $day['flag'] === $flag));
 
+        // The payroll week (Monday to Sunday), not just the days on screen:
+        // overtime is owed per workweek, and a Saturday shift off the grid
+        // still counts towards it. A range across weeks flags any of them.
+        $weeks = collect($dates)
+            ->map(fn ($date) => PaidHours::weekOf($date->toDateString())[0]->toDateString())
+            ->unique()
+            ->map(fn (string $monday) => app(PaidHours::class)->week($person->id, $monday))
+            ->values();
+
         return [
             'id' => $person->id,
             'staff_id' => $person->staffId(),
@@ -385,10 +392,15 @@ class StaffTimesheetController extends Controller
             // The room they work, for the filter: their title, failing that
             // the room on their account, failing that the office.
             'room' => $person->title ?: ($person->classroom ?: 'Office'),
-            'rate' => $person->pay_rate,
+            // Pay is the director's alone; anyone else gets no number at all.
+            'rate' => auth()->user()?->canSeePay() ? $person->pay_rate : null,
             'hours' => round($worked / 60, 1),
             'minutes' => $worked,
             'total' => $this->duration($worked),
+            'week_minutes' => (int) $weeks->sum('minutes'),
+            'week_total' => $this->duration((int) $weeks->sum('minutes')),
+            'overtime' => $weeks->contains('overtime', true),
+            'overtime_by' => $this->duration((int) $weeks->sum('over')),
             // What the week is measured against — the hours their rules say
             // they are owed, or the default for their employment type.
             'target' => $person->weeklyHours(),
@@ -440,7 +452,7 @@ class StaffTimesheetController extends Controller
             $status === self::ON_TIME => ['', $in.' – '.($out ?: '—'), $this->duration((int) $day['worked']), 'mut', null],
             // Nothing punched. Today that is a fact about the morning so far;
             // ahead it is the plan; behind, with nobody expected, a day off.
-            $today && $window && $now > $window['start'] + self::LATE_GRACE => ['c-bad', 'Not in', 'Late · due '.StaffRule::formatTime($window['start']), 'bad', null],
+            $today && $window && $now > $window['start'] + PaidHours::lateGrace() => ['c-bad', 'Not in', 'Late · due '.StaffRule::formatTime($window['start']), 'bad', null],
             $today && $window => ['c-wait', 'Not in', 'Due '.StaffRule::formatTime($window['start']), 'mut', null],
             $future && $window => ['c-off', $this->short($window['start']).' – '.$this->short($window['end']), 'Scheduled', 'mut', null],
             default => ['c-off', 'Off', $change?->kind === 'all' ? $change->reasonLabel() : '', 'mut', null],
@@ -538,7 +550,7 @@ class StaffTimesheetController extends Controller
             return self::MISSING_OUT;
         }
 
-        if ($window !== null && $day['first_in'] > $window['start'] + self::LATE_GRACE) {
+        if ($window !== null && $day['first_in'] > $window['start'] + PaidHours::lateGrace()) {
             return self::LATE;
         }
 
@@ -595,6 +607,12 @@ class StaffTimesheetController extends Controller
             $change = $this->changeOn($person->id, $today);
             $arrived = $day['first_in'] !== null;
 
+            // Clocked out with another shift still to come — a split shift
+            // — is due back, not done.
+            $later = $arrived && ! $day['open']
+                ? $this->shiftsOn($person->id, $today)->first(fn (StaffShift $shift) => $shift->starts_at > (int) $day['last_out'])
+                : null;
+
             // The director with nothing today is not a row of dashes.
             if ($person->role === 'admin' && ! $arrived && $day['last_out'] === null && $window === null && $change === null) {
                 continue;
@@ -604,10 +622,12 @@ class StaffTimesheetController extends Controller
                 $day['open'] && $day['state'] === TimeClock::BREAK => ['in', 'On break', 'ok'],
                 $day['open'] && $day['state'] === TimeClock::LUNCH => ['in', 'At lunch', 'ok'],
                 $day['open'] => ['in', 'On shift', 'ok'],
+                $later !== null && $now > $later->starts_at + PaidHours::lateGrace() => ['late', 'Not back · due '.StaffRule::formatTime($later->starts_at), 'bad'],
+                $later !== null => ['due', 'Due back '.StaffRule::formatTime($later->starts_at), 'mut'],
                 $arrived => ['done', 'Done for today', 'mut'],
                 $change?->kind === 'all' => ['off', 'Off · '.strtolower($change->reasonLabel()), 'mut'],
                 $window === null => ['off', 'Off', 'mut'],
-                $now > $window['start'] + self::LATE_GRACE => ['late', 'Not in · due '.StaffRule::formatTime($window['start']), 'bad'],
+                $now > $window['start'] + PaidHours::lateGrace() => ['late', 'Not in · due '.StaffRule::formatTime($window['start']), 'bad'],
                 default => ['due', 'Due '.StaffRule::formatTime($window['start']), 'mut'],
             };
 

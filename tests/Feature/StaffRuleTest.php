@@ -19,7 +19,7 @@ class StaffRuleTest extends TestCase
     {
         parent::setUp();
 
-        $this->admin = User::create(['name' => 'Director', 'email' => 'director@example.com', 'password' => 'password', 'role' => 'admin']);
+        $this->admin = User::create(['name' => 'Director', 'email' => 'director@example.com', 'password' => 'password', 'role' => 'admin', 'job_role' => 'Director']);
         $this->teacher = User::create(['name' => 'Grace Lee', 'email' => 'grace@example.com', 'password' => 'password', 'role' => 'teacher']);
     }
 

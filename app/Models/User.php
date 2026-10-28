@@ -260,6 +260,29 @@ class User extends Authenticatable
         return $this->role === 'admin';
     }
 
+    /**
+     * The director: an admin account whose job is Director.
+     *
+     * There is no separate role for it — directors and office admins share
+     * "admin" — so the job title is what tells them apart.
+     */
+    public function isDirector(): bool
+    {
+        return $this->isAdmin() && $this->job_role === 'Director';
+    }
+
+    /** Pay rates and direct deposit are the director's alone. */
+    public function canSeePay(): bool
+    {
+        return $this->isDirector();
+    }
+
+    /** Who can see pay, by name, for the line that says so to everyone else. */
+    public static function payViewerName(): ?string
+    {
+        return static::where('role', 'admin')->where('job_role', 'Director')->orderBy('id')->value('name');
+    }
+
     public function students()
     {
         return $this->hasMany(Child::class, 'classroom', 'classroom');
@@ -287,18 +310,113 @@ class User extends Authenticatable
         return route('avatars.show', ['user' => $this, 'v' => substr(md5($this->avatar_path), 0, 8)]);
     }
 
-    /** First letters of the first and last name, for the fallback badge. */
+    /**
+     * The badge letters: two of them, and never the same as a colleague's.
+     *
+     * Lana is LA and LaQuora is LQ, not L and L. Worked out across the whole
+     * team at once (see staffInitials()), so every screen that prints
+     * $user->initials agrees on who is who.
+     */
     public function getInitialsAttribute(): string
     {
-        $words = preg_split('/\s+/', trim((string) $this->name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($this->id !== null && in_array($this->role, ['admin', 'teacher'], true)) {
+            $map = self::staffInitials();
 
-        if ($words === []) {
-            return '?';
+            if (isset($map[$this->id]) && (self::$initialsNames[$this->id] ?? null) === $this->name) {
+                return $map[$this->id];
+            }
+
+            $map = self::staffInitials(fresh: true);
+
+            if (isset($map[$this->id])) {
+                return $map[$this->id];
+            }
         }
 
-        $initials = Str::substr($words[0], 0, 1).(count($words) > 1 ? Str::substr(end($words), 0, 1) : '');
+        return self::initialsOptions((string) $this->name)[0];
+    }
 
-        return Str::upper($initials);
+    /** A new face, a new name or a departure can change somebody else's letters. */
+    protected static function booted(): void
+    {
+        $forget = fn () => self::$initialsMap = null;
+
+        static::saved($forget);
+        static::deleted($forget);
+    }
+
+    /** @var array<int, string>|null */
+    private static ?array $initialsMap = null;
+
+    /** @var array<int, string> */
+    private static array $initialsNames = [];
+
+    /**
+     * Everyone on the team's initials, no two alike.
+     *
+     * Earliest account first keeps its first choice; a later one with the
+     * same letters takes its next option. Cached for the request, and redone
+     * whenever somebody's name has changed since.
+     *
+     * @return array<int, string>
+     */
+    public static function staffInitials(bool $fresh = false): array
+    {
+        if (! $fresh && self::$initialsMap !== null) {
+            return self::$initialsMap;
+        }
+
+        $taken = [];
+        $map = [];
+        $names = static::whereIn('role', ['admin', 'teacher'])->orderBy('id')->pluck('name', 'id');
+
+        foreach ($names as $id => $name) {
+            $options = self::initialsOptions((string) $name);
+            $pick = collect($options)->first(fn (string $option) => ! isset($taken[$option])) ?? $options[0];
+            $taken[$pick] = true;
+            $map[$id] = $pick;
+        }
+
+        self::$initialsNames = $names->all();
+
+        return self::$initialsMap = $map;
+    }
+
+    /**
+     * The letters a name could go by, best first.
+     *
+     * Two words: first and last initial, then first initial with each later
+     * letter of the last name. One word: the first letter with the next
+     * capital ("LaQuora" → LQ) or else the next letter ("Lana" → LA), then
+     * each later letter in turn.
+     *
+     * @return list<string>
+     */
+    public static function initialsOptions(string $name): array
+    {
+        $words = preg_split('/\s+/', trim(preg_replace('/[^\pL\s]/u', '', $name)), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($words === []) {
+            return ['?'];
+        }
+
+        $first = Str::upper(Str::substr($words[0], 0, 1));
+        $rest = count($words) > 1 ? end($words) : Str::substr($words[0], 1);
+        $options = [];
+
+        if (count($words) > 1) {
+            $options[] = $first.Str::upper(Str::substr($rest, 0, 1));
+        } elseif (preg_match('/\p{Lu}/u', $rest, $capital)) {
+            $options[] = $first.$capital[0];
+        }
+
+        foreach (mb_str_split($rest) as $letter) {
+            $options[] = $first.Str::upper($letter);
+        }
+
+        $options = array_values(array_unique($options));
+
+        return $options === [] ? [$first] : $options;
     }
 
     /* ---- the time clock at the door ----
