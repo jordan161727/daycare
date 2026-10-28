@@ -64,7 +64,7 @@ class RoomTabletTest extends TestCase
         $this->assertStringStartsWith(url('/clock?token='), $this->door->pairingUrl());
 
         $this->get($this->tablet->pairingUrl())->assertRedirect(route('room.kiosk'));
-        $this->get(route('room.kiosk'))->assertOk()->assertSee('PreK iPad')->assertSee('Coming into');
+        $this->get(route('room.kiosk'))->assertOk()->assertSee('Little Angels')->assertSee('Coming into');
     }
 
     public function test_a_browser_never_paired_becomes_a_room_tablet_set_by_its_code(): void

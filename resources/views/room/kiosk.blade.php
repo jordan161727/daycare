@@ -29,27 +29,29 @@
 
 <div x-data="roomTablet()" x-init="focusEntry()" class="flex min-h-dvh flex-col">
 
-    {{-- ---- the masthead: which room this is, always ---- --}}
-    <header class="border-b border-slate-200/70 bg-white/70 px-5 py-3 backdrop-blur">
+    {{-- ---- the masthead: which room this is, always ----
+         As the StaffFlow mock-up draws it (Jordan, 29 Oct 2026: "I want
+         exactly this"): the centre's name in blue over "Room tablet · PreK",
+         the time and the gear on the right. --}}
+    @php
+        // The mock-up's keys, shared by the PIN pad and the set-up pad.
+        $key = 'h-14 rounded-[14px] border border-[#d5dbea] bg-white text-[22px] font-semibold text-[#1c2130] transition active:bg-[#eef1fb]';
+        $keySm = 'h-14 rounded-[14px] border border-[#d5dbea] bg-[#f5f7fc] text-sm font-semibold text-[#5f6676] transition active:bg-[#eef1fb]';
+    @endphp
+    <header class="border-b border-[#e3e6ee] px-[18px] py-3.5">
         <div class="mx-auto flex max-w-xl items-center justify-between gap-4">
-            <div class="flex min-w-0 items-center gap-3">
-                <img src="{{ asset('images/littleangels-logo.png') }}" alt="" width="531" height="228" class="h-7 w-auto shrink-0">
-                <span class="min-w-0 border-l border-slate-200 pl-3">
-                    <span class="block truncate text-[12px] font-semibold leading-tight">Room tablet · <b data-tablet-room x-text="room ?? 'no room yet'"></b></span>
-                    <span class="block truncate text-[11px] leading-tight text-slate-500">{{ $device?->name ?? 'Not paired' }}</span>
-                </span>
+            <div class="flex min-w-0 flex-col">
+                <span class="truncate text-base font-bold leading-tight text-[#1b5e91]">Little Angels</span>
+                <span class="truncate text-xs leading-tight text-[#465577]">Room tablet · <b data-tablet-room x-text="room ?? 'no room yet'"></b></span>
             </div>
 
-            <div class="flex shrink-0 items-center gap-3">
-                <span class="text-right">
-                    <span class="block text-[22px] font-bold leading-none tabular-nums" x-text="now"></span>
-                    <span class="block text-[11px] leading-tight text-slate-500" x-text="today"></span>
-                </span>
+            <div class="flex shrink-0 items-center gap-2.5">
+                <span class="text-lg font-semibold tabular-nums text-[#1c2130]" x-text="now"></span>
                 @if($device)
                     {{-- The gear: the owner's exact request. Key the room code
                          here and the tablet is that room. --}}
                     <button type="button" @click.stop="openSetup()" aria-label="Set up this tablet" title="Set up this tablet" data-gear
-                            class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition active:bg-slate-50">
+                            class="grid h-9 w-9 place-items-center rounded-[10px] border border-[#d5dbea] bg-white text-[#5f6676] transition hover:border-[#9fb0d6] hover:text-[#1b5e91] active:bg-slate-50">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                     </button>
                 @endif
@@ -59,7 +61,7 @@
 
     {{-- This room in three numbers (Jordan's mock-up, 29 Oct 2026). Counts
          only, never names: anybody can read a tablet. --}}
-    <div x-show="summary?.room" x-cloak class="border-b border-slate-200/70 bg-white/50 px-5 py-2.5" data-room-strip>
+    <div x-show="summary?.room && step !== 'setup'" x-cloak class="border-b border-slate-200/70 bg-white/50 px-5 py-2.5" data-room-strip>
         <div class="mx-auto grid max-w-xl grid-cols-3 gap-2">
             <div class="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
                 <p class="text-[10px] font-bold uppercase tracking-[.06em] text-slate-500">Teachers</p>
@@ -85,77 +87,84 @@
             </div>
         </main>
     @else
-        <main class="flex flex-1 items-center justify-center p-5" @click="focusEntry()">
-            <div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="h-1.5" :style="`background: ${colour}`"></div>
+        {{-- The two keypads sit straight on the page near the top, as in the
+             mock-up; the person's screen and the done screen keep the card. --}}
+        <main class="flex flex-1 justify-center p-[18px]" :class="step === 'pin' || step === 'setup' ? 'items-start' : 'items-center'" @click="focusEntry()">
 
-                {{-- ---- set-up: which room is this? ---- --}}
-                <template x-if="step === 'setup'">
-                    <div class="p-7 text-center" data-setup>
-                        <h1 class="text-xl font-bold">Set up this tablet</h1>
-                        <p class="mt-1 text-[13px] leading-snug text-slate-500">Key the 4-digit room code.<br>Right now this tablet is <b class="text-slate-900" x-text="room ?? 'no room'"></b>.</p>
+            {{-- ---- set-up: which room is this? ---- --}}
+            <template x-if="step === 'setup'">
+                <div class="flex w-full max-w-md flex-col items-center gap-3.5 pt-2.5 text-center" data-setup>
+                    <h1 class="text-[22px] font-bold text-[#1c2130]">Set up this tablet</h1>
+                    <p class="text-sm leading-normal text-[#5f6676]">Key the 4-digit room code.<br>Right now this tablet is <b class="text-[#1c2130]" x-text="room ?? 'no room'"></b>.</p>
 
-                        <div class="mx-auto mt-5 flex justify-center gap-3">
+                    <div class="flex gap-3" aria-hidden="true">
+                        <template x-for="i in 4" :key="i">
+                            <span class="h-[15px] w-[15px] rounded-full border-2" :class="code.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
+                        </template>
+                    </div>
+
+                    <p x-show="problem" x-cloak class="rounded-[10px] bg-[#fff1f2] px-3 py-2 text-sm font-semibold text-[#be123c]" x-text="problem?.title"></p>
+
+                    <div class="grid w-full max-w-[300px] grid-cols-3 gap-2.5">
+                        <template x-for="k in ['1','2','3','4','5','6','7','8','9']" :key="k">
+                            <button type="button" @click="pressCode(k)" class="{{ $key }}" x-text="k"></button>
+                        </template>
+                        <button type="button" @click="code = ''" class="{{ $keySm }}">Clear</button>
+                        <button type="button" @click="pressCode('0')" class="{{ $key }}">0</button>
+                        <button type="button" @click="code = code.slice(0, -1)" aria-label="Delete one digit" class="{{ $keySm }}">⌫</button>
+                    </div>
+
+                    <button type="button" @click="reset()" class="rounded-xl border border-[#cfd3de] bg-white px-4 py-2.5 text-sm font-semibold text-[#1c2130] transition active:bg-slate-50">Cancel</button>
+                </div>
+            </template>
+
+            {{-- ---- the keypad ---- --}}
+            <template x-if="step === 'pin'">
+                <div class="flex w-full max-w-md flex-col items-center gap-3.5 pt-2.5 text-center">
+                    <h1 class="text-[22px] font-bold text-[#1c2130]" data-keypad-title>Coming into <span x-text="room ?? 'this room'"></span>?</h1>
+                    <p class="text-sm text-[#5f6676]">Same PIN as the front door</p>
+
+                    <p x-show="! room" x-cloak class="w-full max-w-[300px] rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-900 ring-1 ring-amber-200" data-no-room>
+                        This tablet has not been told which room it is in. Tap ⚙ and key the room code from Settings → Rooms &amp; hours.
+                    </p>
+
+                    <form @submit.prevent="identify()" autocomplete="off" class="flex w-full flex-col items-center gap-3.5">
+                        {{-- Out of sight, for a card reader: it types fast and
+                             presses Enter. Keyed PINs submit at four digits.
+                             inputmode none keeps the iPad's keyboard away. --}}
+                        <input x-ref="entry" x-model="entry" type="text" inputmode="none"
+                               name="kiosk-entry" autocomplete="off" autocorrect="off" spellcheck="false"
+                               data-1p-ignore data-lpignore="true" data-form-type="other"
+                               aria-label="Key your PIN"
+                               class="pointer-events-none absolute h-px w-px opacity-0">
+
+                        <div class="flex gap-3" aria-hidden="true" data-pin-dots>
                             <template x-for="i in 4" :key="i">
-                                <span class="h-4 w-4 rounded-full border-2 border-indigo-300" :class="code.length >= i ? 'bg-indigo-700 border-indigo-700' : ''"></span>
+                                <span class="h-[15px] w-[15px] rounded-full border-2" :class="entry.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
                             </template>
                         </div>
 
-                        <p x-show="problem" x-cloak class="mt-4 rounded-xl bg-rose-50 px-4 py-2.5 text-[14px] font-semibold text-rose-800 ring-1 ring-rose-200" x-text="problem?.title"></p>
-
-                        <div class="mx-auto mt-5 grid max-w-xs grid-cols-3 gap-2">
-                            <template x-for="key in ['1','2','3','4','5','6','7','8','9']" :key="key">
-                                <button type="button" @click="pressCode(key)" class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:bg-indigo-50" x-text="key"></button>
+                        <div class="grid w-full max-w-[300px] grid-cols-3 gap-2.5">
+                            <template x-for="k in ['1','2','3','4','5','6','7','8','9']" :key="k">
+                                <button type="button" @click="press(k)" class="{{ $key }}" x-text="k"></button>
                             </template>
-                            <button type="button" @click="code = ''" class="min-h-14 rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-500 transition active:scale-95">Clear</button>
-                            <button type="button" @click="pressCode('0')" class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:bg-indigo-50">0</button>
-                            <button type="button" @click="code = code.slice(0, -1)" class="min-h-14 rounded-xl border border-slate-200 bg-slate-50 text-xl font-semibold text-slate-500 transition active:scale-95">⌫</button>
+                            <button type="button" @click="entry = ''" class="{{ $keySm }}">Clear</button>
+                            <button type="button" @click="press('0')" class="{{ $key }}">0</button>
+                            {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
+                            <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back class="{{ $keySm }}">⌫</button>
                         </div>
+                    </form>
 
-                        <button type="button" @click="reset()" class="mt-5 min-h-12 w-full rounded-xl border border-slate-200 text-[13px] font-semibold text-slate-500 transition active:bg-slate-50">Cancel</button>
-                    </div>
-                </template>
+                    <p x-show="problem" x-cloak class="w-full max-w-[300px] rounded-xl px-4 py-3"
+                       :class="problem?.kind === 'bad' ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'">
+                        <span class="block font-bold" x-text="problem?.title"></span>
+                        <span class="text-[13px]" x-text="problem?.detail"></span>
+                    </p>
+                </div>
+            </template>
 
-                {{-- ---- the keypad ---- --}}
-                <template x-if="step === 'pin'">
-                    <div class="p-7">
-                        <div class="text-center">
-                            <h1 class="text-xl font-bold" data-keypad-title>Coming into <span x-text="room ?? 'this room'"></span>?</h1>
-                            <p class="mt-1 text-[13px] text-slate-500">Same PIN as the front door</p>
-                        </div>
-
-                        <p x-show="! room" x-cloak class="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-center text-[13px] text-amber-900 ring-1 ring-amber-200" data-no-room>
-                            This tablet has not been told which room it is in. Tap ⚙ and key the room code from Settings → Rooms &amp; hours.
-                        </p>
-
-                        <form @submit.prevent="identify()" autocomplete="off" class="mt-5">
-                            <input x-ref="entry" x-model="entry" type="text" inputmode="numeric"
-                                   name="kiosk-entry" autocomplete="off" autocorrect="off" spellcheck="false"
-                                   data-1p-ignore data-lpignore="true" data-form-type="other"
-                                   style="-webkit-text-security: disc; text-security: disc;"
-                                   aria-label="Key your PIN"
-                                   class="w-full rounded-xl border border-slate-300 bg-slate-50 px-6 py-4 text-center text-3xl tracking-[0.5em] text-slate-900 placeholder:tracking-[0.3em] placeholder:text-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-100"
-                                   placeholder="••••">
-
-                            <div class="mt-4 grid grid-cols-3 gap-2">
-                                <template x-for="key in ['1','2','3','4','5','6','7','8','9']" :key="key">
-                                    <button type="button" @click="press(key)" class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:bg-indigo-50" x-text="key"></button>
-                                </template>
-                                <button type="button" @click="entry = ''" class="min-h-14 rounded-xl border border-slate-200 bg-white text-sm font-semibold uppercase tracking-wide text-slate-400 transition active:scale-95">Clear</button>
-                                <button type="button" @click="press('0')" class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:bg-indigo-50">0</button>
-                                {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
-                                <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-500 transition active:scale-95">⌫</button>
-                                <button type="submit" :disabled="entry.length < 4 || sending" class="col-span-3 min-h-12 rounded-xl bg-indigo-600 text-sm font-bold uppercase tracking-wide text-white transition active:scale-95 disabled:bg-slate-200 disabled:text-slate-400">Enter</button>
-                            </div>
-                        </form>
-
-                        <p x-show="problem" x-cloak class="mt-4 rounded-xl px-4 py-3 text-center"
-                           :class="problem?.kind === 'bad' ? 'bg-rose-50 text-rose-900 ring-1 ring-rose-200' : 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'">
-                            <span class="block font-bold" x-text="problem?.title"></span>
-                            <span class="text-[13px]" x-text="problem?.detail"></span>
-                        </p>
-                    </div>
-                </template>
+            <div x-show="step !== 'pin' && step !== 'setup'" x-cloak class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="h-1.5" :style="`background: ${colour}`"></div>
 
                 {{-- ---- one person: this room, another room, or a break ---- --}}
                 <template x-if="step === 'rooms' && staff">

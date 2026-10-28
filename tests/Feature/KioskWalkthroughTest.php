@@ -76,7 +76,7 @@ class KioskWalkthroughTest extends TestCase
         $this->door = tap(new StaffDevice(['name' => 'Front desk', 'kind' => StaffDevice::KIND_CLOCK, 'is_active' => true]))->issueToken();
         $this->tablet = tap(new StaffDevice(['name' => 'PreK iPad', 'kind' => StaffDevice::KIND_ROOM, 'classroom' => 'PreK', 'is_active' => true]))->issueToken();
         $this->asTablet();
-        $this->get(route('room.kiosk'))->assertOk()->assertSee('PreK iPad')->assertSee('Coming into');
+        $this->get(route('room.kiosk'))->assertOk()->assertSee('Little Angels')->assertSee('Coming into');
         $this->asDoor();
         $this->get(route('clock.kiosk'))->assertOk()->assertSee('Front desk')->assertSee('Scan your card');
         $this->actingAs($this->admin)->get(route('settings.rooms'))->assertOk()->assertSee('1 tablet · never used');
