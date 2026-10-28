@@ -15,13 +15,14 @@ use Illuminate\Support\Carbon;
  */
 class StaffScheduleWeek extends Model
 {
-    protected $fillable = ['week_start', 'generated_at', 'generated_by', 'warnings', 'published_at', 'published_by', 'edits'];
+    protected $fillable = ['week_start', 'generated_at', 'generated_by', 'warnings', 'published_at', 'published_by', 'edits', 'rule_misses'];
 
     protected $casts = [
         'week_start' => 'date:Y-m-d',
         'generated_at' => 'datetime',
         'published_at' => 'datetime',
         'warnings' => 'array',
+        'rule_misses' => 'array',
         'edits' => 'integer',
     ];
 

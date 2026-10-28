@@ -222,6 +222,31 @@ class StaffScheduleTest extends TestCase
         $this->assertStringContainsString('prefers FRI off', implode(' ', $week->warnings));
     }
 
+    public function test_a_prefer_rule_not_kept_is_recorded_against_the_rule_with_a_reason(): void
+    {
+        // So the Rules tab can say "Not met this week" on the rule itself,
+        // not only in the warnings shown once after generating.
+        $emily = $this->teacher('Emily Carter', 'FT', 'Toddler');
+        $this->rule($emily, 'PREFERRED_DAY_OFF', ['day' => 'FRI', 'priority' => 'SOFT']);
+        $rule = $emily->staffRules()->first();
+
+        $week = $this->scheduler->generate(self::WEEK)->fresh();
+
+        $this->assertArrayHasKey($rule->id, $week->rule_misses);
+        $this->assertSame(['FRI'], $week->rule_misses[$rule->id]['days']);
+        $this->assertNotSame('', $week->rule_misses[$rule->id]['reason']);
+    }
+
+    public function test_must_rules_are_never_recorded_as_missed(): void
+    {
+        $emily = $this->teacher('Emily Carter', 'FT', 'Toddler');
+        $this->rule($emily, 'PREFERRED_DAY_OFF', ['day' => 'FRI', 'priority' => 'HARD']);
+
+        $week = $this->scheduler->generate(self::WEEK)->fresh();
+
+        $this->assertSame([], $week->rule_misses);
+    }
+
     public function test_a_hard_preferred_day_off_closes_the_day(): void
     {
         $emily = $this->teacher('Emily Carter', 'FT', 'Toddler');

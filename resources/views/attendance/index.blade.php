@@ -2259,7 +2259,17 @@ function attendanceApp() { return {
 
         const value = this.normalizeTime(this.draft);
         const outValue = this.retimingBoth ? this.normalizeTime(this.draftOut) : '';
+
+        // Something typed that is not a time says so, and the hour stays as it
+        // was. It used to close without a word, which read as saved.
+        const bad = [[this.draft, value], [this.retimingBoth ? this.draftOut : '', outValue]]
+            .find(([typed, read]) => String(typed || '').trim() !== '' && ! read);
         this.cancelRetime();
+        if (bad) {
+            this.notice = '“' + String(bad[0]).trim() + '” is not a time — try 8:05a or 5:30p. Nothing was changed.';
+
+            return;
+        }
 
         // Both hours of a recorded arrival go together, either one alone
         // being enough; an empty box leaves its hour as it was.
@@ -2292,9 +2302,10 @@ function attendanceApp() { return {
         if (! match) return '';
 
         let hours = parseInt(match[1], 10);
-        const minutes = Math.min(match[2] ? parseInt(match[2], 10) : 0, 59);
+        const minutes = match[2] ? parseInt(match[2], 10) : 0;
 
-        if (hours > 23) return '';
+        // "7:61a" is a typo, not 7:59a: it was clamped and saved until 29 Oct 2026.
+        if (hours > 23 || minutes > 59) return '';
 
         /*
          * A padded hour with no am/pm is already a 24-hour one, and is taken

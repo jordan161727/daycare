@@ -47,6 +47,9 @@ class StaffSchedule
     /** @var array<string, array<string, list<string>>> Soft rules broken, by user then rule type. */
     private array $broken = [];
 
+    /** @var array<int, list<string>> The same, by rule id, kept on the week for the Rules tab. */
+    private array $missed = [];
+
     /**
      * @var array<int, array<string, int>> Approved leave this week, as minutes
      *                                     per person per date.
@@ -87,6 +90,7 @@ class StaffSchedule
         $this->assigned = [];
         $this->cover = [];
         $this->broken = [];
+        $this->missed = [];
         $this->warnings = [];
         $this->leaveToday = [];
 
@@ -212,6 +216,7 @@ class StaffSchedule
                     'generated_at' => now(),
                     'generated_by' => $actor?->id,
                     'warnings' => array_values(array_unique($this->warnings)),
+                    'rule_misses' => $this->ruleMisses(),
                 ]
             );
         });
@@ -703,11 +708,13 @@ class StaffSchedule
             foreach ($soft as $rule) {
                 if ($rule->rule_type === 'PREFERRED_DAY_OFF' && $rule->appliesOn($day)) {
                     $this->broken[$person->id]['PREFERRED_DAY_OFF'][] = $day;
+                    $this->missed[$rule->id][] = $day;
                 }
 
                 if ($rule->rule_type === 'PREFERRED_START' && $rule->time_1 !== null
                     && $mine->min('starts_at') !== (int) $rule->time_1) {
                     $this->broken[$person->id]['PREFERRED_START'][] = $day;
+                    $this->missed[$rule->id][] = $day;
                 }
             }
         }
@@ -846,6 +853,35 @@ class StaffSchedule
                 };
             }
         }
+    }
+
+    /**
+     * The Prefer rules not kept this week, by rule id, each with a short why.
+     *
+     * Only ever Prefer: a Must is never broken, it bounds the solve.
+     *
+     * @return array<int, array{days: list<string>, reason: string}>
+     */
+    private function ruleMisses(): array
+    {
+        $out = [];
+
+        foreach ($this->missed as $ruleId => $days) {
+            $rule = StaffRule::find($ruleId);
+            $days = array_values(array_unique($days));
+            $when = count($days) === count(config('daycare.days')) ? 'every day' : implode(', ', array_map(fn ($d) => ucfirst(strtolower($d)), $days));
+
+            $out[$ruleId] = [
+                'days' => $days,
+                'reason' => match ($rule?->rule_type) {
+                    'PREFERRED_DAY_OFF' => 'Scheduled '.$when.' — needed for cover.',
+                    'PREFERRED_START' => 'Started at a different time '.$when.' to cover the rooms.',
+                    default => 'Not kept '.$when.'.',
+                },
+            ];
+        }
+
+        return $out;
     }
 
     private function checkPairs(array $shifts, Collection $staff, array $noPair, string $day): void

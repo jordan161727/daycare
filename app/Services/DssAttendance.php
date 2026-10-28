@@ -55,7 +55,9 @@ class DssAttendance
     /** "8:00a", "8:00 AM", "08:00", "3p" → minutes; null when it is not a time. */
     public static function minutes(?string $text): ?int
     {
-        if (! preg_match('/^\s*(\d{1,2})(?::(\d{2}))?\s*([ap])?/i', (string) $text, $m)) {
+        // Anchored at both ends: "9abc" or "8:05xyz" is not a time, and was
+        // read as one until 29 Oct 2026.
+        if (! preg_match('/^\s*(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?m?\.?)?\s*$/i', (string) $text, $m)) {
             return null;
         }
         $h = (int) $m[1];
