@@ -6,7 +6,7 @@
 
      Laid out as Jordan's "Kiosks — full-width layout" mock-up (29 Oct
      2026): four counts across the top, the real /room tablet at the
-     mock-up's iPad width on the left, and Who's where filling the rest —
+     tablet a little over the mock-up's iPad width (500px, Jordan 29 Oct) on the left, and Who's where filling the rest —
      rooms as tiles two across, then who is on break, in the office and not
      in, each as a small card. It reads the same StaffPresence the kiosks
      write; the counts and the right-hand column are fetched again every few
@@ -64,7 +64,7 @@
         @endforeach
     </div>
 
-    <div class="mt-5 grid items-start gap-5 lg:grid-cols-[440px_minmax(0,1fr)]">
+    <div class="mt-5 grid items-start gap-5 lg:grid-cols-[500px_minmax(0,1fr)]">
         {{-- A room tablet. The gear and a room code say which room. --}}
         <div data-kiosk-frame="room">
             <div class="mb-2 ml-1.5 flex items-baseline justify-between gap-2">
@@ -73,7 +73,7 @@
             </div>
             <p class="-mt-1 mb-2 ml-1.5 text-xs text-slate-500 dark:text-slate-400">Tap ⚙ on the tablet and key a room code to change which room it’s in.</p>
             <div class="rounded-[34px] bg-[#1d2333] p-3.5 shadow-[0_10px_30px_rgba(28,33,48,.18)]">
-                <iframe src="{{ route('room.kiosk') }}" title="Room tablet" class="block h-[760px] w-full rounded-[22px] bg-[#f4f6fb]"></iframe>
+                <iframe src="{{ route('room.kiosk') }}" title="Room tablet" class="block h-[820px] w-full rounded-[22px] bg-[#f4f6fb]"></iframe>
             </div>
         </div>
 
