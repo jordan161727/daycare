@@ -261,7 +261,7 @@ class StaffKiosk
         }
 
         $punch = $this->writePunch($user, self::PUNCH_FOR[$action], TimePunch::SOURCE_CLOCK, $method, $device, $ip);
-        $this->presence->logPunch($user, $user->name.' '.self::FEED[$action].' (front door)', $device);
+        $this->presence->logPunch($user, $this->feedLine($user, $action, $status), $device);
 
         $warning = null;
         $place = null;
@@ -312,6 +312,27 @@ class StaffKiosk
             'placed' => $place !== null,
             'warning' => $warning,
         ];
+    }
+
+    /**
+     * The activity line for a punch at the front door (QA spec B6/B8, 28 Oct
+     * 2026): a break that ends says how long it was — "Evana ended break
+     * (16 min)" — and a clock-out says the day's hours — "Farhana clocked
+     * out · 2h 33m". The rest say where they were made.
+     */
+    private function feedLine(User $user, string $action, array $status): string
+    {
+        $name = $user->name;
+
+        return match ($action) {
+            'break_end', 'lunch_end' => $name.' '.self::FEED[$action].' ('.($status['since'] ? max(0, (int) $status['since']->diffInMinutes(now())) : 0).' min)',
+            'clock_out' => (function () use ($user, $name) {
+                $minutes = (int) $this->clock->day($user->id, today()->toDateString())['so_far'];
+
+                return $name.' clocked out · '.intdiv($minutes, 60).'h '.str_pad((string) ($minutes % 60), 2, '0', STR_PAD_LEFT).'m';
+            })(),
+            default => $name.' '.self::FEED[$action].' (front door)',
+        };
     }
 
     /** The punch itself, with where and how it was made written on it. */

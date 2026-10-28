@@ -123,7 +123,9 @@
                                 </template>
                                 <button type="button" @click="entry = ''" class="min-h-14 rounded-xl border border-slate-200 bg-white text-sm font-semibold uppercase tracking-wide text-slate-400 transition active:scale-95">Clear</button>
                                 <button type="button" @click="press('0')" class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-700 transition active:scale-95 active:bg-indigo-50">0</button>
-                                <button type="submit" :disabled="entry.length < 4 || sending" class="min-h-14 rounded-xl bg-indigo-600 text-sm font-bold uppercase tracking-wide text-white transition active:scale-95 disabled:bg-slate-200 disabled:text-slate-400">Enter</button>
+                                {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
+                                <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back class="min-h-14 rounded-xl border border-slate-200 bg-white text-2xl font-semibold text-slate-500 transition active:scale-95">⌫</button>
+                                <button type="submit" :disabled="entry.length < 4 || sending" class="col-span-3 min-h-12 rounded-xl bg-indigo-600 text-sm font-bold uppercase tracking-wide text-white transition active:scale-95 disabled:bg-slate-200 disabled:text-slate-400">Enter</button>
                             </div>
                         </form>
 

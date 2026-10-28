@@ -195,6 +195,29 @@ class StaffPresenceBoardTest extends TestCase
         $this->actingAs($teacher)->get(route('staff.presence'))->assertForbidden();
     }
 
+    /**
+     * Ray (28 Oct 2026): "a link to the kiosk above the login details, as in
+     * my draft". It sits above the user card, opens Who's where, and the
+     * board links on to the clock and to pairing. A teacher, who cannot open
+     * the board, is not offered it.
+     */
+    public function test_the_kiosks_link_sits_above_the_login_details_for_a_director(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('dashboard'))->assertOk()->getContent();
+
+        $link = strpos($html, 'data-kiosks-link');
+        $this->assertNotFalse($link);
+        $this->assertLessThan(strpos($html, 'title="My profile"'), $link, 'the Kiosks link comes before the login details');
+        $this->assertStringContainsString('href="'.route('staff.presence').'" data-kiosks-link', $html);
+
+        $board = $this->actingAs($this->admin)->get(route('staff.presence'))->assertOk()->getContent();
+        $this->assertStringContainsString('href="'.route('clock.kiosk').'" target="_blank"', $board);
+        $this->assertStringContainsString('href="'.route('settings.devices').'"', $board);
+
+        $teacher = $this->teacher('Lana Ortiz', 'PreK');
+        $this->assertStringNotContainsString('data-kiosks-link', $this->actingAs($teacher)->get(route('dashboard'))->getContent());
+    }
+
     /* ---- helpers ---- */
 
     private function teacher(string $name, string $room): User

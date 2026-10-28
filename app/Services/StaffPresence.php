@@ -136,9 +136,22 @@ class StaffPresence
             ?->copy();
     }
 
+    /**
+     * Today's open check-in. One left open from an earlier day — the closing
+     * job did not run — is not where anybody is standing today (28 Oct 2026).
+     */
     public function openCheckin(User $user): ?StaffRoomCheckin
     {
-        return StaffRoomCheckin::open()->where('user_id', $user->id)->orderByDesc('started_at')->orderByDesc('id')->first();
+        return StaffRoomCheckin::open()->where('user_id', $user->id)
+            ->where('started_at', '>=', today())
+            ->orderByDesc('started_at')->orderByDesc('id')->first();
+    }
+
+    /** Close every open check-in this person holds, today's or older. */
+    private function closeAllOpen(User $user, string $reason, ?StaffDevice $device): void
+    {
+        StaffRoomCheckin::open()->where('user_id', $user->id)->get()
+            ->each(fn (StaffRoomCheckin $row) => $row->close($reason, $device));
     }
 
     /** The room a break was taken from, so End Break can put them back. */
@@ -177,7 +190,7 @@ class StaffPresence
      */
     public function checkIn(User $user, ?string $room, string $via, ?StaffDevice $device = null): StaffRoomCheckin
     {
-        $this->openCheckin($user)?->close(StaffRoomCheckin::ENDED_MOVE, $device);
+        $this->closeAllOpen($user, StaffRoomCheckin::ENDED_MOVE, $device);
 
         return StaffRoomCheckin::create([
             'user_id' => $user->id,
@@ -196,7 +209,11 @@ class StaffPresence
      */
     public function leave(User $user, string $reason, ?StaffDevice $device = null): ?StaffRoomCheckin
     {
-        return $this->openCheckin($user)?->close($reason, $device);
+        $today = $this->openCheckin($user)?->close($reason, $device);
+        // Anything older still open goes too, quietly: it was never today's.
+        $this->closeAllOpen($user, StaffRoomCheckin::ENDED_CLOSING, $device);
+
+        return $today;
     }
 
     /**
@@ -219,10 +236,26 @@ class StaffPresence
 
     /* --------------------------------------------------------------- rooms */
 
-    /** Everyone whose open check-in names this room. */
+    /**
+     * Everyone standing in this room: an open check-in from today, held by
+     * somebody working right now.
+     *
+     * RULE (28 Oct 2026): the check-in alone is not enough. A director who
+     * adds a forgotten clock-out in Staff attendance writes a punch, not a
+     * room move, and that person is off — so they must stop counting at
+     * once, whoever wrote the punch. The same holds for a break typed in by
+     * hand, and for a check-in left open from an earlier day.
+     */
     public function teachersIn(string $room): Collection
     {
-        return StaffRoomCheckin::open()->where('classroom', $room)->with('user')->orderBy('started_at')->get();
+        $today = today()->toDateString();
+
+        return StaffRoomCheckin::open()->where('classroom', $room)
+            ->where('started_at', '>=', today())
+            ->with('user')->orderBy('started_at')->get()
+            ->filter(fn (StaffRoomCheckin $row) => $row->user !== null
+                && $this->clock->state($row->user, $today) === TimeClock::WORKING)
+            ->values();
     }
 
     /**
@@ -379,7 +412,13 @@ class StaffPresence
      * The whole floor at a glance (HANDOFF §5.3.1): room by room, on break,
      * in the office, not clocked in, and the newest lines of the feed.
      */
-    public function board(int $feedLines = 30): array
+    /**
+     * The feed shows the 12 newest lines (QA spec F2, 28 Oct 2026). The full
+     * history is kept and read on Staff → Activity.
+     */
+    public const FEED_LINES = 12;
+
+    public function board(int $feedLines = self::FEED_LINES): array
     {
         $children = $this->childrenByRoom();
         $teachers = User::teachers()->get();
@@ -501,8 +540,19 @@ class StaffPresence
         $today = today()->toDateString();
         $flagged = 0;
 
-        foreach (User::teachers()->get() as $user) {
+        // Teachers, and anybody else holding a check-in or a punch today — a
+        // director who clocks in with a PIN is on the floor too (28 Oct 2026).
+        $ids = User::teachers()->pluck('id')
+            ->merge(StaffRoomCheckin::open()->pluck('user_id'))
+            ->merge(TimePunch::live()->whereDate('work_date', $today)->pluck('user_id'))
+            ->unique();
+
+        foreach (User::whereIn('id', $ids)->get() as $user) {
             if ($this->clock->state($user, $today) === TimeClock::OFF) {
+                // Off, but a check-in was left open (a clock-out typed in by
+                // hand, or an earlier day): close it without a flag.
+                $this->closeAllOpen($user, StaffRoomCheckin::ENDED_CLOSING, $device);
+
                 continue;
             }
 

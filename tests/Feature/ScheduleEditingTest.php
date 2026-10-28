@@ -371,7 +371,7 @@ class ScheduleEditingTest extends TestCase
         // The hour is typed through the pencil, never tomorrow: the field
         // opens only where an arrival could be recorded.
         $this->assertStringContainsString('! (this.editing && this.canSignIn(date))', $html);
-        $this->assertStringContainsString('@blur="commitRetime(child.id,', $html);
+        $this->assertStringContainsString('@focusout="if (! $el.contains($event.relatedTarget)) commitRetime(child.id,', $html);
 
         // And signing in itself still stops at today.
         $this->assertStringContainsString('return this.editing && this.canAmend && date < this.today;', $html);

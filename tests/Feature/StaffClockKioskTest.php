@@ -36,6 +36,31 @@ class StaffClockKioskTest extends TestCase
         config(['daycare.kiosk.enabled' => true]);
     }
 
+    /**
+     * The sign-in page leads to the staff kiosks as well as the families'
+     * (Jordan, 28 Oct 2026: "connect the kiosk for staff"), and both open
+     * signed out. With the kiosks off the links are not offered, because
+     * those addresses would answer 404.
+     */
+    public function test_the_sign_in_page_links_to_the_staff_clock_and_the_room_tablet(): void
+    {
+        $html = $this->get(route('login'))->assertOk()->getContent();
+
+        // The families' kiosk is parked for now (Jordan, 28 Oct 2026); it
+        // still answers at its own address.
+        $this->assertStringNotContainsString('Open check-in kiosk', $html);
+        $this->get(route('kiosk.index'))->assertOk();
+        $this->assertStringContainsString('href="'.route('clock.kiosk').'" data-staff-clock', $html);
+        $this->assertStringContainsString('href="'.route('room.kiosk').'" data-room-tablet', $html);
+
+        // Both open without signing in.
+        $this->get(route('clock.kiosk'))->assertOk()->assertSee('not set up yet');
+        $this->get(route('room.kiosk'))->assertOk()->assertSee('not set up yet');
+
+        config(['daycare.kiosk.enabled' => false]);
+        $this->assertStringNotContainsString('data-staff-kiosks', $this->get(route('login'))->getContent());
+    }
+
     public function test_clocked_out_offers_only_clock_in(): void
     {
         [, $token] = $this->device();

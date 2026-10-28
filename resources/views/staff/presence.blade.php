@@ -24,6 +24,11 @@
         <div class="flex items-center gap-2 text-xs">
             <a href="{{ route('staff.presence') }}" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-800 dark:text-slate-300">Refresh</a>
             <a href="{{ route('settings.rooms') }}" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-800 dark:text-slate-300">Room codes ⚙</a>
+            {{-- The kiosks themselves (Ray, 28 Oct 2026). The clock opens in
+                 its own tab: on a browser that was never paired it says so,
+                 and pairing is one click away under Devices. --}}
+            <a href="{{ route('clock.kiosk') }}" target="_blank" rel="noopener" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-night-800 dark:text-slate-300" data-open-clock>Front door clock ↗</a>
+            <a href="{{ route('settings.devices') }}" class="rounded-xl px-3 py-1.5 font-semibold text-white hover:brightness-110" style="background: #1b5e91" data-pair-kiosk>Pair a kiosk</a>
         </div>
     </div>
 

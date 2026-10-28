@@ -312,7 +312,7 @@ Log in as a director and:
 ### The automated version
 
 ```bash
-php artisan test --filter "KioskWalkthroughTest|DoorClockRoomsTest|RoomTabletTest|StaffPresenceBoardTest|StaffClockKioskTest"
+php artisan test --filter "KioskWalkthroughTest|KioskWorkflowChecklistTest|DoorClockRoomsTest|RoomTabletTest|StaffPresenceBoardTest|StaffClockKioskTest"
 ```
 
 `KioskWalkthroughTest` is this hand test, step for step, driven through the

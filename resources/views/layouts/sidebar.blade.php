@@ -134,6 +134,20 @@
          scrolling nav above, so it is pinned there and stays on the screen
          however far the links run. --}}
     <div class="shrink-0 border-t border-white/20 px-3 py-3 dark:border-white/10">
+        {{-- Kiosks, above who you are (Ray's draft, 28 Oct 2026: "a link to
+             the kiosk above the login details"). It opens Who's where — what
+             the front door clock and the room tablets are saying — because a
+             desk browser is not a paired kiosk; the board links on to the
+             clock and to pairing. Directors only, as the board is. --}}
+        @if($isAdmin)
+            <a href="{{ route('staff.presence') }}" data-kiosks-link
+               @class(['mb-2 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110', 'ring-2 ring-white/70' => request()->routeIs('staff.presence')])
+               style="background: #1b5e91" :class="collapsed ? 'justify-center' : ''" title="Kiosks — who's where">
+                <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>
+                <span x-show="!collapsed">Kiosks</span>
+                <span x-show="!collapsed" class="ml-auto rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold">PIN</span>
+            </a>
+        @endif
         <div :class="collapsed ? 'flex-col gap-1.5' : 'gap-2'" class="flex items-center rounded-xl bg-white/40 p-2 dark:bg-white/5">
             <a href="{{ route('profile.edit') }}" class="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg transition hover:opacity-80" title="My profile">
                 <x-user-avatar :user="auth()->user()" size="h-8 w-8" text="text-xs" />

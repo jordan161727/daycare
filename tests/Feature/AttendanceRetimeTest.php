@@ -220,7 +220,7 @@ class AttendanceRetimeTest extends TestCase
         $this->assertStringContainsString('const total = ((hours * 60 + mins + minutes) % 1440 + 1440) % 1440;', $html);
 
         // An empty field starts from the hour the centre opens, not midnight.
-        $this->assertStringContainsString("this.normalizeTime(this.draft) || '07:00'", $html);
+        $this->assertStringContainsString("this.normalizeTime(this[field]) || '07:00'", $html);
 
         // And the arrows can read their own output back. nudgeDraft() writes
         // a padded 24-hour string, and without this the "before seven is the

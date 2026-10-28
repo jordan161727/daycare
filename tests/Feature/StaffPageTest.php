@@ -86,14 +86,18 @@ class StaffPageTest extends TestCase
         $this->assertStringContainsString('In since 8:58 AM', $html);
     }
 
-    public function test_a_teacher_may_not_open_it_and_the_kiosks_are_not_on_the_menu(): void
+    public function test_a_teacher_may_not_open_it_and_the_kiosks_link_goes_to_whos_where(): void
     {
         $this->actingAs($this->zameera)->get(route('staff.index'))->assertForbidden();
 
         $html = $this->actingAs($this->admin)->get(route('staff.index'))->assertOk()->getContent();
 
         $this->assertStringContainsString(route('staff.index'), $html);
-        $this->assertStringNotContainsString('>Kiosks<', $html);
+        // Kiosks is on the menu since Ray asked (28 Oct 2026), but it opens
+        // Who's where: a desk browser is not a paired kiosk, so the menu
+        // never links straight to the clock screen.
+        $this->assertStringContainsString('>Kiosks<', $html);
+        $this->assertStringContainsString('href="'.route('staff.presence').'" data-kiosks-link', $html);
         $this->assertStringNotContainsString(route('clock.kiosk'), $html);
         $this->assertStringNotContainsString('MOCKUP', $html);
     }

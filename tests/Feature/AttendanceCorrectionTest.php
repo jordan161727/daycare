@@ -692,7 +692,7 @@ class AttendanceCorrectionTest extends TestCase
         // E on the box opens it too, through the same one handler.
         $this->assertStringContainsString("event.key === 'e' || event.key === 'E'", $html);
 
-        $this->assertStringContainsString('@blur="commitRetime(child.id,', $html);
+        $this->assertStringContainsString('@focusout="if (! $el.contains($event.relatedTarget)) commitRetime(child.id,', $html);
         $this->assertStringContainsString('@keydown.escape.prevent="cancelRetime()"', $html);
         $this->assertStringContainsString("if (! value) return;", $html);
 

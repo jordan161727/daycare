@@ -174,9 +174,36 @@
 
                 {{-- The door tablet's own way in. It is outside the auth group —
                      nobody signs in at a door — so this is a plain link, and the
-                     guardian's PIN is what authenticates on the other side. --}}
+                     guardian's PIN is what authenticates on the other side.
+
+                     Parked (Jordan, 28 Oct 2026: "for now hide the check-in
+                     kiosk, I want the staff kiosk"). The families' kiosk still
+                     answers at /kiosk; flip to @if(true) to offer it here again. --}}
+                @if(false)
                 <a href="{{ route('kiosk.index') }}"
                    class="auth-rise block w-full rounded-[14px] border border-slate-200 bg-white/70 px-4 py-[20px] text-center text-[16px] font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md hover:shadow-slate-300/40 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 dark:hover:shadow-none" style="animation-delay:.18s">Open check-in kiosk</a>
+                @endif
+
+                {{-- The staff kiosks, beside the families' one (Jordan, 28 Oct
+                     2026: "connect the kiosk for staff"). Signed out like the
+                     door: the PIN is the way in. Each opens as the device this
+                     browser was paired as; an unpaired browser is told to ask
+                     an administrator. Only offered when the kiosks are on —
+                     otherwise these addresses answer 404. --}}
+                @if(config('daycare.kiosk.enabled'))
+                    <div class="auth-rise grid grid-cols-2 gap-3" style="animation-delay:.18s" data-staff-kiosks>
+                        <a href="{{ route('clock.kiosk') }}" data-staff-clock
+                           class="flex flex-col items-center justify-center gap-0.5 rounded-[14px] border border-slate-200 bg-white/70 px-3 py-[14px] text-center transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md hover:shadow-slate-300/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:hover:shadow-none">
+                            <span class="text-[15px] font-semibold text-slate-700 dark:text-slate-200">Staff time clock</span>
+                            <span class="text-[12px] text-slate-500 dark:text-slate-400">Front door · clock in &amp; out</span>
+                        </a>
+                        <a href="{{ route('room.kiosk') }}" data-room-tablet
+                           class="flex flex-col items-center justify-center gap-0.5 rounded-[14px] border border-slate-200 bg-white/70 px-3 py-[14px] text-center transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md hover:shadow-slate-300/40 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10 dark:hover:shadow-none">
+                            <span class="text-[15px] font-semibold text-slate-700 dark:text-slate-200">Room tablet</span>
+                            <span class="text-[12px] text-slate-500 dark:text-slate-400">Check into a room</span>
+                        </a>
+                    </div>
+                @endif
 
                 <p class="auth-rise mt-8 text-center text-[15px] text-slate-500 dark:text-slate-400" style="animation-delay:.24s">Need access? <span class="font-semibold text-indigo-600 dark:text-indigo-300">Ask your administrator</span></p>
             </div>
