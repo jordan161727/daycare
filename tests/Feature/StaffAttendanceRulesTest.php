@@ -302,6 +302,12 @@ class StaffAttendanceRulesTest extends TestCase
         $c = $live['counts'];
         $this->assertSame($c['all'], $c['in'] + $c['done'] + $c['late'] + $c['due'] + $c['off']);
         $this->assertSame(count($live['rows']), $c['all']);
+
+        // And the chips on the page say so, Done included.
+        $html = $this->actingAs($this->director)->get(route('staff.timesheets'))->getContent();
+        foreach (['All '.$c['all'], 'Clocked in '.$c['in'], 'Done '.$c['done'], 'Not in '.$c['late'], 'Due later '.$c['due'], 'Off '.$c['off']] as $chip) {
+            $this->assertStringContainsString($chip, $html);
+        }
     }
 
     /* ---- 8. time off conflicts ---- */

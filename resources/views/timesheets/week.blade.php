@@ -87,11 +87,13 @@
             <div style="padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; border-bottom: 1px solid #e7e9f0;">
                 <h2 style="margin: 0; font-size: 17px; font-weight: 700;">Today · live as of <span x-text="now">{{ now()->format('g:i A') }}</span></h2>
                 {{-- The pills narrow the list without a round trip: every
-                     row is already here. "Done for today" is under All only. --}}
+                     row is already here. Every row is under exactly one of
+                     them, so the five add up to All. --}}
                 <div style="display: flex; gap: 6px; flex-wrap: wrap;" role="group" aria-label="Filter staff">
                     @foreach([
                         'all' => ['All', $counts['all'], 'mut'],
                         'in' => ['Clocked in', $counts['in'], 'ok'],
+                        'done' => ['Done', $counts['done'], 'mut'],
                         'late' => ['Not in', $counts['late'], 'bad'],
                         'due' => ['Due later', $counts['due'], 'mut'],
                         'off' => ['Off', $counts['off'], 'mut'],
