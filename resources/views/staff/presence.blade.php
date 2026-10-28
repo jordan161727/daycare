@@ -76,54 +76,66 @@
     @endif
 
     <div class="grid gap-4">
-        <section class="glass-card rounded-2xl p-5">
-            <h2 class="mb-3 text-base font-bold">Who’s where right now</h2>
-            <div class="space-y-3">
+        {{-- Compact (Jordan, 29 Oct 2026: "make smaller the who's where"):
+             rooms as small tiles two or three across rather than one long
+             list, and the people who are not in a room as name chips, so the
+             whole centre fits beside the tablet. --}}
+        <section class="glass-card rounded-2xl p-4" data-whos-where>
+            <h2 class="mb-2.5 text-sm font-bold">Who’s where right now</h2>
+            <div class="grid grid-cols-2 gap-2 2xl:grid-cols-3">
                 @foreach($board['rooms'] as $room)
-                    <div class="rounded-r-xl border-l-[6px] py-1.5 pl-3" style="border-color: {{ $room['colour'] }}" data-room-row="{{ $room['room'] }}">
-                        <div class="flex items-center justify-between gap-2">
-                            <b class="text-sm"><x-room-icon :room="$room['room']" size="text-sm" /> {{ $room['room'] }}</b>
-                            <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $tone($room['tone']) }}" data-room-ratio>{{ $room['label'] }}</span>
+                    <div class="min-w-0 rounded-lg border border-slate-200/80 border-l-4 bg-white/60 px-2.5 py-1.5 dark:border-white/10 dark:bg-white/5" style="border-left-color: {{ $room['colour'] }}" data-room-row="{{ $room['room'] }}">
+                        <div class="flex items-center justify-between gap-1.5">
+                            <b class="truncate text-[13px]"><x-room-icon :room="$room['room']" size="text-xs" /> {{ $room['room'] }}</b>
+                            <span class="shrink-0 rounded-full px-1.5 py-px text-[10.5px] font-semibold {{ $tone($room['tone']) }}" data-room-ratio title="{{ $room['label'] }}">{{ $room['label'] }}</span>
                         </div>
                         @forelse($room['people'] as $person)
-                            <div class="flex justify-between text-sm"><span>{{ $person['name'] }}</span><span class="text-slate-500 dark:text-slate-400">since {{ $person['since'] }}</span></div>
+                            <div class="flex justify-between gap-2 text-xs"><span class="truncate">{{ $person['name'] }}</span><span class="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">{{ $person['since'] }}</span></div>
                         @empty
-                            <p class="text-xs text-slate-400">Nobody checked in</p>
+                            <p class="text-[11px] text-slate-400">Nobody checked in</p>
                         @endforelse
                     </div>
                 @endforeach
+            </div>
 
-                <div class="rounded-r-xl border-l-[6px] border-amber-500 py-1.5 pl-3" data-on-break>
-                    <div class="flex items-center justify-between gap-2"><b class="text-sm">On break</b><span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $tone('brk') }}">{{ count($board['on_break']) }}</span></div>
-                    @foreach($board['on_break'] as $person)
-                        <div class="flex justify-between text-sm"><span>{{ $person['name'] }}</span><span class="text-slate-500 dark:text-slate-400">since {{ $person['since'] }} · from {{ $person['last'] }}</span></div>
-                    @endforeach
+            <div class="mt-3 space-y-2 border-t border-slate-100 pt-2.5 text-xs dark:border-white/5">
+                <div data-on-break>
+                    <div class="mb-1 flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-500"></span><b class="text-[12px]">On break</b><span class="rounded-full px-1.5 text-[10.5px] font-semibold {{ $tone('brk') }}">{{ count($board['on_break']) }}</span></div>
+                    <div class="flex flex-wrap gap-1">
+                        @foreach($board['on_break'] as $person)
+                            <span class="rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-900 dark:bg-amber-500/10 dark:text-amber-100" title="since {{ $person['since'] }} · from {{ $person['last'] }}">{{ $person['name'] }} <span class="text-amber-700/70 dark:text-amber-200/60">· {{ $person['since'] }} · {{ $person['last'] }}</span></span>
+                        @endforeach
+                    </div>
                 </div>
 
-                <div class="rounded-r-xl border-l-[6px] border-slate-400 py-1.5 pl-3" data-office>
-                    <div class="flex items-center justify-between gap-2"><b class="text-sm">Office / no room</b><span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $tone('mut') }}">{{ count($board['office']) }}</span></div>
-                    @foreach($board['office'] as $person)
-                        <div class="flex justify-between text-sm"><span>{{ $person['name'] }}</span><span class="text-slate-500 dark:text-slate-400">{{ $person['since'] }}</span></div>
-                    @endforeach
+                <div data-office>
+                    <div class="mb-1 flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-slate-400"></span><b class="text-[12px]">Office / no room</b><span class="rounded-full px-1.5 text-[10.5px] font-semibold {{ $tone('mut') }}">{{ count($board['office']) }}</span></div>
+                    <div class="flex flex-wrap gap-1">
+                        @foreach($board['office'] as $person)
+                            <span class="rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-700 dark:bg-white/10 dark:text-slate-200" title="{{ $person['since'] }}">{{ $person['name'] }}</span>
+                        @endforeach
+                    </div>
                 </div>
 
-                <div class="rounded-r-xl border-l-[6px] border-slate-200 py-1.5 pl-3 dark:border-white/10" data-not-in>
-                    <b class="text-sm">Not clocked in</b>
-                    @foreach($board['not_in'] as $person)
-                        <div class="flex items-center justify-between gap-2 text-sm"><span>{{ $person['name'] }}</span><span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $tone($person['tone']) }}">{{ $person['note'] }}</span></div>
-                    @endforeach
+                <div data-not-in>
+                    <div class="mb-1 flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-slate-200 dark:bg-white/20"></span><b class="text-[12px]">Not clocked in</b><span class="rounded-full px-1.5 text-[10.5px] font-semibold {{ $tone('mut') }}">{{ count($board['not_in']) }}</span></div>
+                    <div class="flex flex-wrap gap-1">
+                        @foreach($board['not_in'] as $person)
+                            <span class="rounded-md px-1.5 py-0.5 {{ $tone($person['tone']) }}">{{ $person['name'] }} <span class="opacity-75">· {{ $person['note'] }}</span></span>
+                        @endforeach
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section class="glass-card rounded-2xl p-5" data-activity>
+        <section class="glass-card rounded-2xl p-4" data-activity>
             <div class="flex items-center justify-between gap-2">
                 <h2 class="text-sm font-bold">Activity</h2>
                 <span class="text-[11px] text-slate-500 dark:text-slate-400"><span class="inline-block h-2 w-2 rounded-full" style="background:#1b5e91"></span> punch · <span class="inline-block h-2 w-2 rounded-full" style="background:#9dc585"></span> room · <span class="inline-block h-2 w-2 rounded-full" style="background:#be123c"></span> flag</span>
             </div>
             <ul class="mt-2 divide-y divide-slate-100 dark:divide-white/5">
                 @forelse($board['activity'] as $line)
-                    <li class="grid grid-cols-[64px_12px_1fr] items-baseline gap-2 py-1.5 text-[13px]">
+                    <li class="grid grid-cols-[58px_10px_1fr] items-baseline gap-2 py-1 text-xs">
                         <span class="tabular-nums text-slate-500 dark:text-slate-400">{{ $line['time'] }}</span>
                         <span class="inline-block h-2 w-2 rounded-full" style="background: {{ $line['colour'] }}"></span>
                         <span class="{{ $line['kind'] === 'flag' && $line['resolved'] ? 'text-slate-400 line-through' : '' }}">{{ $line['text'] }}</span>
