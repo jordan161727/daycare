@@ -207,8 +207,10 @@ class StaffPresenceBoardTest extends TestCase
 
         $link = strpos($html, 'data-kiosks-link');
         $this->assertNotFalse($link);
-        $this->assertLessThan(strpos($html, 'title="My profile"'), $link, 'the Kiosks link comes before the login details');
-        $this->assertStringContainsString('href="'.route('staff.presence').'" data-kiosks-link', $html);
+        $this->assertLessThan(strpos($html, 'title="My profile"'), $link, 'the Kiosk link comes before the login details');
+        // One click to the room tablet itself (Jordan, 2 Nov 2026). The board below
+        // is off the menu but still answers at its address.
+        $this->assertStringContainsString('href="'.route('staff.kiosk').'" data-kiosks-link', $html);
 
         $board = $this->actingAs($this->admin)->get(route('staff.presence'))->assertOk()->getContent();
         // No "Pair a kiosk" any more (29 Oct 2026): screens pair themselves.

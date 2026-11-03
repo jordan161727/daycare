@@ -45,7 +45,9 @@
          flex-1 and overflow-y-auto alone left the nav as tall as its links and
          went on pushing the account block below off the bottom of the screen —
          the scrollbar never appeared because there was nothing to overflow. --}}
-    <nav class="sidebar-scroll min-h-0 flex-1 space-y-px overflow-y-auto overscroll-contain px-3 py-1">
+    {{-- pt-4: room under the "Angel Nest" wordmark before the first link
+         (Jordan, 31 Oct 2026). --}}
+    <nav class="sidebar-scroll min-h-0 flex-1 space-y-px overflow-y-auto overscroll-contain px-3 pb-1 pt-4">
         {{-- The menu as Phase 1.1 of docs/work.md orders it (24 Oct 2026):
              the day's screens, then Staff, Families and Only you as sections,
              then Reports and Settings. Modules the mock-ups mark NEW wear the
@@ -63,9 +65,15 @@
         @php($icon = fn (string $d) => '<svg class="h-[18px] w-[18px] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="'.$d.'"/></svg>')
         @php($link = fn (string $route, string $active, string $label, string $d, string $badge = '') => '<a href="'.route($route).'" class="nav-link '.(request()->routeIs(...explode('|', $active)) ? 'nav-link-active' : '').'">'.$icon($d).'<span x-show="!collapsed">'.$label.'</span>'.$badge.'</a>')
 
+        {{-- A teacher's menu is five links (Jordan, 31 Oct 2026): Dashboard,
+             Teacher Attendance, Children, Schedule and Messages. The rest are
+             off their menu only; each page keeps its own role check. --}}
+        @php($isTeacher = auth()->user()->role === 'teacher')
         {!! $link('dashboard', 'dashboard', 'Dashboard', 'M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z') !!}
-        {!! $link('floor-plan.index', 'floor-plan.*', 'Floor plan', 'M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 7h16M12 4v16', $new) !!}
-        {!! $link('attendance.index', 'attendance.*', 'Director Attendance', 'M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z') !!}
+        @unless($isTeacher)
+            {!! $link('floor-plan.index', 'floor-plan.*', 'Floor plan', 'M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 7h16M12 4v16', $new) !!}
+            {!! $link('attendance.index', 'attendance.*', 'Director Attendance', 'M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z') !!}
+        @endunless
         {!! $link('check-in.index', 'check-in.*', 'Teacher Attendance', 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z') !!}
         {!! $link('children.index', 'children.index', 'Children', 'M17 20h5v-2a4 4 0 00-4-4h-1m-4 6H2v-2a4 4 0 014-4h3a4 4 0 014 4v2zm-5-6a4 4 0 100-8 4 4 0 000 8z') !!}
 
@@ -108,8 +116,10 @@
             {!! $link('dss.index', 'dss.*', 'DSS', 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', '<span x-show="!collapsed" class="ml-auto rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Private</span>') !!}
         @endcan
 
-        <div class="pt-1"></div>
-        {!! $link('reports.index', 'reports.*', 'Reports', 'M4 19V9m5 10V5m5 14v-7m5 7V3', $new) !!}
+        @unless($isTeacher)
+            <div class="pt-1"></div>
+            {!! $link('reports.index', 'reports.*', 'Reports', 'M4 19V9m5 10V5m5 14v-7m5 7V3', $new) !!}
+        @endunless
         @if($isAdmin)
             {!! $link('settings.children', 'settings.*', 'Settings', 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z') !!}
 
@@ -133,17 +143,21 @@
          scrolling nav above, so it is pinned there and stays on the screen
          however far the links run. --}}
     <div class="shrink-0 border-t border-white/20 px-3 py-3 dark:border-white/10">
-        {{-- Kiosks, above who you are (Ray's draft, 28 Oct 2026: "a link to
-             the kiosk above the login details"). It opens Who's where — what
-             the front door clock and the room tablets are saying — because a
-             desk browser is not a paired kiosk; the board links on to the
-             clock and to pairing. Directors only, as the board is. --}}
-        @if($isAdmin)
-            <a href="{{ route('staff.presence') }}" data-kiosks-link
-               @class(['mb-2 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110', 'ring-2 ring-white/70' => request()->routeIs('staff.presence')])
-               style="background: #1b5e91" :class="collapsed ? 'justify-center' : ''" title="Kiosks — who's where">
+        {{-- Kiosk, above who you are (Ray's draft, 28 Oct 2026: "a link to
+             the kiosk above the login details"). One click opens the room
+             tablet itself — "Coming into this room?", the gear and the
+             keypad — with no device frame round it (Jordan, 2 Nov 2026), as a
+             page of the app with this sidebar beside it (4 Nov 2026), not a
+             tab of its own. It used to open Who's where, the framed tablet beside
+             the board, which is parked off the menu but still answers at
+             /staff/whos-where. Directors only, and only while the kiosk is
+             switched on. --}}
+        @if($isAdmin && config('daycare.kiosk.enabled'))
+            <a href="{{ route('staff.kiosk') }}" data-kiosks-link
+               class="mb-2 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+               style="background: #1b5e91" :class="collapsed ? 'justify-center' : ''" title="Kiosk — room tablet">
                 <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>
-                <span x-show="!collapsed">Kiosks</span>
+                <span x-show="!collapsed">Kiosk</span>
                 <span x-show="!collapsed" class="ml-auto rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold">PIN</span>
             </a>
         @endif

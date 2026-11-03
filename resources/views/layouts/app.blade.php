@@ -38,7 +38,9 @@
              sliding under it on scroll needs no runway to do it in. --}}
         <main class="px-4 pb-5 pt-0 sm:px-6 lg:px-8 lg:pb-6">
 
-            @if(session('error'))
+            {{-- Pages that place the message themselves (Staff, Payroll)
+                 say so with @section('own-flash'), or it shows twice. --}}
+            @if(session('error') && ! View::hasSection('own-flash'))
                 <div class="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
                     <span class="text-lg" aria-hidden="true">!</span>
                     <p class="font-medium">{{ session('error') }}</p>

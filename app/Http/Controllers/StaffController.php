@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\TeacherWelcomeMail;
 use App\Models\LoginEvent;
 use App\Models\StaffRule;
 use App\Models\StaffShift;
@@ -12,13 +11,11 @@ use App\Models\User;
 use App\Services\ClassroomAssignment;
 use App\Services\PaidHours;
 use App\Services\StaffSchedule;
-use App\Services\TemporaryPassword;
 use App\Services\TimeClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -119,28 +116,38 @@ class StaffController extends Controller
     }
 
     /**
-     * A new temporary password, mailed. The one they had stops working the
-     * moment this is pressed, and the new one has to be replaced at the
-     * next sign-in — the same path a new account takes.
+     * A new password, typed by the director and handed over in person — the
+     * way it was before the emailed temporary password, which is off at
+     * Jordan's request (4 Nov 2026). The old one stops working at once, and
+     * nothing is mailed. Same rule as the teacher form: eight or more,
+     * typed twice.
      */
-    public function sendPassword(User $staff)
+    public function setPassword(Request $request, User $staff)
     {
         abort_unless(in_array($staff->role, ['teacher', 'admin'], true), 404);
 
-        $temporary = TemporaryPassword::generate();
-        $staff->forceFill(['password' => Hash::make($temporary), 'must_change_password' => true])->save();
+        $data = $request->validate([
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
 
-        try {
-            Mail::to($staff->email)->send(new TeacherWelcomeMail($staff, $temporary));
-        } catch (\Throwable $e) {
-            report($e);
+        $staff->forceFill([
+            'password' => Hash::make($data['password']),
+            'must_change_password' => false,
+            'temp_password_expires_at' => null,
+        ])->save();
 
-            return redirect()->route('staff.show', [$staff, 'tab' => 'details'])
-                ->with('error', "The email to {$staff->email} could not be sent. Temporary password: {$temporary}");
-        }
+        rescue(fn () => LoginEvent::create([
+            'user_id' => $staff->id,
+            'by_user_id' => $request->user()->id,
+            'email' => $staff->email,
+            'outcome' => LoginEvent::PASSWORD_SET,
+            'method' => 'director',
+            'ip_address' => $request->ip(),
+            'user_agent' => mb_substr((string) $request->userAgent(), 0, 500),
+        ]), null, false);
 
         return redirect()->route('staff.show', [$staff, 'tab' => 'details'])
-            ->with('success', 'A temporary password has been emailed to '.$staff->email.'. They choose their own at the next sign-in.');
+            ->with('success', $staff->firstName().'’s password has been set. Give it to them in person.');
     }
 
     /** The Attendance tab's rows as a spreadsheet. */

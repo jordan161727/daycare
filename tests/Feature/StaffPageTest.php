@@ -86,20 +86,25 @@ class StaffPageTest extends TestCase
         $this->assertStringContainsString('In since 8:58 AM', $html);
     }
 
-    public function test_a_teacher_may_not_open_it_and_the_kiosks_link_goes_to_whos_where(): void
+    public function test_a_teacher_may_not_open_it_and_the_kiosk_link_opens_the_room_tablet(): void
     {
+        config(['daycare.kiosk.enabled' => true]);
         $this->actingAs($this->zameera)->get(route('staff.index'))->assertForbidden();
 
         $html = $this->actingAs($this->admin)->get(route('staff.index'))->assertOk()->getContent();
 
         $this->assertStringContainsString(route('staff.index'), $html);
-        // Kiosks is on the menu since Ray asked (28 Oct 2026), but it opens
-        // Who's where: a desk browser is not a paired kiosk, so the menu
-        // never links straight to the clock screen.
-        $this->assertStringContainsString('>Kiosks<', $html);
-        $this->assertStringContainsString('href="'.route('staff.presence').'" data-kiosks-link', $html);
-        $this->assertStringNotContainsString(route('clock.kiosk'), $html);
+        // Kiosk opens the room tablet in one click (Jordan, 2 Nov 2026), as a
+        // page of the app with the sidebar (4 Nov 2026). It used to open Who's where.
+        $this->assertStringContainsString('>Kiosk<', $html);
+        $this->assertStringContainsString('href="'.route('staff.kiosk').'" data-kiosks-link', $html);
+        $this->assertStringNotContainsString('target="_blank" rel="noopener" data-kiosks-link', $html);
+        $this->assertStringNotContainsString('href="'.route('staff.presence').'"', $html);
         $this->assertStringNotContainsString('MOCKUP', $html);
+
+        // Kiosk switched off: no button to a page that would not answer.
+        config(['daycare.kiosk.enabled' => false]);
+        $this->assertStringNotContainsString('data-kiosks-link', $this->actingAs($this->admin)->get(route('staff.index'))->getContent());
     }
 
     /* ---- Details ---- */
@@ -146,7 +151,8 @@ class StaffPageTest extends TestCase
         $this->assertStringContainsString('Set PIN', $html);
         $this->assertStringContainsString(route('staff.card.issue', $this->zameera), $html);
         $this->assertStringContainsString(route('staff.card.pin', $this->zameera), $html);
-        $this->assertStringContainsString('Send a new temporary password', $html);
+        $this->assertStringContainsString('data-password-form', $html);
+        $this->assertStringNotContainsString('Send a new temporary password', $html);
     }
 
     /* ---- Rules ---- */

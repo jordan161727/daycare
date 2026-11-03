@@ -1,5 +1,6 @@
 @extends('layouts.app')
 @section('title', 'Staff')
+@section('own-flash', '1')
 @section('content')
 {{-- The Staff page — Phase 5 of docs/work.md, as Staff.dc.html draws it:
      everyone on the team down the left with where they stand this minute,
@@ -174,7 +175,7 @@
                             <button type="submit" class="btn sm" form="card-form">{{ $selected->hasCard() ? 'Reprint card' : 'Issue card' }}</button>
                             <button type="button" class="btn sm" @click="pinForm = ! pinForm">{{ $selected->hasKioskPin() ? 'Reset PIN' : 'Set PIN' }}</button>
                         </div>
-                        <div x-show="pinForm" x-cloak style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;" data-pin-form>
+                        <div x-show="pinForm" x-cloak class="side-form" data-pin-form>
                             <label class="fld"><span class="lbl">New PIN</span><input class="inp" form="pin-form" type="password" name="kiosk_pin" inputmode="numeric" maxlength="4" required style="width: 90px; text-align: center; letter-spacing: .3em;" placeholder="••••"></label>
                             <label class="fld"><span class="lbl">Again</span><input class="inp" form="pin-form" type="password" name="kiosk_pin_confirmation" inputmode="numeric" maxlength="4" required style="width: 90px; text-align: center; letter-spacing: .3em;" placeholder="••••"></label>
                             <button type="submit" class="btn sm pri" form="pin-form">Save PIN</button>
@@ -213,7 +214,16 @@
                             <div style="display: flex; justify-content: space-between;"><span class="muted">Can sign in</span><b>Yes · {{ $selected->role }}{{ $selected->mustChangePassword() ? ' · must pick a password' : '' }}</b></div>
                             <div style="display: flex; justify-content: space-between;"><span class="muted">Last sign-in</span><b>{{ $lastSignIn ? ($lastSignIn->isToday() ? 'Today '.$lastSignIn->format('g:i A') : ($lastSignIn->isYesterday() ? 'Yesterday' : $lastSignIn->format('M j, Y'))) : 'Never' }}</b></div>
                         </div>
-                        <button type="submit" class="btn sm" style="align-self: flex-start;" form="password-form" onclick="return confirm('Email {{ $selected->firstName() }} a new temporary password? The current one stops working.')">Send a new temporary password</button>
+                        {{-- The director types the password and hands it over,
+                             as before; nothing is emailed (Jordan, 4 Nov 2026). --}}
+                        <button type="button" class="btn sm" style="align-self: flex-start;" @click="passwordForm = ! passwordForm" data-password-open>{{ $selected->mustChangePassword() ? 'Set password' : 'Reset password' }}</button>
+                        <div x-show="passwordForm" x-cloak class="side-form" data-password-form>
+                            <label class="fld"><span class="lbl">New password</span><input class="inp" form="password-form" type="password" name="password" minlength="8" required autocomplete="new-password" style="width: 150px;"></label>
+                            <label class="fld"><span class="lbl">Again</span><input class="inp" form="password-form" type="password" name="password_confirmation" minlength="8" required autocomplete="new-password" style="width: 150px;"></label>
+                            <button type="submit" class="btn sm pri" form="password-form">Save password</button>
+                        </div>
+                        @error('password')<span style="font-size: 12.5px; color: #be123c;" data-password-error>{{ $message }}</span>@enderror
+                        <span style="font-size: 12px;" class="faint">At least 8 characters. The old password stops working straight away.</span>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 8px;"><a class="btn" href="{{ $tabUrl('details') }}">Cancel</a><button type="submit" class="btn pri">Save changes</button></div>
@@ -444,6 +454,8 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('staffPage', (opts) => ({
         search: '',
         pinForm: false,
+        // Open again after a refused save, so the reason sits beside the boxes.
+        passwordForm: @js($errors->has('password')),
         showPay: false,
         pastOpen: false,
         shifts: opts.shifts || {},

@@ -199,7 +199,7 @@ class SettingController extends Controller
     {
         return view('settings.login-history', [
             'tab' => 'history',
-            'events' => LoginEvent::with('user')->latest('created_at')->latest('id')->take(self::HISTORY_ROWS)->get(),
+            'events' => LoginEvent::with(['user', 'by'])->latest('created_at')->latest('id')->take(self::HISTORY_ROWS)->get(),
             'rows' => self::HISTORY_ROWS,
             // Both kinds: a run of wrong PINs at the lobby screen is as much
             // worth surfacing as a run of wrong passwords, and somebody

@@ -8,6 +8,40 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+// Proves the Mailtrap settings (MAILTRAP_API_TOKEN, MAILTRAP_INBOX_ID,
+// MAIL_MODE) through the same mailer the temporary-password email uses. In
+// sandbox mode it lands in the Mailtrap test inbox, not the address given.
+Artisan::command('send-mail {email : Who it is addressed to}', function () {
+    $config = config('services.mailtrap');
+
+    $this->line('  mode:  '.($config['mode'] ?: 'sandbox'));
+    $this->line('  inbox: '.($config['inbox_id'] ?: '(not set)'));
+    $this->line('  from:  '.$config['from'].' ('.$config['from_name'].')');
+    $this->line('  token: '.(filled($config['token']) ? 'set' : '(not set)'));
+    $this->newLine();
+
+    try {
+        app(\App\Services\Mail\Mailer::class)->sendEmail(
+            to: $this->argument('email'),
+            toName: null,
+            subject: 'You are awesome!',
+            html: '<p>Congrats for sending a test email with Mailtrap from AngelNest!</p>',
+            text: 'Congrats for sending a test email with Mailtrap from AngelNest!',
+            category: 'Integration Test',
+        );
+    } catch (\App\Services\Mail\MailConfigError|\App\Services\Mail\MailSendError $e) {
+        $this->error($e->getMessage());
+
+        return 1;
+    }
+
+    $this->info(($config['mode'] ?: 'sandbox') === 'live'
+        ? 'Sent. Check Mailtrap → Email Logs.'
+        : 'Sent. Check Mailtrap → Sandboxes → your inbox.');
+
+    return 0;
+})->purpose('Send a test email through the Mailtrap HTTP API');
+
 // A room follows an age, so it can only change at a date boundary — a birthday.
 // Once a night, before anyone opens the sheet, is enough.
 Schedule::command('classrooms:sync')->dailyAt('00:05');

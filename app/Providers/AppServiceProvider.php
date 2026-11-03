@@ -16,7 +16,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Built on first use, so a missing token fails the email that needed
+        // it (with MailConfigError) rather than every page of the site.
+        $this->app->bind(
+            \App\Services\Mail\Mailer::class,
+            fn () => new \App\Services\Mail\MailtrapMailer(config('services.mailtrap')),
+        );
     }
 
     /**

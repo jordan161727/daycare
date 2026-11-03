@@ -45,4 +45,14 @@ return [
         'token' => env('TWILIO_TOKEN'),
     ],
 
+    // Email over Mailtrap's HTTP API (App\Services\Mail\MailtrapMailer).
+    // "sandbox" lands every email in a Mailtrap test inbox; "live" delivers.
+    'mailtrap' => [
+        'token' => env('MAILTRAP_API_TOKEN'),
+        'inbox_id' => env('MAILTRAP_INBOX_ID'),
+        'mode' => env('MAIL_MODE', 'sandbox'),
+        'from' => env('MAIL_FROM', env('MAIL_FROM_ADDRESS')),
+        'from_name' => env('MAIL_FROM_NAME', 'AngelNest'),
+    ],
+
 ];

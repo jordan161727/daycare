@@ -31,4 +31,8 @@
     .ch .grid-fit { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
     .ch .grid-fit.tight { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
     .ch .pay { background: #fbfcfe; } .dark .ch .pay { background: rgb(255 255 255 / .03); }
+    /* The PIN and password boxes. In a class, not inline: x-show puts an
+       inline display:flex back as block, and the gap went with it. */
+    .ch .side-form { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+    .ch .side-form .btn { margin-top: 6px; }
 </style>

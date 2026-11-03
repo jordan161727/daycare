@@ -33,6 +33,7 @@ class User extends Authenticatable
         'avatar_path',
         'password',
         'must_change_password',
+        'temp_password_expires_at',
         'password_changed_at',
         'role',
         'job_role',
@@ -78,6 +79,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'must_change_password' => 'boolean',
+            'temp_password_expires_at' => 'datetime',
             'password_changed_at' => 'datetime',
             'classrooms' => 'array',
             'dob' => 'date:Y-m-d',
@@ -105,6 +107,39 @@ class User extends Authenticatable
     public function mustChangePassword(): bool
     {
         return (bool) $this->must_change_password;
+    }
+
+    /**
+     * Holding an emailed temporary password that is past its date.
+     *
+     * Only while it is still the password they sign in with: once they have
+     * chosen their own, the date means nothing.
+     */
+    /**
+     * Signs the account out wherever it is signed in, after its password
+     * changed hands.
+     *
+     * Only possible where sessions are rows in the database; with file
+     * sessions there is no index from a user to their sessions, and rotating
+     * remember_token (which the callers do) is as far as it goes.
+     */
+    public function endSessions(): void
+    {
+        if (config('session.driver') !== 'database') {
+            return;
+        }
+
+        \Illuminate\Support\Facades\DB::connection(config('session.connection'))
+            ->table(config('session.table', 'sessions'))
+            ->where('user_id', $this->id)
+            ->delete();
+    }
+
+    public function temporaryPasswordExpired(): bool
+    {
+        return $this->mustChangePassword()
+            && $this->temp_password_expires_at !== null
+            && $this->temp_password_expires_at->isPast();
     }
 
     /** Every scheduling constraint on this person. */

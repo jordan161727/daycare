@@ -19,7 +19,7 @@
         <h1 class="mt-2 text-3xl font-bold text-slate-900">Choose your password</h1>
 
         @if($forced)
-            <p class="mt-2 text-slate-500">You are signed in with the temporary password from your welcome email. Pick your own to finish setting up the account.</p>
+            <p class="mt-2 text-slate-500">You are signed in with a temporary password. Pick your own to finish setting up the account.</p>
         @else
             <p class="mt-2 text-slate-500">Update the password you use to sign in.</p>
         @endif

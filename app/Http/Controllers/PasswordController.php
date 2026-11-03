@@ -37,6 +37,7 @@ class PasswordController extends Controller
         $user->forceFill([
             'password' => $validated['password'],
             'must_change_password' => false,
+            'temp_password_expires_at' => null,
             'password_changed_at' => now(),
         ])->save();
 

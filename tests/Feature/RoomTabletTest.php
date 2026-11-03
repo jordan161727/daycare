@@ -67,6 +67,18 @@ class RoomTabletTest extends TestCase
         $this->get(route('room.kiosk'))->assertOk()->assertSee('Little Angels')->assertSee('Coming into');
     }
 
+    public function test_the_sidebars_kiosk_page_shows_the_tablet_beside_the_sidebar(): void
+    {
+        // Jordan, 4 Nov 2026: "like in other tab have sidebar then the kiosk".
+        $director = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($director)->get(route('staff.kiosk'))->assertOk()
+            ->assertSee('data-kiosks-link', false)
+            ->assertSee('<iframe src="'.route('room.kiosk').'"', false);
+
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $this->actingAs($teacher)->get(route('staff.kiosk'))->assertForbidden();
+    }
+
     public function test_a_browser_never_paired_becomes_a_room_tablet_set_by_its_code(): void
     {
         // No pairing step any more (Jordan, 29 Oct 2026): the tablet is a

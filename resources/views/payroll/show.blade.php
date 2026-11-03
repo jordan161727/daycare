@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('title', 'Review payroll')
+@section('own-flash', '1')
 
 @php
     $states = [

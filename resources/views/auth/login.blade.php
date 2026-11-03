@@ -112,6 +112,11 @@
                 <h1 class="auth-rise mt-3 text-[38px] font-extrabold leading-[1.05] tracking-tight text-slate-900 dark:text-white sm:text-[46px]" style="animation-delay:.06s">Welcome back</h1>
                 <p class="auth-rise mt-3 text-[16px] text-slate-500 dark:text-slate-400" style="animation-delay:.06s">Sign in to open today&rsquo;s roster.</p>
 
+                {{-- "Your password has been changed", after a reset link. --}}
+                @if(session('success'))
+                    <p class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('success') }}</p>
+                @endif
+
                 @if(session('error'))
                     <p class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{{ session('error') }}</p>
                 @endif
@@ -129,16 +134,15 @@
                            class="auth-field mt-2 w-full rounded-[14px] border border-slate-200 bg-white px-4 py-[19px] text-[15px] text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:border-white/10 dark:bg-night-900 dark:text-white dark:placeholder:text-slate-500">
                     <x-input-error :messages="$errors->get('email')" />
 
-                    {{-- Both the reveal and the reset hint hang off this one
-                         Alpine scope. There is no reset route to link to — an
-                         administrator issues a new temporary password — so the
-                         mockup's link is a disclosure that says exactly that
-                         rather than an anchor that 404s. --}}
-                    <div x-data="{ show: false, hint: false }" class="mt-5">
+                    {{-- Forgot password? goes to the emailed-link reset
+                         (ForgotPasswordController, Jordan 31 Oct 2026). It used
+                         to open a hint saying only an administrator could
+                         reset one. --}}
+                    <div x-data="{ show: false }" class="mt-5">
                         <div class="flex items-baseline justify-between gap-4">
                             <label for="password" class="block text-[15px] font-semibold text-slate-700 dark:text-slate-200">Password</label>
-                            <button type="button" @click="hint = !hint" :aria-expanded="hint ? 'true' : 'false'" aria-controls="password-hint"
-                                    class="text-[15px] font-medium text-indigo-600 hover:text-indigo-700 hover:underline">Forgot password?</button>
+                            <a href="{{ route('password.request') }}" data-forgot-password
+                               class="text-[15px] font-medium text-indigo-600 hover:text-indigo-700 hover:underline">Forgot password?</a>
                         </div>
 
                         <div class="relative mt-2">
@@ -148,10 +152,6 @@
                                     class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg bg-slate-100 px-3 py-1.5 text-[13px] font-semibold text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                                     x-text="show ? 'Hide' : 'Show'">Show</button>
                         </div>
-
-                        <p id="password-hint" x-show="hint" x-cloak x-transition.opacity class="mt-2 rounded-xl bg-slate-100 p-3 text-sm text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                            Passwords are reset by an administrator &mdash; ask them to issue you a new temporary one.
-                        </p>
 
                         <x-input-error :messages="$errors->get('password')" />
                     </div>

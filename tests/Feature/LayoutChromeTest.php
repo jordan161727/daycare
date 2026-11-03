@@ -81,16 +81,10 @@ class LayoutChromeTest extends TestCase
             ->assertDontSee($label('My Leave'), false)
             ->assertDontSee($label('Comments'), false);
 
-        // A teacher: no director's pages, no DSS; My Schedule is parked for now.
-        $this->actingAs($teacher)->get(route('dashboard'))->assertOk()
-            ->assertSee($label('Floor plan'), false)
-            ->assertSee($label('Schedule'), false)
-            ->assertDontSee($label('My Schedule'), false)
-            ->assertSee($label('Messages'), false)
-            ->assertDontSee($label('Staff attendance'), false)
-            ->assertDontSee($label('DSS'), false)
-            ->assertDontSee($label('Settings'), false)
-            ->assertDontSee($label('Payroll'), false);
+        // A teacher: these five links and nothing else (Jordan, 31 Oct 2026).
+        $html = $this->actingAs($teacher)->get(route('dashboard'))->assertOk()->getContent();
+        preg_match_all('#<span x-show="!collapsed">([^<]+)</span>#', $html, $m);
+        $this->assertSame(['Dashboard', 'Teacher Attendance', 'Children', 'Schedule', 'Messages'], $m[1]);
     }
 
     public function test_the_desktop_variant_requires_width_and_a_fine_pointer(): void

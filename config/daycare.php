@@ -32,6 +32,11 @@ return [
         'email' => env('DAYCARE_COMPANY_EMAIL'),
     ],
 
+    // How long a temporary password from "Send a new temporary password" on
+    // a staff profile works. Long enough to cover a weekend off; after that
+    // the sign-in form refuses it and the director sends another.
+    'temporary_password_hours' => (int) env('DAYCARE_TEMP_PASSWORD_HOURS', 72),
+
     /*
     |--------------------------------------------------------------------------
     | Messages (Phase 9)

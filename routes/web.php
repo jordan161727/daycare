@@ -15,6 +15,7 @@ use App\Http\Controllers\ChildArchiveController;
 use App\Http\Controllers\ChildRecordController;
 use App\Http\Controllers\ChildStatusController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\TeacherController;
 use App\Http\Controllers\ReportController;
@@ -75,6 +76,12 @@ Route::get('/child-care-assistance/apply', [AssistanceController::class, 'apply'
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
     Route::post('/login', [AuthController::class, 'store'])->name('login.store');
+
+    // Forgot password? — an emailed link, see ForgotPasswordController.
+    Route::get('/forgot-password', [ForgotPasswordController::class, 'create'])->name('password.request');
+    Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])->middleware('throttle:6,1')->name('password.email');
+    Route::get('/reset-password/{token}', [ForgotPasswordController::class, 'edit'])->name('password.reset');
+    Route::post('/reset-password', [ForgotPasswordController::class, 'update'])->middleware('throttle:6,1')->name('password.store');
 });
 
 
@@ -253,7 +260,7 @@ Route::get('/staff', [StaffController::class, 'index'])->name('staff.index');
 Route::get('/staff/export', [StaffController::class, 'export'])->middleware('never-cached')->name('staff.export');
 Route::get('/staff/{staff}', [StaffController::class, 'show'])->name('staff.show')->whereNumber('staff');
 Route::put('/staff/{staff}', [StaffController::class, 'update'])->name('staff.update')->whereNumber('staff');
-Route::post('/staff/{staff}/password', [StaffController::class, 'sendPassword'])->name('staff.password')->whereNumber('staff');
+Route::post('/staff/{staff}/password', [StaffController::class, 'setPassword'])->name('staff.password')->whereNumber('staff');
 Route::get('/staff/{staff}/attendance.csv', [StaffController::class, 'attendanceExport'])->middleware('never-cached')->name('staff.attendance.export')->whereNumber('staff');
 Route::post('/staff/{staff}/time-off', [StaffController::class, 'storeTimeOff'])->name('staff.time-off.store')->whereNumber('staff');
 Route::put('/staff/{staff}/time-off/{timeOff}', [StaffController::class, 'updateTimeOff'])->name('staff.time-off.update')->whereNumber('staff');
@@ -432,6 +439,9 @@ Route::get('/settings/login-history', [SettingController::class, 'history'])->na
 // and the flags the office has to answer. Director only.
 Route::get('/staff/whos-where', [StaffPresenceController::class, 'board'])->middleware('never-cached')->name('staff.presence');
 Route::post('/staff/whos-where/flags/{event}', [StaffPresenceController::class, 'resolve'])->name('staff.presence.resolve');
+// The sidebar's Kiosk: the room tablet inside the app, sidebar and all
+// (Jordan, 4 Nov 2026: "like in other tab have sidebar then the kiosk").
+Route::view('/staff/kiosk', 'staff.kiosk')->name('staff.kiosk');
 
 
 Route::post('/teachers/{staff}/card', [StaffCardController::class, 'issue'])->name('staff.card.issue');

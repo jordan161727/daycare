@@ -24,7 +24,20 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        // A right password that is an expired temporary one is refused here,
+        // inside the attempt, so it is logged as a failed sign-in rather than
+        // a sign-in followed by a sign-out.
+        $expired = false;
+
+        $signedIn = Auth::attemptWhen($credentials, function (User $user) use (&$expired) {
+            return ! ($expired = $user->temporaryPasswordExpired());
+        }, $request->boolean('remember'));
+
+        if ($expired) {
+            return back()->withErrors(['email' => 'That temporary password has expired. Ask the director for a new one.'])->onlyInput('email');
+        }
+
+        if (! $signedIn) {
             return back()->withErrors(['email' => 'The provided credentials do not match our records.'])->onlyInput('email');
         }
 
