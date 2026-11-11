@@ -14,6 +14,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // HSTS, framing, sniffing, referrer, permissions and the CSP — on
+        // every response, pages, API and errors alike (QA #44).
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+
         // Every page is read fresh: no browser, back/forward or host cache
         // may hand back a roster as it was before the last correction.
         $middleware->web(append: [\App\Http\Middleware\FreshPages::class]);

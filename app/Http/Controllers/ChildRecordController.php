@@ -261,9 +261,26 @@ class ChildRecordController extends Controller
             'pays_fees' => ['nullable', 'boolean'],
             'gets_texts' => ['nullable', 'boolean'],
             'restriction' => ['nullable', 'string', 'max:255'],
+            // The person's own name and mobile, from the same row (QA #29).
+            // Optional in the request, so an older form without them still saves.
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'cell' => ['sometimes', 'nullable', 'string', 'max:40', function (string $attribute, mixed $value, \Closure $fail) {
+                if (filled($value) && Person::e164((string) $value) === null) {
+                    $fail('Enter a 10-digit US mobile number, like (716) 555-0134.');
+                }
+            }],
         ]);
 
         $link = ChildPerson::where('child_id', $child->id)->where('person_id', $person->id)->firstOrFail();
+
+        $own = array_intersect_key($data, array_flip(['name', 'cell']));
+        if ($own !== []) {
+            if (array_key_exists('cell', $own)) {
+                $own['cell'] = filled($own['cell']) ? Person::e164($own['cell']) : null;
+            }
+            $person->fill($own)->save();
+        }
+        unset($data['name'], $data['cell']);
 
         $directory->link($child, $person, ['priority' => $link->priority] + $data);
 

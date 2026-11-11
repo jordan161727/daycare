@@ -657,6 +657,26 @@
                                 </div>
                                 <div class="cs-grid">
                                     @foreach($fields as $label => $field)
+                                        {{-- A parent's SSN (QA #34): directors and the office only, never
+                                             handed to the page in full — the box is empty and masked, the
+                                             last four sit in the placeholder, and an empty box keeps what is on file. --}}
+                                        @if(str_ends_with($field, '_ssn'))
+                                            @continue(! \App\Services\SensitiveAccess::allowed())
+                                            {{-- A record on file: the box starts empty. A new one (a scanned form
+                                                 under review): what the form said, masked, or the import loses it. --}}
+                                            @php($existing = (bool) $child?->exists)
+                                            @php($onFile = $existing ? preg_replace('/\D+/', '', (string) $child->{$field}) : '')
+                                            <label x-data="{ shown: false }">
+                                                <span class="cs-label">{{ $label }}{!! $fromDocument($field) ? $documentBadge : '' !!}</span>
+                                                <span class="ca-masked-row">
+                                                    <input id="{{ $field }}" type="text" name="{{ $field }}" value="{{ $existing ? '' : old($field, $fieldValue($field)) }}" class="{{ $fieldClass($field) }} ca-masked" :class="{ 'ca-shown': shown }" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="{{ strlen($onFile) >= 4 ? '•••••'.substr($onFile, -4) : '000 00 0000' }}">
+                                                    <button type="button" class="ca-show" @click="shown = ! shown" :aria-pressed="shown" x-text="shown ? 'Hide' : 'Show'">Show</button>
+                                                </span>
+                                                <span class="cs-help">{{ strlen($onFile) >= 4 ? 'On file, last four shown. Type a new one to replace it.' : 'Not on file.' }}</span>
+                                                <x-input-error :messages="$errors->get($field)" />
+                                            </label>
+                                            @continue
+                                        @endif
                                         <label class="{{ str_contains($field, 'address') ? 'cs-wide' : '' }}">
                                             <span class="cs-label">{{ $label }}{!! $fromDocument($field) ? $documentBadge : '' !!}</span>
                                             @php($current = old($field, $fieldValue($field)))

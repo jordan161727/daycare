@@ -201,9 +201,11 @@ class TeacherController extends Controller
         // not a request for a generated one.
         $settingByHand = ! $teacher && ! $request->boolean('send_invite');
 
+        // Twelve characters at least, checked here and not only in the
+        // browser (QA #43, 12 Nov 2026).
         $passwordRules = $settingByHand
-            ? ['required', 'string', 'min:8', 'confirmed']
-            : ['nullable', 'string', 'min:8', 'confirmed'];
+            ? ['required', 'string', 'min:12', 'confirmed']
+            : ['nullable', 'string', 'min:12', 'confirmed'];
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],

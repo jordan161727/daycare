@@ -22,18 +22,23 @@
                 <h2 class="text-base font-semibold">Close a day</h2>
                 <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Weekends are skipped. Weeks that have already ended cannot be changed.</p>
 
-                <form method="POST" action="{{ route('holidays.store') }}" class="mt-4 space-y-4">
+                {{-- The dates read back in words before the press (QA #39): a
+                     typed 06/16/2027 that became something else is seen here. --}}
+                <form method="POST" action="{{ route('holidays.store') }}" class="mt-4 space-y-4"
+                      x-data="{ from: @js(old('closed_on', '')), to: @js(old('ends_on', '')),
+                                words(d) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? new Date(+m[1], m[2] - 1, +m[3]).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : ''; },
+                                get summary() { if (! this.words(this.from)) return ''; if (this.words(this.to) && this.to < this.from) return 'The last day, ' + this.words(this.to) + ', is before the first. Check the dates.'; return this.words(this.to) && this.to !== this.from ? 'Closes ' + this.words(this.from) + ' through ' + this.words(this.to) + '.' : 'Closes ' + this.words(this.from) + '.'; } }">
                     @csrf
 
                     <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">
                         Date
-                        <input type="date" name="closed_on" required value="{{ old('closed_on') }}" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
+                        <input type="date" name="closed_on" required x-model.lazy="from" value="{{ old('closed_on') }}" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         <x-input-error :messages="$errors->get('closed_on')" />
                     </label>
 
                     <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">
                         Last day <span class="font-normal">(optional — for a break)</span>
-                        <input type="date" name="ends_on" value="{{ old('ends_on') }}" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
+                        <input type="date" name="ends_on" x-model.lazy="to" value="{{ old('ends_on') }}" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         <x-input-error :messages="$errors->get('ends_on')" />
                     </label>
 
@@ -42,6 +47,8 @@
                         <input type="text" name="reason" maxlength="120" value="{{ old('reason') }}" placeholder="Snow day" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         <x-input-error :messages="$errors->get('reason')" />
                     </label>
+
+                    <p class="rounded-xl bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 dark:bg-white/5 dark:text-slate-200" data-close-summary aria-live="polite" x-show="summary" x-text="summary" x-cloak></p>
 
                     <button class="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-700">Close these days</button>
                 </form>

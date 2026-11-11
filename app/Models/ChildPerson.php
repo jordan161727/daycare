@@ -35,6 +35,24 @@ class ChildPerson extends Model
         'priority' => 'integer',
     ];
 
+    /**
+     * A new guardian with a mobile gets the texts unless somebody said
+     * otherwise (QA #45, 12 Nov 2026). Saved off by default, every family
+     * added since the column arrived was out of reach and Messages went to
+     * nobody. A link written with gets_texts said either way keeps it; STOP,
+     * a restriction and the untick on the record still win, as before.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $link) {
+            if (array_key_exists('gets_texts', $link->getAttributes())) {
+                return;
+            }
+            $cell = $link->person_id ? Person::whereKey($link->person_id)->value('cell') : null;
+            $link->gets_texts = (bool) $link->is_guardian && Person::e164($cell) !== null;
+        });
+    }
+
     public function child(): BelongsTo
     {
         return $this->belongsTo(Child::class);

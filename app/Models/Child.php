@@ -50,6 +50,9 @@ class Child extends Model
         'father_ssn' => 'encrypted',
     ];
 
+    /** Never in a page's JSON: a child turned into an array would carry them decrypted. */
+    protected $hidden = ['mother_ssn', 'father_ssn'];
+
      protected $fillable = [
         'lan',
         // The two numbers the state knows a subsidised child by: the family's
@@ -112,6 +115,20 @@ class Child extends Model
             // anybody is. A seeder or the nightly room sync leaves it as it was.
             if ($child->exists && $child->isDirty() && auth()->id()) {
                 $child->updated_by = auth()->id();
+            }
+        });
+
+        // A parent's SSN written onto the record is a line in the activity log (QA #34).
+        static::saved(function (self $child) {
+            foreach (['mother_ssn' => 'mother', 'father_ssn' => 'father'] as $column => $who) {
+                if ($child->wasChanged($column) || ($child->wasRecentlyCreated && filled($child->{$column}))) {
+                    \App\Services\SensitiveAccess::record(
+                        \App\Services\SensitiveAccess::UPDATED,
+                        $who."'s ".(blank($child->{$column}) ? 'cleared' : 'set').' on the record of '.trim($child->first_name.' '.$child->last_name),
+                        $child,
+                        trim($child->first_name.' '.$child->last_name),
+                    );
+                }
             }
         });
 

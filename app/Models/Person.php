@@ -51,8 +51,23 @@ class Person extends Model implements AuthenticatableContract
         'failed_attempts' => 'integer',
     ];
 
-    /** The door's half of the record is never handed to a view. */
-    protected $hidden = ['pin_index', 'pin_hash'];
+    /** The door's half of the record is never handed to a view, nor is the SSN. */
+    protected $hidden = ['pin_index', 'pin_hash', 'ssn'];
+
+    protected static function booted(): void
+    {
+        // Every SSN written, added or cleared, is a line in the activity log.
+        static::saved(function (self $person) {
+            if ($person->wasChanged('ssn') || ($person->wasRecentlyCreated && filled($person->ssn))) {
+                \App\Services\SensitiveAccess::record(
+                    \App\Services\SensitiveAccess::UPDATED,
+                    (blank($person->ssn) ? 'cleared for ' : 'set for ').$person->name,
+                    $person,
+                    $person->name,
+                );
+            }
+        });
+    }
 
     public function children(): BelongsToMany
     {
@@ -75,7 +90,33 @@ class Person extends Model implements AuthenticatableContract
      */
     public static function digits(?string $phone): string
     {
-        return preg_replace('/\D+/', '', (string) $phone) ?? '';
+        $digits = preg_replace('/\D+/', '', (string) $phone) ?? '';
+
+        // +1 (716) 555-0134 is (716) 555-0134: the country code is not part
+        // of what tells two US numbers apart.
+        return strlen($digits) === 11 && $digits[0] === '1' ? substr($digits, 1) : $digits;
+    }
+
+    /**
+     * A US number as stored (QA #28): +1 and ten digits, or null when it is
+     * not one — ten digits, area code and exchange not starting 0 or 1.
+     */
+    public static function e164(?string $phone): ?string
+    {
+        $digits = self::digits($phone);
+
+        return preg_match('/^[2-9]\d{2}[2-9]\d{6}$/', $digits) ? '+1'.$digits : null;
+    }
+
+    /** A number as people read it: (716) 555-0134. Anything else as it was written. */
+    public static function displayPhone(?string $phone): ?string
+    {
+        if (blank($phone)) {
+            return $phone;
+        }
+        $digits = self::digits($phone);
+
+        return strlen($digits) === 10 ? sprintf('(%s) %s-%s', substr($digits, 0, 3), substr($digits, 3, 3), substr($digits, 6)) : $phone;
     }
 
     /**

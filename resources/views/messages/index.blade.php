@@ -178,7 +178,7 @@
                                         <td><input x-show="r.child_id" type="checkbox" :checked="! excl.includes(r.child_id)" @change="toggle(r.child_id)" aria-label="Include"></td>
                                         <td style="font-weight: 600; white-space: nowrap;"><span x-text="r.child || r.room"></span><span x-show="r.no_photo && att.new.length" class="pill warn" style="font-size: 10.5px; padding: 1px 6px; margin-left: 6px;">No photo consent</span></td>
                                         <td x-text="r.child_id ? (excl.includes(r.child_id) ? '—' : r.gets) : r.families + ' families · ' + r.phones + ' phones'"></td>
-                                        <td style="color: #b45309;" x-text="r.child_id ? r.skip : (r.skipped ? r.skipped + (r.skipped === 1 ? ' contact' : ' contacts') : '')"></td>
+                                        <td style="color: #b45309;" x-text="r.child_id ? r.skip : (r.skipped ? r.skipped + (r.skipped === 1 ? ' contact' : ' contacts') + (r.reasons ? ': ' + r.reasons : '') : '')"></td>
                                     </tr>
                                 </template>
                             </tbody>

@@ -521,4 +521,13 @@ return [
         'enabled' => env('DAYCARE_KIOSK', false),
         'device' => env('DAYCARE_KIOSK_DEVICE', 'Front door'),
     ],
+
+    /*
+    | Browser-side protections (App\Http\Middleware\SecurityHeaders). The
+    | Content-Security-Policy is sent report-only until this is true: check
+    | the browser console for "[Report Only]" lines on every page first.
+    */
+    'security' => [
+        'csp_enforce' => env('DAYCARE_CSP_ENFORCE', false),
+    ],
 ];

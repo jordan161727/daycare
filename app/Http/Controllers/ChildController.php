@@ -508,6 +508,16 @@ class ChildController extends Controller
         // teacher edits the children in their own rooms and nobody else's.
         abort_unless($this->isVisibleTo($child, request()->user()), 403);
 
+        // The form shows an admin the last four of each parent's SSN on file (QA #34).
+        if (\App\Services\SensitiveAccess::allowed()) {
+            foreach (['mother_ssn' => 'mother', 'father_ssn' => 'father'] as $column => $who) {
+                if (strlen((string) preg_replace('/\D+/', '', (string) $child->{$column})) >= 4) {
+                    $name = trim($child->first_name.' '.$child->last_name);
+                    \App\Services\SensitiveAccess::record(\App\Services\SensitiveAccess::VIEWED, "{$who}'s last four shown on the edit form of {$name}", $child, $name);
+                }
+            }
+        }
+
         return view('children.edit', compact('child'));
     }
 
@@ -711,7 +721,9 @@ class ChildController extends Controller
             // still being agreed, so neither requires the other.
             'drop_off_time' => ['nullable', 'date_format:H:i', 'after_or_equal:'.Child::DAY_OPENS_AT, 'before_or_equal:'.Child::DAY_CLOSES_AT],
             'pick_up_time' => ['nullable', 'date_format:H:i', 'after_or_equal:'.Child::DAY_OPENS_AT, 'before_or_equal:'.Child::DAY_CLOSES_AT, 'after:drop_off_time'],
-            'birth_date' => ['nullable', 'date'],
+            // Normalised to Y-m-d above when it is a real date; anything else
+            // arrives here as typed and is refused by name (QA #27).
+            'birth_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.now()->addYear()->toDateString()],
             // Blank stays a real answer: only the drawn stand-in face reads
             // this, and a record that does not say is drawn as one that does
             // not say rather than being guessed at from the name.
@@ -735,6 +747,8 @@ class ChildController extends Controller
 
         $data = $request->validate($rules, [
             'photo.max' => 'The photo may not be larger than 4 MB.',
+            'birth_date.date_format' => 'That is not a real date. Type the date of birth as mm/dd/yyyy, for example 02/14/2024.',
+            'birth_date.before_or_equal' => 'That date of birth is more than a year from now. Check the year.',
             'photo.image' => 'The photo must be an image file.',
         ]);
 
@@ -777,6 +791,15 @@ class ChildController extends Controller
 
         // The upload is not a column. syncPhoto puts the stored path in.
         unset($data['photo']);
+
+        // A parent's SSN (QA #34): only a director or the office may write
+        // one, and the edit form never holds the number on file — its box is
+        // empty — so an empty box means "leave it", not "clear it".
+        foreach (['mother_ssn', 'father_ssn'] as $ssn) {
+            if (! \App\Services\SensitiveAccess::allowed() || ($child !== null && blank($data[$ssn] ?? null))) {
+                unset($data[$ssn]);
+            }
+        }
 
         // The alerts arrive as the form drew them, which includes any row
         // somebody opened and then left empty. A chip reading "Allergy:" with
@@ -837,18 +860,24 @@ class ChildController extends Controller
     private function normalizeDate(?string $value): ?string
     {
         if (blank($value)) return $value;
-        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'm/d/Y', 'F j Y', 'F j, Y', 'M j Y', 'M j, Y', 'j F Y', 'j M Y'] as $format) {
-            try {
-                return Carbon::createFromFormat($format, trim($value))->format('Y-m-d');
-            } catch (\Throwable) {
-                // Try the next common document date format.
+
+        /*
+         * Strictly (QA #27, 12 Nov 2026). PHP rolls an impossible date over —
+         * month 13, day 45 of 2023 became 02/14/2024 — and a last-resort
+         * free parse took anything at all. So a format only counts when the
+         * date it reads is a real one, US order is tried before day-first
+         * (06/07/2023 is June 7 here), and text no format reads is handed
+         * back as it was for the date_format rule to refuse with a message.
+         */
+        foreach (['Y-m-d', 'm/d/Y', 'm-d-Y', 'd/m/Y', 'd-m-Y', 'F j Y', 'F j, Y', 'M j Y', 'M j, Y', 'j F Y', 'j M Y'] as $format) {
+            $date = \DateTime::createFromFormat('!'.$format, trim($value));
+            $problems = \DateTime::getLastErrors();
+            if ($date !== false && ($problems === false || ($problems['warning_count'] === 0 && $problems['error_count'] === 0))) {
+                return $date->format('Y-m-d');
             }
         }
-        try {
-            return Carbon::parse(trim($value))->format('Y-m-d');
-        } catch (\Throwable) {
-            return $value;
-        }
+
+        return $value;
     }
 
     /**

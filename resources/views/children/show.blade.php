@@ -363,7 +363,7 @@
                                 </label>
                                 <label class="fam-field">
                                     <span class="fam-label">Mobile</span>
-                                    <input type="tel" class="fam-input" placeholder="082 555 0134" x-model="newPhone" autocomplete="off">
+                                    <input type="tel" class="fam-input" placeholder="(716) 555-0134" inputmode="tel" x-model="newPhone" autocomplete="off">
                                 </label>
                             </div>
                             <div class="fam-way-foot">
@@ -394,7 +394,7 @@
                                     </td>
                                     <td style="font-weight: 600; min-width: 170px;">{{ $person?->name ?? 'Name not on file' }}@if($restricted)<div style="font-size: 12px; font-weight: 500; color: #be123c;">{{ $link->restriction }}</div>@endif</td>
                                     <td class="muted">{{ $link->relationship ?: '—' }}</td>
-                                    <td>@if(filled($person?->cell))<a href="tel:{{ $digits($person->cell) }}">{{ $person->cell }}</a>@else —@endif</td>
+                                    <td>@if(filled($person?->cell))<a href="tel:{{ $digits($person->cell) }}">{{ \App\Models\Person::displayPhone($person->cell) }}</a>@else —@endif</td>
                                     <td>{!! $tick($link->is_guardian) !!}</td>
                                     <td>{!! $tick($link->can_pickup) !!}</td>
                                     <td>{!! $tick($link->is_emergency) !!}</td>
@@ -409,10 +409,23 @@
                                     <td colspan="10" style="white-space: normal; background: #f7f9fd;" class="dark:!bg-slate-800/60">
                                         <form method="POST" action="{{ route('children.people.flags', [$child, $person]) }}" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;" data-person-flags="{{ $person?->id }}">
                                             @csrf
-                                            <label class="fld" style="min-width: 150px;"><span class="lbl">Relationship</span><select class="inp" name="relationship">@foreach($relationships as $rel)<option @selected($link->relationship === $rel)>{{ $rel }}</option>@endforeach</select></label>
+                                            <input type="hidden" name="_person" value="{{ $person?->id }}">
+                                            @if((int) old('_person') === (int) $person?->id && ($errors->has('name') || $errors->has('cell')))
+                                                <p class="w-full" role="alert" style="margin: 0; color: #be123c; font-size: 13px; font-weight: 600;">{{ $errors->first('name') ?: $errors->first('cell') }}</p>
+                                            @endif
+                                            {{-- The person's own name and mobile, so a typing slip can be put right here (QA #29).
+                                                 They are the person's, not the link's: every child they are on reads the change. --}}
+                                            <label class="fld" style="flex: 1 1 200px;"><span class="lbl">Full name</span><input class="inp" name="name" value="{{ old('name', $person?->name) }}" required maxlength="255" autocomplete="off"></label>
+                                            <label class="fld" style="flex: 0 1 170px;"><span class="lbl">Mobile</span><input class="inp" type="tel" inputmode="tel" name="cell" value="{{ old('cell', \App\Models\Person::displayPhone($person?->cell)) }}" placeholder="(716) 555-0134" maxlength="40" autocomplete="off"></label>
+                                            @if(($person?->links_count ?? $person?->links()->count()) > 1)
+                                                <p class="w-full text-xs" style="margin: -4px 0 0; color: #5f6676;">{{ $person->name }} is on {{ $person->links()->count() }} children's records; a new name or mobile shows on all of them.</p>
+                                            @endif
+                                            {{-- A blank first choice: a relationship nobody set is not silently saved as the first in the list. --}}
+                                            <label class="fld" style="min-width: 150px;"><span class="lbl">Relationship</span><select class="inp" name="relationship"><option value="">Choose…</option>@foreach(collect($relationships)->when(filled($link->relationship) && ! in_array($link->relationship, $relationships, true), fn ($list) => $list->push($link->relationship)) as $rel)<option @selected($link->relationship === $rel)>{{ $rel }}</option>@endforeach</select></label>
                                             @foreach(['is_guardian' => 'Guardian', 'can_pickup' => 'Pick-up', 'is_emergency' => 'Emergency', 'pays_fees' => 'Pays the fees', 'gets_texts' => 'Gets texts'] as $field => $label)
                                                 <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; min-height: 38px;"><input type="hidden" name="{{ $field }}" value="0"><input type="checkbox" name="{{ $field }}" value="1" @checked($link->{$field}) style="width: 16px; height: 16px; accent-color: #1b5e91;"> {{ $label }}</label>
                                             @endforeach
+                                            <p class="w-full" style="margin: -2px 0 0; font-size: 12px; color: #5f6676;">Gets texts is ticked for a guardian with a mobile when they are added. Untick it for anyone who has not agreed to texts from the centre; replying STOP to a text also stops them.</p>
                                             <label class="fld" style="flex: 1 1 220px;"><span class="lbl">Restriction (court order etc.)</span><input class="inp" name="restriction" value="{{ $link->restriction }}" placeholder="Leave blank if none"></label>
                                             <button type="submit" class="btn sm pri">Save</button>
                                         </form>
@@ -670,7 +683,7 @@ document.addEventListener('alpine:init', () => {
         menu: false, statusMenu: false,
         panel: open || null,
         overviewEdit: false, roomForm: false, healthEdit: false, alertForm: false, noteEdit: false, docForm: false,
-        addPerson: false, editing: null,
+        addPerson: false, editing: @js(old('_person') ? (int) old('_person') : null),
         query: '', hits: [], searching: false, relationship: 'Mother', newName: '', newPhone: '', busy: false, error: '',
 
         headers() {
@@ -696,6 +709,8 @@ document.addEventListener('alpine:init', () => {
         async createPerson() {
             if (! this.newName.trim()) { this.error = 'A name is needed.'; return; }
             if (! this.newPhone.trim()) { this.error = 'A mobile number is needed.'; return; }
+            // The server's rule, said before the round trip (QA #28): ten digits, a real US area code.
+            { const d = this.newPhone.replace(/\D+/g, '').replace(/^1(?=\d{10}$)/, ''); if (! /^[2-9]\d{2}[2-9]\d{6}$/.test(d)) { this.error = 'Enter a 10-digit US mobile number, like (716) 555-0134.'; return; } }
             await this.send('/people', { child_id: childId, name: this.newName.trim(), cell: this.newPhone.trim(), relationship: this.relationship, can_pickup: true, is_emergency: true });
         },
 

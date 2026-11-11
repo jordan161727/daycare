@@ -70,6 +70,36 @@ class TeacherPasswordSetupTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    /** QA #43: the browser must not fill in another teacher's saved login. */
+    public function test_the_form_turns_off_autofill_of_saved_logins(): void
+    {
+        $page = $this->actingAs($this->admin())->get(route('teachers.create'))->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('/<input type="email" name="email" autocomplete="off"/', $page);
+        $this->assertSame(2, preg_match_all('/name="password(_confirmation)?" autocomplete="new-password" minlength="12"/', $page));
+    }
+
+    /** QA #43: twelve characters at least, enforced by the server, on create and on edit. */
+    public function test_a_password_under_twelve_characters_is_refused(): void
+    {
+        $this->actingAs($this->admin())
+            ->post(route('teachers.store'), [
+                'name' => 'Grace Ilagan', 'email' => 'grace@example.com', 'send_invite' => '0',
+                'password' => 'short-pass1', 'password_confirmation' => 'short-pass1', // 11
+            ])
+            ->assertSessionHasErrors('password');
+        $this->assertDatabaseMissing('users', ['email' => 'grace@example.com']);
+
+        $teacher = User::factory()->create(['role' => 'teacher', 'password' => Hash::make('original-password-1')]);
+        $this->actingAs($this->admin())
+            ->put(route('teachers.update', $teacher), [
+                'name' => $teacher->name, 'email' => $teacher->email,
+                'password' => 'short-pass1', 'password_confirmation' => 'short-pass1',
+            ])
+            ->assertSessionHasErrors('password');
+        $this->assertTrue(Hash::check('original-password-1', $teacher->fresh()->password));
+    }
+
     public function test_a_blank_password_is_rejected_when_no_invite_was_asked_for(): void
     {
         $this->actingAs($this->admin())

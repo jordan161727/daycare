@@ -43,6 +43,14 @@ class PeopleSheet implements FromCollection, WithHeadings, WithMapping, WithStyl
      */
     public function collection(): Collection
     {
+        // The SSN column carries the last four; whoever takes the file is a line in the log (QA #34).
+        $withSsn = $this->children->flatMap(fn (Child $child) => collect($child->personLinks))
+            ->filter(fn (ChildPerson $link) => $link->person?->ssnLast4() !== null)
+            ->unique('person_id')->count();
+        if ($withSsn > 0 && \App\Services\SensitiveAccess::allowed()) {
+            \App\Services\SensitiveAccess::record(\App\Services\SensitiveAccess::EXPORTED, "last four exported for {$withSsn} people in the children export");
+        }
+
         return $this->children
             ->flatMap(fn (Child $child) => collect($child->personLinks)
                 ->map(fn (ChildPerson $link) => [$child, $link]))
@@ -121,7 +129,7 @@ class PeopleSheet implements FromCollection, WithHeadings, WithMapping, WithStyl
             $person?->title,
             $person?->fax,
             $person?->drivers_license,
-            $person?->ssnLast4(),
+            \App\Services\SensitiveAccess::allowed() ? $person?->ssnLast4() : null,
         ];
     }
 

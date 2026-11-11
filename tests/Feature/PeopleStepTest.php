@@ -476,8 +476,8 @@ class PeopleStepTest extends TestCase
             ->assertOk();
 
         // One record, so both children see it — which is the whole point.
-        $this->assertSame('585-999-1234', $maeve->fresh()->people()->first()->cell);
-        $this->assertSame('585-999-1234', $sibling->fresh()->people()->first()->cell);
+        $this->assertSame('+15859991234', $maeve->fresh()->people()->first()->cell);
+        $this->assertSame('+15859991234', $sibling->fresh()->people()->first()->cell);
     }
 
     public function test_a_linked_person_cannot_be_deleted(): void

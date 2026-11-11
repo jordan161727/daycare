@@ -96,6 +96,9 @@ class Messaging
                 'skip' => collect($r['skipped'])->map(fn ($s) => $s['name'].': '.$s['why'])->implode(' · '),
                 'phones' => count($r['gets']),
                 'skipped' => count($r['skipped']),
+                // Why, by kind ("Texts not ticked", "no mobile number"…), so a
+                // room's count can say what it is made of (QA #45).
+                'why' => collect($r['skipped'])->map(fn ($s) => Str::before($s['why'], ' —'))->all(),
                 'no_photo' => ! $child->photoConsentOnFile(),
             ];
         })->values()->all();
@@ -116,6 +119,8 @@ class Messaging
                 'families' => $families,
                 'phones' => array_sum(array_column($children, 'phones')),
                 'skipped' => array_sum(array_column($children, 'skipped')),
+                'reasons' => collect($children)->flatMap(fn ($c) => $c['why'])->countBy()->sortDesc()
+                    ->map(fn ($n, $why) => $n.' '.$why)->implode(' · '),
             ];
         }
 

@@ -233,12 +233,20 @@
             <label><span class="cs-label">Fax</span><input type="text" class="cs-input" x-model="draft.fax"></label>
             <label>
                 <span class="cs-label">Cell <span class="text-rose-500">*</span></span>
-                <input type="text" class="cs-input" x-model="draft.cell" placeholder="585 000 0000">
+                <input type="text" class="cs-input" x-model="draft.cell" placeholder="(716) 555-0134" inputmode="tel">
                 <span class="cs-help">Used to spot duplicates.</span>
             </label>
             <label><span class="cs-label">Email</span><input type="email" class="cs-input" x-model="draft.email"></label>
             <label><span class="cs-label">Title</span><input type="text" class="cs-input" x-model="draft.title"></label>
-            <label><span class="cs-label">SSN</span><input type="text" class="cs-input" x-model="draft.ssn" placeholder="000 00 0000"></label>
+            @if(\App\Services\SensitiveAccess::allowed())
+            {{-- Directors and the office only; masked while typed (QA #34). --}}
+            <label x-data="{ shown: false }"><span class="cs-label">SSN</span>
+                <span class="ca-masked-row">
+                    <input type="text" class="cs-input ca-masked" :class="{ 'ca-shown': shown }" x-model="draft.ssn" placeholder="000 00 0000" inputmode="numeric" autocomplete="off" spellcheck="false">
+                    <button type="button" class="ca-show" @click="shown = ! shown" :aria-pressed="shown" x-text="shown ? 'Hide' : 'Show'">Show</button>
+                </span>
+            </label>
+            @endif
         </div>
 
         <div class="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3 dark:border-white/5">

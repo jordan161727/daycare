@@ -16,6 +16,26 @@
 import flatpickr from 'flatpickr';
 
 const FORMAT = 'm/d/Y';
+const INVALID = 'Type the date as mm/dd/yyyy, for example 06/16/2027.';
+
+/**
+ * A typed date, read strictly (QA #27, #39, 12 Nov 2026). mm/dd/yyyy — one-
+ * or two-digit month and day, four-digit year — or the posted Y-m-d; anything
+ * else, 13/45/2023 included, is no date at all rather than whatever the
+ * browser's own date parser makes of it (06/16/2027 had become 11/08/2026).
+ */
+export function parseStrictDate(text) {
+    const value = String(text ?? '').trim();
+    let m, d, y;
+    let match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+    if (match) [, m, d, y] = match.map(Number);
+    else if ((match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value))) [, y, m, d] = match.map(Number);
+    else return null;
+
+    const date = new Date(y, m - 1, d);
+    if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+    return date;
+}
 
 export function upgradeDateInput(input) {
     if (input._flatpickr || input.dataset.nativeDate !== undefined) return input._flatpickr ?? null;
@@ -32,11 +52,45 @@ export function upgradeDateInput(input) {
         maxDate: input.max || undefined,
         // Monday first, as the register's week runs.
         locale: { firstDayOfWeek: 1 },
+        // Typed text is read strictly; see parseStrictDate. (A Date passed
+        // in by script is taken as it is.)
+        parseDate: (text) => parseStrictDate(text) ?? undefined,
     });
 
-    picker.altInput.placeholder = 'mm/dd/yyyy';
-    picker.altInput.setAttribute('inputmode', 'numeric');
-    picker.altInput.setAttribute('autocomplete', 'off');
+    const box = picker.altInput;
+    box.placeholder = 'mm/dd/yyyy';
+    box.setAttribute('inputmode', 'numeric');
+    box.setAttribute('autocomplete', 'off');
+
+    // A typed date that is not one is said so, and the form will not post
+    // with it: the box is marked invalid, the hidden value emptied, and the
+    // browser's own check stops the submit with the message.
+    // flatpickr empties the box on its own when it cannot read what was
+    // typed, so what was typed is kept here and put back with the message —
+    // an empty box is the silent failure this is here to stop.
+    let typed = '';
+    box.addEventListener('input', () => { typed = box.value; });
+    const check = () => {
+        if (box.value.trim() === '' && typed.trim() !== '' && parseStrictDate(typed) === null) box.value = typed;
+        const text = box.value.trim();
+        const bad = text !== '' && parseStrictDate(text) === null;
+        if (! bad) typed = '';
+        box.setCustomValidity(bad ? INVALID : '');
+        box.toggleAttribute('aria-invalid', bad);
+        if (bad) {
+            if (native.get.call(input) !== '') {
+                native.set.call(input, '');
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            box.reportValidity();
+        }
+        return ! bad;
+    };
+    box.addEventListener('blur', check);
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && ! check()) e.preventDefault(); });
+    box.addEventListener('input', () => box.setCustomValidity(''));
+    input.form?.addEventListener('submit', (e) => { if (! check()) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 
     // Script writes the hidden field (Alpine's x-model, a reset button); the
     // visible box has to follow, and nothing fires for a property write — so

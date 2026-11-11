@@ -61,7 +61,7 @@ class PersonController extends Controller
                 ->map(fn (ChildPerson $link) => [
                     'id' => $link->person_id,
                     'name' => $link->person?->name,
-                    'cell' => $link->person?->cell,
+                    'cell' => Person::displayPhone($link->person?->cell),
                     'relationship' => $link->relationship,
                     'is_guardian' => $link->is_guardian,
                     'can_pickup' => $link->can_pickup,
@@ -79,6 +79,7 @@ class PersonController extends Controller
         $child = $this->childFor($request, required: true);
 
         $data = $request->validate($this->personRules() + $this->linkRules());
+        $data['cell'] = Person::e164($data['cell']);
 
         ['person' => $person, 'existed' => $existed] = $this->directory->create($data);
 
@@ -99,10 +100,11 @@ class PersonController extends Controller
         $this->authoriseForAnyLinkedChild($request, $person);
 
         $data = $request->validate($this->personRules());
+        $data['cell'] = Person::e164($data['cell']);
 
         $this->directory->update($person, $data);
 
-        return response()->json(['status' => 'ok', 'person' => $this->asPerson($person->fresh())]);
+        return response()->json(['status' => 'ok', 'person' => $this->asPerson($person->fresh(), withSsn: true)]);
     }
 
     /** The drawer: the person, and every child they belong to. */
@@ -112,8 +114,13 @@ class PersonController extends Controller
 
         $links = $person->links()->with('child:id,first_name,last_name,lan,classroom,address,city,zip')->get();
 
+        $shown = $this->asPerson($person, withSsn: true);
+        if ($shown['ssn_last4'] !== null) {
+            \App\Services\SensitiveAccess::record(\App\Services\SensitiveAccess::VIEWED, 'last four shown for '.$person->name, $person, $person->name);
+        }
+
         return response()->json([
-            'person' => $this->asPerson($person),
+            'person' => $shown,
             'children' => $links->map(fn (ChildPerson $link) => [
                 'id' => $link->child_id,
                 'name' => trim(($link->child->first_name ?? '').' '.($link->child->last_name ?? '')),
@@ -184,13 +191,21 @@ class PersonController extends Controller
             // Required by hand, though the column is not: a person typed in on
             // this screen is somebody the centre will have to ring. A record
             // carried over from a paper form may legitimately have no number.
-            'cell' => ['required', 'string', 'max:40'],
+            // A US mobile, kept as +1 and ten digits (QA #28): "abc12" is not
+            // somebody the centre can ring or text.
+            'cell' => ['required', 'string', 'max:40', function (string $attribute, mixed $value, \Closure $fail) {
+                if (Person::e164((string) $value) === null) {
+                    $fail('Enter a 10-digit US mobile number, like (716) 555-0134.');
+                }
+            }],
             'alternate_phone' => ['nullable', 'string', 'max:40'],
             'fax' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:255'],
             'employer' => ['nullable', 'string', 'max:255'],
             'title' => ['nullable', 'string', 'max:120'],
-            'ssn' => ['nullable', 'string', 'max:40'],
+            // Directors and the office only (QA #34): a teacher's form has no
+            // SSN box, and a request that carries one anyway is refused.
+            'ssn' => \App\Services\SensitiveAccess::allowed() ? ['nullable', 'string', 'max:40'] : ['prohibited'],
             'drivers_license' => ['nullable', 'string', 'max:60'],
         ];
     }
@@ -255,7 +270,12 @@ class PersonController extends Controller
         abort_unless($visible || ! $person->links()->exists(), 403);
     }
 
-    private function asPerson(Person $person): array
+    /**
+     * One person for a screen. The SSN's last four only where it is shown —
+     * the drawer, and the answer to saving it — and only to an admin; every
+     * other answer carries null.
+     */
+    private function asPerson(Person $person, bool $withSsn = false): array
     {
         return [
             'id' => $person->id,
@@ -263,7 +283,7 @@ class PersonController extends Controller
             'address' => $person->address,
             'home_phone' => $person->home_phone,
             'work_phone' => $person->work_phone,
-            'cell' => $person->cell,
+            'cell' => Person::displayPhone($person->cell),
             'alternate_phone' => $person->alternate_phone,
             'fax' => $person->fax,
             'email' => $person->email,
@@ -271,7 +291,8 @@ class PersonController extends Controller
             'title' => $person->title,
             // Never the whole number to a screen: the last four is what anybody
             // checking an identity actually reads off it.
-            'ssn_last4' => $person->ssnLast4(),
+            'ssn_last4' => $withSsn && \App\Services\SensitiveAccess::allowed() ? $person->ssnLast4() : null,
+            'can_see_ssn' => \App\Services\SensitiveAccess::allowed(),
             'drivers_license' => $person->drivers_license,
             'linked_count' => $person->links()->count(),
         ];
@@ -307,7 +328,7 @@ class PersonController extends Controller
         return [
             'id' => $person->id,
             'name' => $person->name,
-            'cell' => $person->cell,
+            'cell' => Person::displayPhone($person->cell),
             'families' => $families,
             'already_linked' => $child !== null && $person->links->contains('child_id', $child->id),
         ];

@@ -229,6 +229,8 @@ class ChildrenExportTest extends TestCase
             'can_pickup' => true, 'employer' => 'Retired', 'ssn' => '123-45-4864',
         ]);
 
+        // The SSN column is filled for a director or the office only (QA #34).
+        $this->actingAs($this->admin);
         $sheet = new PeopleSheet(collect([$child->load('personLinks.person')]));
 
         $this->assertSame('People', $sheet->title());
@@ -255,6 +257,8 @@ class ChildrenExportTest extends TestCase
 
         $this->link($child, 'Kaylynn Adkins', '585-820-5029', 'Mother', []);
 
+        // The SSN column is filled for a director or the office only (QA #34).
+        $this->actingAs($this->admin);
         $sheet = new PeopleSheet(collect([$child->load('personLinks.person')]));
         $mapped = $sheet->map($sheet->collection()->first());
 

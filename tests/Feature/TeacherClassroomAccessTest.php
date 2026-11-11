@@ -107,8 +107,8 @@ class TeacherClassroomAccessTest extends TestCase
                 'name' => 'Ms. Rivera',
                 'email' => 'teacher@example.com',
                 'classrooms' => ['School Age', 'PreK'],
-                'password' => 'password123',
-                'password_confirmation' => 'password123',
+                'password' => 'long-password-123',
+                'password_confirmation' => 'long-password-123',
             ])
             ->assertRedirect(route('staff.show', User::where('email', 'teacher@example.com')->first()));
 

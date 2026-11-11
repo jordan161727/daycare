@@ -57,15 +57,21 @@
                 <label><span class="cs-label">Employer</span><input type="text" class="cs-input" x-model="drawer.person.employer"></label>
                 <label><span class="cs-label">Title</span><input type="text" class="cs-input" x-model="drawer.person.title"></label>
                 <label><span class="cs-label">Fax</span><input type="text" class="cs-input" x-model="drawer.person.fax"></label>
-                <label>
+                {{-- Never handed to the browser in full. The last four is
+                     what anybody checking an identity reads off it, and a
+                     whole one sitting in a page is a whole one to leak.
+                     Directors and the office only; masked while typed (QA #34). --}}
+                @if(\App\Services\SensitiveAccess::allowed())
+                <label x-data="{ shown: false }">
                     <span class="cs-label">SSN</span>
-                    {{-- Never handed to the browser in full. The last four is
-                         what anybody checking an identity reads off it, and a
-                         whole one sitting in a page is a whole one to leak. --}}
-                    <input type="text" class="cs-input" x-model="drawer.ssn"
-                           :placeholder="drawer.person.ssn_last4 ? '•••••' + drawer.person.ssn_last4 : '000 00 0000'">
+                    <span class="ca-masked-row">
+                        <input type="text" class="cs-input ca-masked" :class="{ 'ca-shown': shown }" x-model="drawer.ssn" inputmode="numeric" autocomplete="off" spellcheck="false"
+                               :placeholder="drawer.person.ssn_last4 ? '•••••' + drawer.person.ssn_last4 : '000 00 0000'">
+                        <button type="button" class="ca-show" @click="shown = ! shown" :aria-pressed="shown" x-text="shown ? 'Hide' : 'Show'">Show</button>
+                    </span>
                     <span class="cs-help" x-text="drawer.person.ssn_last4 ? 'On file, last four shown. Type a new one to replace it.' : 'Not on file.'"></span>
                 </label>
+                @endif
             </div>
 
             {{-- Said before the save, not after it. --}}
