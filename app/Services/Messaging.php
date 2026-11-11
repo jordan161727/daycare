@@ -6,6 +6,7 @@ use App\Models\Child;
 use App\Models\ChildPerson;
 use App\Models\Message;
 use App\Models\MessageThread;
+use App\Models\ParentDevice;
 use App\Models\Person;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -31,7 +32,7 @@ use Illuminate\Support\Str;
  */
 class Messaging
 {
-    public function __construct(private Texter $texter) {}
+    public function __construct(private Texter $texter, private ParentPortal $portal) {}
 
     /* ---------------------------------------------------------------
      * Who gets a text
@@ -230,6 +231,8 @@ class Messaging
                 $meta .= ' · '.$m->delivered.' delivered'.(count($m->skipped ?? []) ? ' · '.count($m->skipped).' skipped' : '');
             } elseif ($m->isOut() && ($m->media ?? []) !== []) {
                 $meta .= ' · picture message';
+            } elseif (! $m->isOut() && $m->channel === Message::APP) {
+                $meta .= ' · via the parent app';
             }
 
             return [
@@ -408,7 +411,16 @@ class Messaging
 
         $full = implode("\n", array_filter([$text, ...$links, $signature]));
 
-        $delivered = 0;
+        // With the parent app replacing texts (off unless switched on), a
+        // parent with the app on a phone hears by push alone and is counted
+        // as reached; everybody else is texted as before.
+        $appOnly = [];
+        if (config('daycare.parent_app.replaces_sms')) {
+            $appOnly = ParentDevice::whereIn('person_id', array_column($gets, 'person_id'))->pluck('person_id')->unique()->all();
+            $gets = array_values(array_filter($gets, fn ($g) => ! in_array($g['person_id'], $appOnly, true)));
+        }
+
+        $delivered = count($appOnly);
         foreach ($gets as $g) {
             if ($this->texter->send(Texter::e164($line) ?? $line, Texter::e164($g['phone']), $full, $photos)) {
                 $delivered++;
@@ -418,6 +430,9 @@ class Messaging
         $message->update(['delivered' => $delivered]);
         $thread->forceFill(['last_message_at' => now()])->save();
         $thread->readBy($by);
+
+        // And the parent app, for everybody on it, whether or not they were texted.
+        $this->portal->pushFor($message);
 
         return $message;
     }

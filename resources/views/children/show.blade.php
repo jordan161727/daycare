@@ -306,33 +306,75 @@
             </section>
 
             {{-- Family & pick-up --}}
-            <section class="sec" x-show="sec === 'all' || sec === 'family'" data-section="family">
-                <div class="sech"><h2>Family &amp; pick-up</h2><span style="font-size: 12.5px;" class="faint">One list — tick what each person may do</span><button type="button" class="btn sm" style="margin-left: auto;" @click="addPerson = ! addPerson">+ Add person</button></div>
-
-                <div x-show="addPerson" x-cloak class="panel" data-add-person>
-                    <b style="font-size: 13.5px;">Add a person to {{ $child->first_name }}</b>
-                    <span style="font-size: 12.5px;" class="muted">Search first — if they're already on file for a brother or sister, link the same person so their details are entered once.</span>
-                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <input class="inp" style="flex: 1 1 260px;" placeholder="Name or cell number" x-model.debounce.300ms="query" @input="searchPeople()">
-                        <select class="inp" style="width: 170px;" x-model="relationship">@foreach($relationships as $rel)<option>{{ $rel }}</option>@endforeach</select>
+            {{-- Laid out to Jordan's brief (6 Nov 2026): the add panel as two
+                 cards — link someone on file, or create someone new — under one
+                 relationship picker, so neither box runs the width of the page. --}}
+            <section class="sec fam" x-show="sec === 'all' || sec === 'family'" data-section="family">
+                <div class="fam-head">
+                    <div>
+                        <h2>Family &amp; pick-up</h2>
+                        <p class="fam-sub">One list — tick what each person may do</p>
                     </div>
-                    <template x-for="hit in hits" :key="hit.id">
-                        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #fff; border: 1px solid #e7e9f0; border-radius: 10px; font-size: 13.5px;" class="dark:!bg-slate-800">
-                            <span style="flex: 1;"><b x-text="hit.name"></b> · <span x-text="hit.cell || '—'"></span> <span class="muted" x-text="hit.already_linked ? '· already on this record' : (hit.families.length ? '· ' + hit.families.join(', ') : '')"></span></span>
-                            <button type="button" class="btn sm pri" x-show="! hit.already_linked" @click="linkPerson(hit.id)">Link</button>
-                        </div>
-                    </template>
-                    <span style="font-size: 13px;" class="faint" x-show="query.length > 1 && ! searching && hits.length === 0">No one on file matches.</span>
-                    <div style="display: flex; align-items: center; gap: 8px; border-top: 1px solid #e7e9f0; padding-top: 10px; flex-wrap: wrap;">
-                        <span style="font-size: 12.5px;" class="muted">Not one of these?</span>
-                        <input class="inp" style="flex: 1 1 180px;" placeholder="Full name" x-model="newName">
-                        <input class="inp" style="width: 160px;" placeholder="Mobile" x-model="newPhone">
-                        <button type="button" class="btn sm" @click="createPerson()" :disabled="busy">+ Create a new person</button>
-                    </div>
-                    <span style="font-size: 12.5px; color: #be123c;" x-show="error" x-text="error"></span>
+                    <button type="button" class="fam-btn" @click="addPerson = ! addPerson" :aria-expanded="addPerson" aria-controls="fam-add">+ Add person</button>
                 </div>
 
-                <div style="overflow-x: auto;">
+                <div id="fam-add" x-show="addPerson" x-cloak class="fam-add" data-add-person>
+                    <div class="fam-add-top">
+                        <div class="fam-add-intro">
+                            <h3>Add a person to {{ $child->first_name }}</h3>
+                            <p>Search first — if they're already on file for a brother or sister, link the same person so their details are entered once.</p>
+                        </div>
+                        <label class="fam-field fam-rel">
+                            <span class="fam-label fam-caps">Relationship to {{ $child->first_name }}</span>
+                            <select class="fam-input" x-model="relationship">@foreach($relationships as $rel)<option>{{ $rel }}</option>@endforeach</select>
+                        </label>
+                    </div>
+
+                    <div class="fam-ways">
+                        <div class="fam-way" data-add-link>
+                            <h4><span aria-hidden="true">①</span> Link someone already on file</h4>
+                            <label class="fam-field">
+                                <span class="fam-label">Search by name or cell number</span>
+                                <span class="fam-search">
+                                    <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><circle cx="8.5" cy="8.5" r="5.75" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13 13l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                                    <input type="search" class="fam-input" placeholder="Name or cell number" x-model="query" @input.debounce.300ms="searchPeople()" autocomplete="off">
+                                </span>
+                            </label>
+                            <p class="fam-hint">Matches from {{ $child->first_name }}'s siblings appear here as you type.</p>
+                            <div class="fam-hits" x-show="hits.length" x-cloak>
+                                <template x-for="hit in hits" :key="hit.id">
+                                    <div class="fam-hit">
+                                        <span class="fam-hit-who"><b x-text="hit.name"></b> · <span x-text="hit.cell || '—'"></span> <span class="fam-muted" x-text="hit.already_linked ? '· already on this record' : (hit.families.length ? '· ' + hit.families.join(', ') : '')"></span></span>
+                                        <button type="button" class="fam-btn fam-btn-sm fam-btn-pri" x-show="! hit.already_linked" @click="linkPerson(hit.id)" :disabled="busy">Link</button>
+                                    </div>
+                                </template>
+                            </div>
+                            <p class="fam-hint" x-show="query.length > 1 && ! searching && hits.length === 0" x-cloak>No one on file matches.</p>
+                        </div>
+
+                        <span class="fam-or" aria-hidden="true">or</span>
+
+                        <div class="fam-way" data-add-new>
+                            <h4><span aria-hidden="true">②</span> Not on file? Create a new person</h4>
+                            <div class="fam-grid">
+                                <label class="fam-field">
+                                    <span class="fam-label">Full name</span>
+                                    <input class="fam-input" placeholder="First and last name" x-model="newName" autocomplete="off">
+                                </label>
+                                <label class="fam-field">
+                                    <span class="fam-label">Mobile</span>
+                                    <input type="tel" class="fam-input" placeholder="082 555 0134" x-model="newPhone" autocomplete="off">
+                                </label>
+                            </div>
+                            <div class="fam-way-foot">
+                                <button type="button" class="fam-btn fam-btn-pri" @click="createPerson()" :disabled="busy">+ Create and add to {{ $child->first_name }}</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="fam-error" role="alert" x-show="error" x-cloak x-text="error"></p>
+                </div>
+
+                <div class="fam-table">
                     <table class="tbl people" data-people-table>
                         <thead><tr><th title="Who to phone first in an emergency">Call #</th><th>Person</th><th>Relationship</th><th>Mobile</th><th>Guardian</th><th>Pick-up</th><th>Emergency</th><th>Pays</th><th>Texts</th><th></th></tr></thead>
                         <tbody>
@@ -377,7 +419,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="10" style="padding: 24px; text-align: center;" class="muted">Nobody is on {{ $child->first_name }}'s record yet.</td></tr>
+                                <tr><td colspan="10" class="fam-empty"><b>Nobody is on {{ $child->first_name }}'s record yet</b><span>Add a parent or guardian above, then tick what each person may do.</span></td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -386,15 +428,32 @@
                      and who must not. A restriction beats the tick. --}}
                 @php($cleared = $people->filter(fn ($link) => $link->allowsPickup()))
                 @php($barred = $people->filter(fn ($link) => filled($link->restriction)))
-                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 4px;" data-pickup-summary>
-                    <span class="muted">Cleared to collect: {{ $cleared->isNotEmpty() ? $cleared->map(fn ($link) => $link->person?->name)->filter()->join(', ') : 'Nobody is cleared to collect this child.' }}</span>
-                    @if($barred->isNotEmpty())
-                        <span style="color: #be123c; font-weight: 600;">Must not collect: {{ $barred->map(fn ($link) => $link->person?->name.' — '.$link->restriction)->join(' · ') }}</span>
-                    @endif
-                </div>
-                <div class="kv">
-                    <span>Home address</span><span>{{ collect([$child->address, $child->city, $child->zip])->filter()->join(', ') ?: '—' }}</span>
-                    <span>Custody</span><span>{{ $child->custody_note ?: ($child->parents_status ?: '—') }}</span>
+                @php($homeAddress = collect([$child->address, $child->city, trim($child->state.' '.$child->zip)])->filter()->join(', '))
+                @php($custody = $child->custody_note ?: $child->parents_status)
+                <div class="fam-tiles">
+                    <div class="fam-tile" data-pickup-summary>
+                        <span class="fam-caps">Cleared to collect</span>
+                        @if($cleared->isNotEmpty())
+                            <span class="fam-chips">
+                                @foreach($cleared->map(fn ($link) => $link->person?->name)->filter() as $name)
+                                    <span class="fam-chip fam-chip-ok"><span class="fam-dot" aria-hidden="true"></span>{{ $name }}</span>
+                                @endforeach
+                            </span>
+                        @else
+                            <span class="fam-chips"><span class="fam-chip fam-chip-warn"><span class="fam-dot" aria-hidden="true"></span>Nobody cleared yet</span></span>
+                        @endif
+                        @if($barred->isNotEmpty())
+                            <span class="fam-barred">Must not collect: {{ $barred->map(fn ($link) => $link->person?->name.' — '.$link->restriction)->join(' · ') }}</span>
+                        @endif
+                    </div>
+                    <div class="fam-tile">
+                        <span class="fam-caps">Home address</span>
+                        @if($homeAddress)<span>{{ $homeAddress }}</span>@else<span class="fam-muted">Not added</span>@endif
+                    </div>
+                    <div class="fam-tile">
+                        <span class="fam-caps">Custody</span>
+                        @if($custody)<span>{{ $custody }}</span>@else<span class="fam-muted">No arrangement on file</span>@endif
+                    </div>
                 </div>
             </section>
 

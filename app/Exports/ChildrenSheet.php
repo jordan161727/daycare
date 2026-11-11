@@ -166,7 +166,7 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
             $child->scheduleLabel(),
             $child->scheduleDaysLabel(),
             $child->expected_hours_per_week,
-            trim(collect([$child->address, $child->city, $child->zip])->filter()->implode(', ')),
+            trim(collect([$child->address, $child->city, trim($child->state.' '.$child->zip)])->filter()->implode(', ')),
             $child->telephone,
             $child->email_address,
             $child->dss_case_no,

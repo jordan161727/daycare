@@ -1,0 +1,753 @@
+{
+  "info": {
+    "name": "AngelNest Parent App API",
+    "description": "The AngelNest parent app's API — sign in by text code, read and send messages in the same conversations as the staff **Messages** page.\n\n## Two servers to point it at\nChange `base_url` on the collection's **Variables** tab (then Ctrl+S):\n\n| Server | base_url | Sign-in code | Parents |\n|---|---|---|---|\n| **Your local AngelNest** (default) | `http://127.0.0.1:8000/api/parent` | Written to `storage\\logs\\laravel.log` — copy it into `code` | Real parents in your local data |\n| **Sandbox** | `http://127.0.0.1:8124/api/parent` | Filled in for you | Made-up (table below) |\n\n**Local (port 8000):** set `phone` to the mobile of a parent with **Texts** ticked on an Active or Pending child. After request 1, get the code with\n```\nSelect-String \"AngelNest code\" storage\\logs\\laravel.log | Select-Object -Last 1\n```\nput the 6 digits in `code`, save, then run 2. Nothing is texted (no Twilio locally), but what you send is saved in your local data.\n\n**Sandbox (port 8124):** start it with\n```\npowershell -ExecutionPolicy Bypass -File scripts\\parent-app-sandbox.ps1\n```\n\n| Phone | Who | Expect |\n|---|---|---|\n| 585-555-0134 | Kate — Mia + Leo | Signs in |\n| 585-555-0135 | Dan — Mia | Same Mia conversations as Kate |\n| 585-555-0177 | Olivia — Ava | Only Ava's |\n| 585-555-0188 | Texts not ticked | No code |\n| 585-555-0199 | Court restriction | No code |\n\n## Run in order\n**0** checks the connection. **1 → 2** sign in (the token is saved and sent automatically). **4** picks a conversation. The rest use what earlier requests saved.\n\n**Staff side:** `/messages` on the same server (port 8000: your usual login · sandbox: director@sandbox.test / sandbox-pass). Send from there, then press **6** in Postman to see it arrive.\n\n**Errors:** `401` sign in again · `404` not this parent's · `422` check `errors` · `429` wait a minute.\n\nFull guide: `docs/parent-app-api.md`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000/api/parent"
+    },
+    {
+      "key": "phone",
+      "value": ""
+    },
+    {
+      "key": "code",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "thread_id",
+      "value": ""
+    },
+    {
+      "key": "child_id",
+      "value": ""
+    },
+    {
+      "key": "last_message_id",
+      "value": "0"
+    },
+    {
+      "key": "upload_path",
+      "value": ""
+    },
+    {
+      "key": "upload_kind",
+      "value": "photo"
+    },
+    {
+      "key": "push_token",
+      "value": "ExponentPushToken[postman-test]"
+    },
+    {
+      "key": "tomorrow",
+      "value": ""
+    },
+    {
+      "key": "pickup_person_id",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.request.headers.upsert({ key: 'Accept', value: 'application/json' });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Sign in",
+      "item": [
+        {
+          "name": "0. Check connection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Server answers', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.test('Connected to ' + (r.centre || 'AngelNest'), () => pm.expect(r.connected).to.eql(true));",
+                  "console.log(r.signed_in ? 'Connected and signed in as ' + r.parent.name : 'Connected, not signed in yet (run 1 and 2).');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/ping",
+            "description": "Is Postman reaching the server, and are you signed in? Press **Send** — the **Test Results** tab and the **Console** say which.\n\n**Answer 200**\n```json\n{ \"connected\": true, \"api\": \"parent\", \"centre\": \"Little Angels Day Care Center\", \"server_time\": \"2026-11-06T09:49:00-05:00\", \"signed_in\": true, \"parent\": { \"id\": 1, \"name\": \"Kate Testwell\" } }\n```\n- **Could not send request / ECONNREFUSED** — the server is not running, or `{{base_url}}` points at the wrong place.\n- `\"signed_in\": false` — connected, but no token yet (or it expired): run 1 and 2."
+          }
+        },
+        {
+          "name": "1. Text me a code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "if (r.debug_code) { pm.collectionVariables.set('code', r.debug_code); console.log('Sandbox code saved: ' + r.debug_code); }",
+                  "else { console.log('Code sent. Local server: read it from storage/logs/laravel.log (Select-String \"AngelNest code\" storage\\\\logs\\\\laravel.log | Select-Object -Last 1), put it in the code variable, save, then run 2.'); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\"\n}"
+            },
+            "url": "{{base_url}}/login/start",
+            "description": "Sends a 6-digit sign-in code by text to the parent's mobile.\n\n**Body**\n```json\n{ \"phone\": \"585-555-0134\" }\n```\nAny format works — `(585) 555-0134`, `5855550134`, `+15855550134`.\n\n**Answer 200** (always the same, so nobody can find out which numbers are on file)\n```json\n{ \"sent\": true, \"expires_in\": 600, \"message\": \"If that number is on file, a code is on its way.\" }\n```\nWhere the code goes:\n- **Local (port 8000):** to `storage\\logs\\laravel.log` — run `Select-String \"AngelNest code\" storage\\logs\\laravel.log | Select-Object -Last 1`, put the digits in `{{code}}`, save.\n- **Sandbox (port 8124):** the answer also has `\"debug_code\"`, saved into `{{code}}` for you.\n- **A real server with Twilio:** a text to the phone — type it into `{{code}}`.\n\n**Rules:** the code lasts 10 minutes and allows 5 tries; asking again replaces it.\n\n**Errors:** `422` no phone · `429` more than 5 requests a minute (or 10 an hour for one number)."
+          }
+        },
+        {
+          "name": "2. Check the code → token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "if (r.token) {",
+                  "  pm.collectionVariables.set('token', r.token);",
+                  "  if (r.parent && r.parent.children && r.parent.children.length) pm.collectionVariables.set('child_id', r.parent.children[0].id);",
+                  "  console.log('Signed in as ' + r.parent.name + '; token saved.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"code\": \"{{code}}\",\n  \"device_name\": \"Postman\"\n}"
+            },
+            "url": "{{base_url}}/login/verify",
+            "description": "Checks the code and signs the parent in.\n\n**Body**\n```json\n{ \"phone\": \"585-555-0134\", \"code\": \"427209\", \"device_name\": \"Postman\" }\n```\n\n**Answer 200**\n```json\n{\n  \"token\": \"1|akGrJPdF…\",\n  \"token_type\": \"Bearer\",\n  \"expires_in_days\": 90,\n  \"parent\": { \"id\": 1, \"name\": \"Kate Testwell\", \"children\": [ { \"id\": 1, \"name\": \"Mia Testwell\", … } ], … }\n}\n```\nThe token is saved into `{{token}}` and the first child's id into `{{child_id}}`. The token lasts 90 days.\n\n**Errors:** `422` — \"That code is wrong or has expired. Ask for a new one.\""
+          }
+        },
+        {
+          "name": "3. Who am I",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me",
+            "description": "The signed-in parent, their children, and the centre's phone lines. The app calls this on start-up; a `401` means \"show the sign-in screen\".\n\n**Answer 200**\n```json\n{\n  \"id\": 1, \"name\": \"Kate Testwell\", \"cell\": \"585-555-0134\", \"email\": null,\n  \"children\": [\n    { \"id\": 1, \"name\": \"Mia Testwell\", \"first_name\": \"Mia\", \"classroom\": \"Toddler\", \"status\": \"Active\" }\n  ],\n  \"centre\": { \"name\": \"Little Angels Day Care Center\", \"classroom_line\": \"(716) 555-0143\", \"office_line\": \"(716) 555-0142\" }\n}\n```\nChildren disappear from this list as soon as the parent is no longer allowed (Texts unticked, a restriction added, the child withdrawn)."
+          }
+        }
+      ],
+      "description": "A parent signs in with their **mobile number** and a **6-digit code** sent by text — no password.\n\nRun **0** to check the connection, then **1** and **2**. Request 2 saves the token, and every other request sends it automatically (`Authorization: Bearer {{token}}`).\n\nOnly a parent with **Texts** ticked on a child's record, no restriction, and the child Active or Pending can sign in."
+    },
+    {
+      "name": "2. Conversations",
+      "item": [
+        {
+          "name": "4. Inbox (saves first thread_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json().threads || [];",
+                  "const pick = t.find(x => x.can_reply) || t[0];",
+                  "if (pick) { pm.collectionVariables.set('thread_id', pick.id); console.log('thread_id = ' + pick.id + ' (' + pick.kind_label + ' · ' + pick.title + ')'); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/threads",
+            "description": "The parent's conversations, newest first. Saves the first one they can reply to into `{{thread_id}}`.\n\n**Answer 200**\n```json\n{\n  \"threads\": [\n    {\n      \"id\": 1, \"kind\": \"room\", \"kind_label\": \"Room · Toddler\", \"title\": \"Mia Testwell\",\n      \"child\": { \"id\": 1, \"name\": \"Mia Testwell\" },\n      \"can_reply\": true, \"unread\": 1,\n      \"last_message\": { \"id\": 1, \"preview\": \"Picnic Friday, please bring sunscreen.\", \"from_me\": false, \"sent_at\": \"2026-11-06T09:49:00-05:00\" },\n      \"last_message_at\": \"2026-11-06T09:49:00-05:00\"\n    }\n  ]\n}\n```\n- `unread` — messages after the parent's read mark that they did not write.\n- `can_reply` is `false` for announcements."
+          }
+        },
+        {
+          "name": "5. Open conversation (newest page)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json().messages || [];",
+                  "if (m.length) pm.collectionVariables.set('last_message_id', m[m.length - 1].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/threads/{{thread_id}}?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "threads",
+                "{{thread_id}}"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "One conversation: the thread and its newest messages, **oldest first**. Saves the last message id into `{{last_message_id}}`.\n\n**Query:** `limit` 1–100 (default 50).\n\n**Answer 200**\n```json\n{\n  \"thread\": { …same as in the inbox… },\n  \"messages\": [\n    {\n      \"id\": 2, \"thread_id\": 1,\n      \"from\": { \"type\": \"centre\", \"name\": \"Ray · Toddler\", \"is_me\": false },\n      \"body\": \"Picnic Friday, please bring sunscreen.\",\n      \"media\": [ { \"kind\": \"photo\", \"url\": \"https://…signed link…\" } ],\n      \"channel\": \"sms\",\n      \"sent_at\": \"2026-11-06T09:49:00-05:00\"\n    }\n  ]\n}\n```\n- `from.type` — `centre` (staff) or `parent`. `from.is_me` — this parent's own message (show on the right).\n- `channel` — `sms` (a text) or `app`.\n- `media.url` works for 30 days without a token.\n\n**Errors:** `404` — not this parent's conversation (or `{{thread_id}}` is empty: run 4 first)."
+          }
+        },
+        {
+          "name": "6. Check for new messages (after_id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const m = pm.response.json().messages || [];",
+                  "if (!m.length) console.log('No new messages. Send one from the staff Messages page, then press Send here again.');",
+                  "m.forEach(x => console.log('NEW  ' + x.from.name + ': ' + (x.body || '[photo]') + '  (' + x.sent_at + ')'));",
+                  "pm.test(m.length + ' new message(s)', () => true);",
+                  "if (m.length) pm.collectionVariables.set('last_message_id', m[m.length - 1].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/threads/{{thread_id}}?after_id={{last_message_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "threads",
+                "{{thread_id}}"
+              ],
+              "query": [
+                {
+                  "key": "after_id",
+                  "value": "{{last_message_id}}"
+                }
+              ]
+            },
+            "description": "**See staff messages arrive in Postman.** Postman cannot receive a push, so it asks:\n\n1. Send a message to this family from the staff **Messages** page.\n2. Press **Send** here.\n3. The new message is in the answer, and the **Console** (View → Show Postman Console) prints it as `NEW  Ray · Toddler: Picnic Friday!`.\n\nOnly messages newer than `{{last_message_id}}` come back, and the newest id is saved, so pressing Send again shows only what came after. Empty `messages` means nothing new yet."
+          }
+        },
+        {
+          "name": "7. Older messages (before_id)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/threads/{{thread_id}}?before_id={{last_message_id}}&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "threads",
+                "{{thread_id}}"
+              ],
+              "query": [
+                {
+                  "key": "before_id",
+                  "value": "{{last_message_id}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "The page of messages **before** `before_id` — for when the parent scrolls up past the first page. Same answer shape as 5. Use `limit` for the page size."
+          }
+        },
+        {
+          "name": "8. Send a message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "if (r.message) pm.collectionVariables.set('last_message_id', r.message.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Hello from Postman! See you Friday.\"\n}"
+            },
+            "url": "{{base_url}}/threads/{{thread_id}}/messages",
+            "description": "A message from the parent into the conversation. It appears on the staff Messages page as *\"Kate Testwell · via the parent app\"*.\n\n**Body** — `body`, `media`, or both\n```json\n{ \"body\": \"Hello from Postman! See you Friday.\" }\n```\n`body` up to 1600 characters; `media` up to 4 items from request 11.\n\n**Answer 201**\n```json\n{ \"message\": { \"id\": 5, \"from\": { \"type\": \"parent\", \"name\": \"You\", \"is_me\": true }, \"body\": \"Hello from Postman! See you Friday.\", \"media\": [], \"channel\": \"app\", \"sent_at\": \"…\" } }\n```\n\n**Errors:** `404` not this parent's conversation · `422` empty message, or the conversation is an **announcement** (one-way — use request 10 to write to the office)."
+          }
+        },
+        {
+          "name": "9. Mark as read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"last_message_id\": {{last_message_id}}\n}"
+            },
+            "url": "{{base_url}}/threads/{{thread_id}}/read",
+            "description": "Moves the parent's read mark, so `unread` in the inbox goes to 0.\n\n**Body**\n```json\n{ \"last_message_id\": 5 }\n```\nSend `{}` to mark everything read. The app calls this when a conversation is opened and when new messages arrive while it is open.\n\n**Answer 200:** `{ \"last_read_id\": 5 }`"
+          }
+        },
+        {
+          "name": "10. Start an Office conversation about a child",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const t = pm.response.json().thread;",
+                  "if (t) { pm.collectionVariables.set('thread_id', t.id); console.log('thread_id = ' + t.id + ' (' + t.kind_label + ')'); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"office\"\n}"
+            },
+            "url": "{{base_url}}/children/{{child_id}}/threads",
+            "description": "Finds — or opens, if there is none yet — the conversation of that kind about one child, and saves it into `{{thread_id}}`. Use it for a **\"Message the office\"** button, or to reply to an announcement.\n\n**URL:** `/children/{{child_id}}/threads` — the child id from request 2 or 3.\n\n**Body**\n```json\n{ \"kind\": \"office\" }\n```\n`kind`: `office` (office and director only) or `room` (the child's teachers and the director).\n\n**Answer 200:** `{ \"thread\": { \"id\": 5, \"kind\": \"office\", \"kind_label\": \"Office\", \"title\": \"Leo Testwell\", … } }`\n\n**Errors:** `404` — not this parent's child · `422` — kind is not room or office."
+          }
+        }
+      ],
+      "description": "The parent's inbox and conversations — the **same conversations** the staff Messages page shows.\n\n| kind | Badge | Can reply |\n|---|---|---|\n| `room` | Room · *classroom* | Yes |\n| `office` | Office | Yes |\n| `ann` | Announcement | No |\n\nRun **4** first: it saves a conversation into `{{thread_id}}` for 5–9."
+    },
+    {
+      "name": "3. Photos",
+      "item": [
+        {
+          "name": "11. Upload a photo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const r = pm.response.json();",
+                  "if (r.path) { pm.collectionVariables.set('upload_path', r.path); pm.collectionVariables.set('upload_kind', r.kind); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": "{{base_url}}/uploads",
+            "description": "Uploads a photo or video. Then send it with request 12.\n\n**How:** Body tab → **form-data** → on the `file` row click **Select Files** and pick a file.\n\nAccepted: jpeg, png, gif, webp, heic, mp4, mov, webm — up to 100 MB.\n\n**Answer 201**\n```json\n{ \"path\": \"messages/media/parent-1/abc123.jpg\", \"kind\": \"photo\", \"url\": \"https://…signed link…\" }\n```\n`path` and `kind` are saved into `{{upload_path}}` and `{{upload_kind}}`."
+          }
+        },
+        {
+          "name": "12. Send the photo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"A photo from Postman\",\n  \"media\": [{ \"path\": \"{{upload_path}}\", \"kind\": \"{{upload_kind}}\" }]\n}"
+            },
+            "url": "{{base_url}}/threads/{{thread_id}}/messages",
+            "description": "Sends the photo uploaded in request 11 into `{{thread_id}}`, with a line of text. It shows on the staff Messages page with the photo.\n\n**Body**\n```json\n{ \"body\": \"A photo from Postman\", \"media\": [ { \"path\": \"{{upload_path}}\", \"kind\": \"{{upload_kind}}\" } ] }\n```\nOnly paths from **this parent's own** uploads are accepted.\n\n**Errors:** `422` — `media.0.path` empty (run 11 first) or not this parent's upload."
+          }
+        }
+      ],
+      "description": "A photo or video is two steps: **upload** the file (11), then **send** a message with the saved path (12)."
+    },
+    {
+      "name": "4. Push and sign out",
+      "item": [
+        {
+          "name": "13. Register this device for push",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"push_token\": \"{{push_token}}\",\n  \"platform\": \"ios\"\n}"
+            },
+            "url": "{{base_url}}/devices",
+            "description": "Tells the server where to send push notifications for this parent. The real app sends the Expo push token it gets from `expo-notifications`.\n\n**Body**\n```json\n{ \"push_token\": \"ExponentPushToken[postman-test]\", \"platform\": \"ios\" }\n```\n`platform`: `ios`, `android` or `web`.\n\n**Answer 201:** `{ \"registered\": true }`\n\n**Try it:** after registering, send a message from the staff Messages page — in the sandbox a `[push]` line appears in `storage/logs/laravel.log` (title like *\"Mia · Toddler\"*, the message as the body)."
+          }
+        },
+        {
+          "name": "14. Forget this device",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"push_token\": \"{{push_token}}\"\n}"
+            },
+            "url": "{{base_url}}/devices",
+            "description": "Stops push notifications to this phone. The app calls this when the parent signs out.\n\n**Body**\n```json\n{ \"push_token\": \"ExponentPushToken[postman-test]\" }\n```\n\n**Answer 200:** `{ \"forgotten\": true }`"
+          }
+        },
+        {
+          "name": "15. Sign out",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) pm.collectionVariables.set('token', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{base_url}}/logout",
+            "description": "Deletes the token on the server and clears `{{token}}`. Any request after this answers `401` until you run 1 and 2 again.\n\n**Answer 200:** `{ \"signed_out\": true }`"
+          }
+        }
+      ],
+      "description": "Register the phone for push notifications after sign-in; forget it and sign out when the parent signs out."
+    },
+    {
+      "name": "5. Version 2: the day, photos, calendar, absence, pickup",
+      "description": "Added 9 Nov 2026. docs/parent-app-api.md §4.12–4.17. Sign in first (requests 1–3) so `{{token}}` and `{{child_id}}` are set.",
+      "item": [
+        {
+          "name": "16. A child's day",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/children/{{child_id}}/daily",
+            "description": "Where the child is today, from the register and the door kiosk. Add `?date=YYYY-MM-DD` for another day (§4.12).\n\n**Answer 200**\n```json\n{\n  \"date\": \"2026-11-09\",\n  \"status\": { \"state\": \"checked_in\", \"time\": \"2026-11-09T08:05:00-05:00\", \"by\": \"Kate Testwell\" },\n  \"totals\": null,\n  \"entries\": [ { \"id\": 12, \"time\": \"…\", \"type\": \"checkin\", \"title\": \"Checked in\", \"detail\": \"Dropped off by Kate Testwell\" } ],\n  \"note\": null\n}\n```\n`state`: `checked_in` · `checked_out` · `absent` · `not_arrived`. `totals` and `note` are `null`: meals, naps and notes aren't recorded at the centre yet.\n\n**Errors:** `404` — not this parent's child · `422` — bad date."
+          }
+        },
+        {
+          "name": "17. Photos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/children/{{child_id}}/photos?page=1",
+            "description": "Photos staff sent in this parent's conversations about the child, and in announcements, by day, newest first, 7 days a page (§4.13).\n\n**Answer 200:** `{ \"groups\": [ { \"date\", \"label\": \"TODAY\", \"caption\", \"photos\": [ { \"id\", \"thumb_url\", \"full_url\", \"taken_at\" } ] } ], \"next_page\": null }`\n\nThe links are signed and need no token."
+          }
+        },
+        {
+          "name": "18. Calendar (closure days)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/events?month=2026-11",
+            "description": "The days the centre is closed in a month (§4.14). Leave out `month` for this month.\n\n**Answer 200:** `{ \"month\": \"2026-11\", \"events\": [ { \"id\": 3, \"date\": \"2026-11-26\", \"kind\": \"closed\", \"title\": \"Thanksgiving\", \"detail\": null } ] }`"
+          }
+        },
+        {
+          "name": "19. Report an absence",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d = new Date(Date.now() + 86400000); pm.collectionVariables.set('tomorrow', d.toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"child_id\": {{child_id}},\n  \"dates\": [\"{{tomorrow}}\"],\n  \"reason\": \"sick\",\n  \"symptoms\": [\"fever\"],\n  \"note\": \"Back Thursday.\"\n}"
+            },
+            "url": "{{base_url}}/absences",
+            "description": "Tell the room a child will be away (§4.15). `{{tomorrow}}` is filled in for you.\n\n`reason`: `sick` · `appointment` · `family` · `vacation` · `other`. `symptoms` (only with `sick`): `fever` · `cough` · `stomach` · `rash`.\n\n**Answer 201:** `{ \"absences\": [ { \"id\", \"child_id\", \"date\", \"reason\" } ] }`\n\nAlso posted in the child's **Room** conversation — open `/messages` on the staff side to see it. DSS marks are not touched.\n\n**Errors:** `404` — not this parent's child · `422` — a past date, a repeated date, or an unknown reason."
+          }
+        },
+        {
+          "name": "20. Pickup list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const p = (pm.response.json().people || []).find((x) => !x.one_time);",
+                  "if (p) { pm.collectionVariables.set('pickup_person_id', p.id); console.log('pickup_person_id = ' + p.id + ' (' + p.name + ')'); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/children/{{child_id}}/pickup",
+            "description": "Who may collect the child, and who the parent said is coming today (§4.16). Saves the first person into `{{pickup_person_id}}`.\n\n**Answer 200:** `{ \"code\": null, \"expires_at\": null, \"code_hint\": \"Use your own door PIN…\", \"people\": [ { \"id\", \"name\", \"relation\", \"is_parent\" } ], \"today_person_id\": null }`\n\n`code` is always `null`: door PINs are per adult and stored only as hashes."
+          }
+        },
+        {
+          "name": "21. Choose who collects today",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"person_id\": {{pickup_person_id}}\n}"
+            },
+            "url": "{{base_url}}/children/{{child_id}}/pickup/today",
+            "description": "Someone on the pick-up list is collecting today. Answers the same object as request 20, and posts a note in the child's **Office** conversation.\n\n**Errors:** `422` on `person_id` — not on the pick-up list · `404` — not this parent's child."
+          }
+        },
+        {
+          "name": "22. Someone else, today only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sam Lee\",\n  \"relation\": \"Neighbour\",\n  \"phone\": \"585-555-0100\"\n}"
+            },
+            "url": "{{base_url}}/children/{{child_id}}/pickup/one-time",
+            "description": "A one-time person for today. Answers `201` with the object from request 20; they appear with `\"id\": 0, \"one_time\": true`. They are **never** added to the pick-up list — the note in the Office conversation asks staff to check photo ID."
+          }
+        },
+        {
+          "name": "23. Notification settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/notification-preferences",
+            "description": "Which pushes this parent wants (§4.17). Everything is on until changed.\n\n**Answer 200:** `{ \"messages\": true, \"announcements\": true, \"daily\": true, \"photos\": true }`"
+          }
+        },
+        {
+          "name": "24. Change notification settings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": false\n}"
+            },
+            "url": "{{base_url}}/notification-preferences",
+            "description": "Send any of `messages`, `announcements`, `daily`, `photos` as booleans. Answers the full set. With `messages` off, staff messages no longer push to this parent (texts are unaffected)."
+          }
+        }
+      ]
+    }
+  ]
+}

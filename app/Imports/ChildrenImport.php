@@ -80,6 +80,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
         // The centre keeps these three in one cell — see splitAddress.
         'address' => ['address', 'street_address', 'home_address', 'address_city_zip'],
         'city' => ['city', 'town'],
+        'state' => ['state', 'st', 'province'],
         'zip' => ['zip', 'zip_code', 'postcode', 'postal_code'],
         'telephone' => ['telephone', 'phone', 'home_phone', 'contact_number'],
         'email_address' => ['email_address', 'email', 'parent_email'],
@@ -141,7 +142,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             'lan', 'first_name', 'last_name', 'nickname', 'dob', 'gender', 'description',
             'classroom', 'status', 'enrolled_on', 'withdrawn_on',
             // Where they live
-            'address', 'city', 'zip', 'telephone', 'email_address',
+            'address', 'city', 'state', 'zip', 'telephone', 'email_address',
             // The day they are here
             'drop_off_time', 'pick_up_time', 'schedule_days', 'expected_hours_per_week',
             // Funding
@@ -635,6 +636,15 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             $data['status'] = ucfirst(strtolower($data['status']));
         }
 
+        // "NY", "ny" or "New York" all land as NY; anything else is left as
+        // typed for the rule to report, rather than dropped without a word.
+        if (isset($data['state'])) {
+            $state = trim((string) $data['state']);
+            $code = strtoupper($state);
+            $byName = array_search(strtolower($state), array_map('strtolower', Child::STATES), true);
+            $data['state'] = isset(Child::STATES[$code]) ? $code : ($byName ?: $state);
+        }
+
         $data = $this->foldAppearance($data);
 
         return $data;
@@ -799,6 +809,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             'enrolled_on' => ['nullable', 'date'],
             'withdrawn_on' => ['nullable', 'date', 'after_or_equal:enrolled_on'],
             'email_address' => ['nullable', 'string', 'max:255'],
+            'state' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(Child::STATES))],
             'mother_email' => ['nullable', 'string', 'max:255'],
             'father_email' => ['nullable', 'string', 'max:255'],
             'schedule_days' => ['nullable', 'array'],

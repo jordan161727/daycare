@@ -107,12 +107,15 @@
                                                     <button type="button" x-show="p.editable && p.st !== 'abs'" class="pen" @click="openEdit(c, x.date, p)" aria-label="Edit times">✎</button>
                                                     <span x-show="p.edited" class="edt" :title="'Fixed by hand' + (p.editedBy ? ' · ' + p.editedBy : '')"></span>
                                                 </div>
-                                                <div x-show="isEditing(c.id, x.date, p.session)" x-cloak class="inl">
-                                                    <input x-model.trim="edit.in" :placeholder="p.placeholder || 'in'" aria-label="Time in" @keydown="key($event, 'in')" x-ref="editIn">
-                                                    <span style="font-size: 11px;" class="faint">–</span>
-                                                    <input x-model.trim="edit.out" placeholder="out" aria-label="Time out" @keydown="key($event, 'out')">
-                                                    <button type="button" class="ok" @click="saveEdit()" aria-label="Save">✓</button>
-                                                </div>
+                                                {{-- x-if, not x-show: the boxes read edit.in / edit.out, and edit is null until a pen is pressed. --}}
+                                                <template x-if="isEditing(c.id, x.date, p.session)">
+                                                    <div class="inl">
+                                                        <input x-model.trim="edit.in" :placeholder="p.placeholder || 'in'" aria-label="Time in" @keydown="key($event, 'in')" x-ref="editIn">
+                                                        <span style="font-size: 11px;" class="faint">–</span>
+                                                        <input x-model.trim="edit.out" placeholder="out" aria-label="Time out" @keydown="key($event, 'out')">
+                                                        <button type="button" class="ok" @click="saveEdit()" aria-label="Save">✓</button>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </template>
                                     </div>

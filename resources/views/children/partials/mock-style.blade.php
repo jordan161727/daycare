@@ -74,4 +74,94 @@
     .ch .tl::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 2px; background: #e7e9f0; }
     .ch .tl .dot { position: absolute; left: -17px; top: 12px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; background: #9aa6c4; }
     .ch .tl .dot.ok { background: #15803d; } .ch .tl .dot.bad { background: #be123c; } .ch .tl .dot.dss { background: #7c3aed; }
+
+    /* Family & pick-up (Jordan's brief, 6 Nov 2026): 44px pills and inputs,
+       the add panel as two cards, the table in its own scrolling box. */
+    .ch .fam { --fam-ink: #1f2340; --fam-muted: #5b6078; --fam-line: #d9dcea; --fam-line-soft: #e3e5f0; --fam-inset: #f6f7fc; --fam-card: #fff; --fam-pri: #2f55c9; --fam-pri-hover: #2445a8;
+        max-width: 1200px; padding: 24px; gap: 20px; border-radius: 20px; border-color: var(--fam-line-soft); box-shadow: 0 1px 2px rgb(31 35 64 / .04), 0 8px 24px -16px rgb(31 35 64 / .12);
+        color: var(--fam-ink); font-family: Inter, system-ui, sans-serif; }
+    .dark .ch .fam { --fam-ink: #e2e8f0; --fam-muted: #a3adc8; --fam-line: rgb(255 255 255 / .16); --fam-line-soft: rgb(255 255 255 / .1); --fam-inset: rgb(30 41 59 / .6); --fam-card: rgb(15 23 42); --fam-pri: #7b9bf0; --fam-pri-hover: #a3b8f5; }
+    .ch .fam-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .ch .fam-head h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; }
+    .ch .fam-sub { margin: 2px 0 0; font-size: 13px; line-height: 18px; color: var(--fam-muted); }
+    .ch .fam-muted { color: var(--fam-muted); }
+    .ch .fam-caps { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fam-muted); }
+
+    .ch .fam-btn { font: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 20px; border: 1px solid var(--fam-line); border-radius: 999px; background: var(--fam-card); color: var(--fam-ink); font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .ch .fam-btn:hover { border-color: var(--fam-pri); color: var(--fam-pri); }
+    .ch .fam-btn-pri { border-color: var(--fam-pri); background: var(--fam-pri); color: #fff; }
+    .ch .fam-btn-pri:hover { border-color: var(--fam-pri-hover); background: var(--fam-pri-hover); color: #fff; }
+    .dark .ch .fam-btn-pri, .dark .ch .fam-btn-pri:hover { color: #0f172a; }
+    .ch .fam-btn-sm { min-height: 36px; padding: 0 16px; font-size: 13px; }
+    .ch .fam-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .ch .fam :is(button, input, select, a):focus-visible { outline: 2px solid var(--fam-pri); outline-offset: 2px; }
+
+    .ch .fam-add { display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--fam-line-soft); border-radius: 12px; background: var(--fam-inset); }
+    .ch .fam-add-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+    .ch .fam-add-intro { flex: 1 1 320px; max-width: 640px; }
+    .ch .fam-add-intro h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; }
+    .ch .fam-add-intro p { margin: 4px 0 0; font-size: 13px; line-height: 18px; color: var(--fam-muted); }
+    .ch .fam-rel { width: 220px; flex: none; }
+    .ch .fam-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .ch .fam-label { font-size: 13px; line-height: 18px; font-weight: 600; color: var(--fam-ink); }
+    .ch .fam-label.fam-caps { font-size: 12px; color: var(--fam-muted); }
+    .ch .fam-input { font: inherit; width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--fam-line); border-radius: 8px; background: var(--fam-card); color: var(--fam-ink); font-size: 14px; box-sizing: border-box; }
+    .ch .fam-input::placeholder { color: #767b93; }
+    .ch .fam-input:focus { outline: 2px solid var(--fam-pri); outline-offset: 0; border-color: var(--fam-pri); }
+
+    .ch .fam-ways { display: flex; flex-wrap: wrap; align-items: stretch; gap: 16px; }
+    .ch .fam-way { flex: 1 1 320px; display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 1px solid var(--fam-line-soft); border-radius: 12px; background: var(--fam-card); }
+    .ch .fam-way h4 { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; }
+    /* Side by side when the panel has the room (the Family tab), one above the
+       other when it does not (the narrow column on All, a phone) — measured
+       on the panel, since the same page gives it both widths. */
+    .ch .fam-add { container-type: inline-size; }
+    @container (max-width: 760px) {
+        .ch .fam-ways { display: grid; }
+        .ch .fam-way { flex: none; }
+        .ch .fam-or { text-align: center; }
+    }
+    .ch .fam-or { align-self: center; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fam-muted); }
+    .ch .fam-search { position: relative; display: block; }
+    .ch .fam-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--fam-muted); pointer-events: none; }
+    .ch .fam-search .fam-input { padding-left: 40px; }
+    .ch .fam-hint { margin: 0; font-size: 13px; line-height: 18px; color: var(--fam-muted); }
+    .ch .fam-hits { display: flex; flex-direction: column; gap: 8px; }
+    .ch .fam-hit { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border: 1px solid var(--fam-line-soft); border-radius: 10px; background: var(--fam-inset); font-size: 14px; }
+    .ch .fam-hit-who { flex: 1; min-width: 0; }
+    .ch .fam-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .ch .fam-way-foot { display: flex; justify-content: flex-end; margin-top: auto; }
+    .ch .fam-error { margin: 0; font-size: 13px; font-weight: 600; color: #be123c; }
+    .dark .ch .fam-error { color: #fda4af; }
+
+    .ch .fam-table { overflow-x: auto; border: 1px solid var(--fam-line-soft); border-radius: 12px; }
+    .ch .fam-table .tbl { min-width: 900px; }
+    /* Nobody on the record: no columns worth scrolling to, so the message fits the box. */
+    .ch .fam-table .tbl:has(td.fam-empty) { min-width: 0; }
+    .ch .fam-table .tbl th { background: var(--fam-inset); font-size: 12px; color: var(--fam-muted); padding: 12px 10px; border-bottom-color: var(--fam-line-soft); white-space: nowrap; }
+    .ch .fam-table .tbl td { padding: 10px; }
+    .ch .fam-table .tbl tbody tr:last-child td { border-bottom: 0; }
+    .ch .fam-table .tbl th:nth-child(n+5):nth-child(-n+9), .ch .fam-table .tbl td:nth-child(n+5):nth-child(-n+9) { text-align: center; }
+    .ch .fam-table td.fam-empty { padding: 32px 16px; text-align: center; white-space: normal; }
+    .ch .fam-empty b { display: block; font-size: 15px; color: var(--fam-ink); }
+    .ch .fam-empty span { display: block; margin-top: 4px; font-size: 13px; color: var(--fam-muted); }
+
+    .ch .fam-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .ch .fam-tile { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; background: var(--fam-inset); font-size: 14px; line-height: 20px; }
+    .ch .fam-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ch .fam-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+    .ch .fam-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
+    .ch .fam-chip-warn { background: #fdf1de; color: #8a4b00; }
+    .ch .fam-chip-ok { background: #e3f5ec; color: #146c35; }
+    .ch .fam-barred { font-size: 13px; font-weight: 600; color: #be123c; }
+    .dark .ch .fam-barred { color: #fda4af; }
+
+    @media (max-width: 639px) {
+        .ch .fam { padding: 16px; }
+        .ch .fam-add { padding: 16px; }
+        .ch .fam-rel { width: 100%; }
+        .ch .fam-or { width: 100%; text-align: center; }
+        .ch .fam-way { flex-basis: 100%; padding: 16px; }
+        .ch .fam-way-foot .fam-btn { width: 100%; }
+    }
 </style>

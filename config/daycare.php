@@ -65,6 +65,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Parent app
+    |--------------------------------------------------------------------------
+    |
+    | The API the families' app talks to (routes/api.php, ParentPortal,
+    | docs/parent-app-api.md). push_driver is "log" until there is an Expo
+    | account: pushes are written to the log, as texts are with the log SMS
+    | driver. replaces_sms off means a parent with the app is still texted
+    | too; on, they hear by push alone.
+    |
+    */
+
+    'parent_app' => [
+        'name' => env('PARENT_APP_NAME', 'AngelNest'),
+        'push_driver' => env('PARENT_APP_PUSH_DRIVER', 'log'),
+        'replaces_sms' => (bool) env('PARENT_APP_REPLACES_SMS', false),
+        'token_days' => (int) env('PARENT_APP_TOKEN_DAYS', 90),
+        // The sandbox's shortcut: the sign-in code comes back in the API's
+        // answer. Ignored unless APP_ENV is local as well.
+        'show_codes' => (bool) env('PARENT_APP_SHOW_CODES', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Province
     |--------------------------------------------------------------------------
     |

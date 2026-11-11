@@ -1,7 +1,18 @@
 @extends('layouts.app')
 @section('title', 'Add Child')
 @section('content')
-<div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><x-page-header title="Add Child" subtitle="Create a child record for your daycare roster." /><a href="{{ route('children.document-import.create') }}" class="inline-flex w-fit rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700">Import PDF / Image</a></div>
-{{-- No width cap: the form lays itself out from the room it is given. --}}
-<div class="mt-7">@include('children.form', ['action' => route('children.store'), 'method' => 'POST', 'child' => null, 'submit' => 'Add Child', 'nextLan' => $nextLan])</div>
+{{-- Add, as tabs in one card (Jordan's brief, 6 Nov 2026): six tabs under a
+     summary strip, Back / Next / Add child along the bottom. Capped at 1120px,
+     the width the brief draws it at. The PDF review keeps the stacked shape. --}}
+<div class="ca-page">
+    <div class="ca-header">
+        <div class="min-w-0">
+            <p class="ca-eyebrow">Children · New record</p>
+            <h1 class="ca-title">Add child</h1>
+            <p class="ca-subtitle">Create a child record for your daycare roster. Only first and last name are required to save.</p>
+        </div>
+        <a href="{{ route('children.document-import.create') }}" class="ca-btn">Import PDF / image</a>
+    </div>
+    @include('children.form', ['action' => route('children.store'), 'method' => 'POST', 'child' => null, 'submit' => 'Add child', 'nextLan' => $nextLan, 'tabbed' => true])
+</div>
 @endsection

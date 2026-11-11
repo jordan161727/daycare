@@ -952,6 +952,220 @@
 }
 
 /*
+ * Add child, as tabs (Jordan's brief, 6 Nov 2026): the same form drawn at the
+ * Little Angels design system's sizes — Inter, 44px fields and touch targets,
+ * 13px semibold labels, pills for every button — in one white card.
+ *
+ * Unlayered on purpose. The shared partials carry a few Tailwind utilities
+ * (the Every day button's h-[26px]) and those sit in a later layer than
+ * .cs-form's own rules; only unlayered rules get past them. Everything is
+ * under .ca-page or .cs-form.ca, so nothing else changes.
+ */
+.ca-page {
+    --ca-page: #f6f7fb;
+    --ca-card: #ffffff;
+    --ca-sunken: #f2f4f9;
+    --ca-border: #e7e9f0;
+    --ca-input-border: #cfd3de;
+    --ca-ink: #1c2130;
+    --ca-muted: #5f6676;
+    --ca-link: #4c5a9e;
+    --ca-accent: #1b5e91;
+    --ca-accent-hover: #154b74;
+    --ca-accent-soft: #dcebfa;
+    --ca-danger: #be123c;
+    --ca-danger-soft: #ffe4e6;
+    --ca-warn-soft: #fef3c7;
+    --ca-warn-border: #f6dc9b;
+    max-width: 1120px;
+    color: var(--ca-ink);
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.dark .ca-page {
+    --ca-card: var(--color-night-900);
+    --ca-sunken: var(--color-night-800);
+    --ca-border: rgb(255 255 255 / 0.1);
+    --ca-input-border: rgb(255 255 255 / 0.18);
+    --ca-ink: #f1f5f9;
+    --ca-muted: #b6c3e6;
+    --ca-link: #a5b4fc;
+    --ca-accent: #7ba9dd;
+    --ca-accent-hover: #a3c4ea;
+    --ca-accent-soft: rgb(123 169 221 / 0.18);
+    --ca-danger: #fda4af;
+    --ca-danger-soft: rgb(190 18 60 / 0.25);
+    --ca-warn-soft: rgb(245 158 11 / 0.12);
+    --ca-warn-border: rgb(245 158 11 / 0.35);
+}
+
+/* ---- the page header ---- */
+.ca-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.ca-eyebrow { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ca-muted); }
+.ca-title { margin-top: 4px; font-size: 26px; line-height: 32px; font-weight: 700; color: var(--ca-ink); }
+.ca-subtitle { margin-top: 4px; font-size: 15px; line-height: 22px; color: var(--ca-muted); }
+
+/* ---- buttons: pills, 44px ---- */
+.ca-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; padding: 0 20px;
+    border: 1px solid var(--ca-input-border); border-radius: 999px;
+    background: var(--ca-card); color: var(--ca-ink);
+    font-size: 15px; font-weight: 600; white-space: nowrap;
+    transition: border-color .15s, color .15s, background-color .15s;
+}
+.ca-btn:hover { border-color: var(--ca-accent); color: var(--ca-accent); }
+.ca-btn-primary { border-color: var(--ca-accent); background: var(--ca-accent); color: #fff; }
+.ca-btn-primary:hover { border-color: var(--ca-accent-hover); background: var(--ca-accent-hover); color: #fff; }
+.dark .ca-btn-primary, .dark .ca-btn-primary:hover { color: var(--color-night-950); }
+.ca-page :is(button, a, input, select, textarea, [role="tabpanel"]):focus-visible { outline: 2px solid var(--ca-accent); outline-offset: 2px; }
+
+/* ---- the card: the form itself ---- */
+.cs-form.ca {
+    --cs-primary: var(--ca-accent);
+    --cs-primary-hover: var(--ca-accent-hover);
+    --cs-primary-soft: var(--ca-accent-soft);
+    --cs-card: var(--ca-card);
+    --cs-card-border: var(--ca-border);
+    --cs-field-border: var(--ca-input-border);
+    --cs-field-fill: var(--ca-card);
+    --cs-ink: var(--ca-ink);
+    --cs-label: var(--ca-ink);
+    --cs-help: var(--ca-muted);
+    overflow: hidden;
+    border: 1px solid var(--ca-border);
+    border-radius: 20px;
+    background: var(--ca-card);
+    box-shadow: 0 1px 2px rgb(28 33 48 / 0.04), 0 12px 32px -16px rgb(28 33 48 / 0.12);
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 22px;
+}
+
+/* 1. The summary strip */
+.ca-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 24px; background: var(--ca-sunken); border-bottom: 1px solid var(--ca-border); }
+.ca-summary > .min-w-0 { flex: 1 1 180px; }
+.ca-avatar { display: grid; place-items: center; width: 48px; height: 48px; flex: none; border-radius: 999px; background: #dcebfa; color: #1b5e91; font-size: 17px; font-weight: 600; }
+.ca-name { font-size: 17px; line-height: 24px; font-weight: 600; }
+.ca-meta { font-size: 13px; line-height: 18px; color: var(--ca-muted); }
+.ca-status { --dot: #9aa1ad; display: inline-flex; align-items: center; gap: 8px; margin-left: auto; min-height: 28px; padding: 0 12px; border-radius: 999px; background: #eceef3; color: #4b5263; font-size: 13px; font-weight: 600; }
+.ca-status-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--dot); }
+.ca-status[data-status="Active"] { --dot: #10b981; background: #dcfce7; color: #15803d; }
+.ca-status[data-status="Pending"] { --dot: #f59e0b; background: #fef3c7; color: #b45309; }
+
+/* 2. The tab bar: sideways on a phone rather than two rows */
+.ca-tabs { display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; border-bottom: 1px solid var(--ca-border); scrollbar-width: none; }
+.ca-tabs::-webkit-scrollbar { display: none; }
+.ca-tab {
+    display: inline-flex; align-items: center; gap: 8px; flex: none;
+    min-height: 52px; padding: 0 12px; margin-bottom: -1px;
+    border-bottom: 2px solid transparent; background: none;
+    color: var(--ca-muted); font-size: 15px; font-weight: 500; white-space: nowrap;
+}
+.ca-tab:hover { color: var(--ca-ink); }
+.ca-num { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--ca-sunken); color: var(--ca-muted); font-size: 12px; font-weight: 600; }
+.ca-tab[aria-selected="true"] { color: var(--ca-ink); font-weight: 600; border-bottom-color: var(--ca-accent); }
+.ca-tab[aria-selected="true"] .ca-num { background: var(--ca-accent); color: #fff; }
+.ca-tab[data-invalid="true"] .ca-num { background: var(--ca-danger-soft); color: var(--ca-danger); }
+.ca-tab:focus-visible { outline-offset: -2px; }
+.ca-required { padding: 1px 8px; border-radius: 999px; background: var(--ca-danger-soft); color: var(--ca-danger); font-size: 12px; line-height: 16px; font-weight: 600; }
+
+/* 3. The panels and their cards */
+.ca .cs-body { padding: 24px; }
+.ca .cs-cards { gap: 16px; margin-top: 0; }
+.ca .cs-card { border-radius: 12px; padding: 24px; }
+.ca .cs-card-title { font-size: 17px; line-height: 24px; font-weight: 600; }
+.ca .cs-card > .cs-card-title { margin-bottom: 16px; }
+.ca .cs-card-head { margin-bottom: 16px; }
+.ca-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.ca .cs-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.ca .cs-two { gap: 16px; }
+.ca .cs-label { margin-bottom: 6px; font-size: 13px; line-height: 18px; font-weight: 600; color: var(--ca-ink); }
+.ca .cs-req { color: var(--ca-danger); }
+.ca .cs-optional { font-weight: 400; color: var(--ca-muted); }
+.ca .cs-input { height: 44px; padding: 0 12px; border-radius: 8px; font-size: 15px; }
+.ca textarea.cs-input { height: auto; padding: 10px 12px; line-height: 22px; }
+.ca .cs-input:focus { border-color: var(--ca-accent); box-shadow: none; outline: 2px solid var(--ca-accent); outline-offset: 0; }
+.ca .cs-input[readonly] { background: var(--ca-sunken); color: var(--ca-muted); }
+.ca .cs-input[readonly]:focus { outline: none; }
+.ca .cs-input[aria-invalid="true"] { border-color: var(--ca-danger); }
+.ca .cs-help { margin-top: 6px; font-size: 13px; line-height: 18px; color: var(--ca-muted); }
+.ca .cs-badge { border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+.ca-error { display: block; margin-top: 6px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ca-danger); }
+.ca-eyebrow { display: block; }
+.ca .ca-eyebrow { margin: 24px 0 12px; }
+
+/* Basics: the photo tile beside the two names */
+.ca-identity { display: grid; grid-template-columns: 96px 1fr 1fr; gap: 16px; align-items: start; }
+.ca-identity-help { grid-column: 1 / -1; margin-top: 0 !important; }
+.ca-photo {
+    position: relative; display: grid; place-items: center;
+    width: 96px; height: 96px; overflow: hidden; cursor: pointer;
+    border: 1.5px dashed var(--ca-input-border); border-radius: 12px; background: var(--ca-sunken);
+}
+.ca-photo:hover { border-color: var(--ca-accent); }
+.ca-photo:focus-within { outline: 2px solid var(--ca-accent); outline-offset: 2px; }
+.ca-photo img { width: 100%; height: 100%; object-fit: cover; }
+.ca-photo-add { font-size: 28px; color: var(--ca-muted); }
+
+/* Enrollment: the status as four pills, the days as pills */
+.ca .cs-seg { flex-wrap: wrap; height: auto; padding: 0; gap: 8px; background: none; }
+.ca .cs-seg label { flex: none; }
+.ca .cs-seg span { height: 44px; padding: 0 18px; border: 1px solid var(--ca-input-border); border-radius: 999px; background: var(--ca-card); color: var(--ca-ink); font-size: 15px; }
+.ca .cs-seg span::before { width: 8px; height: 8px; opacity: 1; }
+.ca .cs-seg input:checked + span { border-color: var(--ca-accent); background: var(--ca-accent-soft); box-shadow: none; }
+.ca .cs-seg input:focus-visible + span { outline: 2px solid var(--ca-accent); outline-offset: 2px; box-shadow: none; }
+.ca .cs-group ~ .cs-group { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--ca-border); }
+.ca .cs-group-label { margin-bottom: 12px; font-size: 12px; line-height: 16px; color: var(--ca-muted); }
+.ca .cs-room { padding: 16px; background: var(--ca-sunken); }
+.ca .cs-room-name { font-size: 15px; font-weight: 600; }
+.ca .cs-room-sub { font-size: 13px; color: var(--ca-muted); }
+.ca .cs-btn { height: 44px; padding: 0 20px; font-size: 15px; }
+.ca .cs-room .cs-btn { height: 44px; }
+.ca .cs-day span { min-width: 56px; height: 44px; padding: 0 16px; border-radius: 999px; background: var(--ca-card); color: var(--ca-ink); font-size: 14px; }
+.ca .cs-day input:checked + span { border-color: var(--ca-accent); background: var(--ca-accent); color: #fff; }
+.dark .ca .cs-day input:checked + span { color: var(--color-night-950); }
+.ca .cs-day ~ .cs-btn { height: 44px; margin-left: 4px; padding: 0 18px; border: 1.5px dashed var(--ca-input-border); font-size: 14px; }
+.ca .cs-day ~ .cs-btn:hover { border-color: var(--ca-accent); }
+
+/* Parents and pick-ups: one person at a time */
+.ca-switch { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 2px; border-radius: 999px; background: var(--ca-sunken); }
+.ca-switch button { min-height: 40px; padding: 0 16px; border-radius: 999px; background: none; color: var(--ca-muted); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.ca-switch button:hover { color: var(--ca-ink); }
+.ca-switch button[aria-pressed="true"] { background: var(--ca-card); color: var(--ca-ink); box-shadow: 0 1px 2px rgb(28 33 48 / 0.1); }
+.ca-masked-row { display: flex; gap: 8px; }
+.ca-masked { -webkit-text-security: disc; }
+.ca-masked.ca-shown { -webkit-text-security: none; }
+.ca-show { flex: none; min-width: 64px; min-height: 44px; padding: 0 14px; border: 1px solid var(--ca-input-border); border-radius: 999px; background: var(--ca-card); color: var(--ca-ink); font-size: 14px; font-weight: 600; }
+
+/* Notes: the important card in amber, the alert button a dashed pill */
+.ca .ca-important { border-color: var(--ca-warn-border); background: var(--ca-warn-soft); }
+.ca .ca-important .cs-input { background: var(--ca-card); }
+.ca .cs-alert-row { gap: 8px; margin-bottom: 8px; }
+.ca .cs-alert-type { width: 140px; }
+.ca .cs-alert-drop { width: 44px; height: 44px; border-radius: 999px; font-size: 20px; }
+.ca .cs-alert-add { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border: 1.5px dashed var(--ca-input-border); border-radius: 999px; background: var(--ca-card); color: var(--ca-accent); font-size: 14px; }
+.ca .cs-alert-add:hover { border-color: var(--ca-accent); text-decoration: none; }
+.ca .cs-alerts { margin-bottom: 16px; }
+
+/* 4. The footer bar */
+.ca .cs-foot { gap: 12px; padding: 16px 24px; border-top: 1px solid var(--ca-border); }
+.ca-cancel { display: inline-flex; align-items: center; min-height: 44px; margin-right: auto; color: var(--ca-link); font-size: 15px; font-weight: 600; }
+.ca-cancel:hover { text-decoration: underline; }
+.ca-step { font-size: 13px; line-height: 18px; color: var(--ca-muted); }
+
+@media (max-width: 639px) {
+    .ca-summary { padding: 16px; }
+    .ca-tabs { padding: 0 8px; }
+    .ca .cs-body { padding: 16px; }
+    .ca .cs-card { padding: 16px; }
+    .ca .cs-foot { padding: 16px; }
+    .ca .cs-grid { grid-template-columns: 1fr; }
+    .ca-identity { grid-template-columns: 96px 1fr; }
+    .ca-identity > label:not(.ca-photo) { grid-column: 1 / -1; }
+    .ca-step { display: none; }
+}
+
+/*
  * The animated background for the two screens children and parents stand in
  * front of: drifting colour, clouds crossing, and a few things rising past.
  *

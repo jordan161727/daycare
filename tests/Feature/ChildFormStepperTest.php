@@ -115,30 +115,25 @@ class ChildFormStepperTest extends TestCase
 
     public function test_each_section_says_how_much_of_it_is_answered(): void
     {
-        // Two of the seven contact fields filled in.
+        // Two of the eight contact fields filled in.
         $child = $this->makeChild(['nickname' => 'Addie', 'city' => 'Trenton']);
 
         $this->actingAs($this->admin)
             ->get(route('children.edit', $child))
             ->assertOk()
-            ->assertSee('2/7', false);
+            ->assertSee('2/8', false);
     }
 
-    public function test_add_and_the_pdf_review_get_the_same_sections_without_the_stepper(): void
+    public function test_add_gets_its_own_tabs_rather_than_the_edit_stepper(): void
     {
+        // Add is tabbed now (ChildAddTabsTest has the rest), but not with the
+        // Edit band: no band, no People step, and no fill counters on a record
+        // that does not exist yet.
         $html = $this->actingAs($this->admin)->get(route('children.create'))->assertOk()->getContent();
 
-        // Nothing to step through: every section is on the page at once, which
-        // is what typing a record from scratch — or checking one against the
-        // scan beside it — actually wants.
-        $this->assertStringNotContainsString('cs-tab', $html);
-        $this->assertStringNotContainsString('x-show="index ===', $html);
-
-        $this->assertStringContainsString('name="first_name"', $html);
-        $this->assertStringContainsString('name="important_notes"', $html);
-
-        // And no fill counters on a record that does not exist yet.
+        $this->assertStringNotContainsString('cs-band', $html);
         $this->assertStringNotContainsString('cs-pill', $html);
+        $this->assertStringContainsString('class="ca-tab"', $html);
     }
 
     private function makeChild(array $attributes = []): Child

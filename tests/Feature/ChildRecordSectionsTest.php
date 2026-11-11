@@ -212,7 +212,8 @@ class ChildRecordSectionsTest extends TestCase
         $this->assertStringContainsString('data-people-table', $html);
         $this->assertStringContainsString('Pays', $html);
         $this->assertStringContainsString('Texts', $html);
-        $this->assertStringContainsString('Cleared to collect: Kate Foster', $html);
+        // The Cleared to collect tile names her, in a green chip.
+        $this->assertMatchesRegularExpression('/data-pickup-summary>\s*<span class="fam-caps">Cleared to collect<\/span>.*?fam-chip-ok"><span class="fam-dot" aria-hidden="true"><\/span>Kate Foster</s', $html);
 
         // The JSON endpoints the Add person panel uses carry the ticks too.
         $this->actingAs($this->admin)->postJson(route('people.link', $dan), ['child_id' => $child->id, 'gets_texts' => true, 'is_emergency' => true])

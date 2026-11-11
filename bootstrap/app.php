@@ -9,6 +9,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -16,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Every page is read fresh: no browser, back/forward or host cache
         // may hand back a roster as it was before the last correction.
         $middleware->web(append: [\App\Http\Middleware\FreshPages::class]);
+        // The parent app's API too: the live host's LiteSpeed cache must
+        // never hand one parent's conversations to the next.
+        $middleware->api(append: [\App\Http\Middleware\FreshPages::class]);
 
         // A parent's reply arrives from the SMS provider, which holds no
         // session and no token. The route checks the provider's own
@@ -27,9 +31,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'password.change' => \App\Http\Middleware\RequirePasswordChange::class,
             // Every export: a file the browser must fetch afresh each time.
             'never-cached' => \App\Http\Middleware\NeverCached::class,
+            // The parent app's routes: a parent's token only. See routes/api.php.
+            'parent' => \App\Http\Middleware\EnsureParent::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The parent app always gets JSON back — a 401, a 404, a validation
+        // error — even when it forgets the Accept header, never a login page.
+        $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*') || $request->expectsJson());
+
         // A dead CSRF token here means a page was left open, not an attack.
         // Send people back to the form they were filling in, with their answers
         // and a plain explanation, instead of Laravel's bare "Page Expired".

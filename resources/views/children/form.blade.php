@@ -17,9 +17,13 @@
     $child   ?Child   the record being edited, or null on create
     $submit  string   the label on the save button
     $stepper bool     true for the stepper shape (Edit)
+    $tabbed  bool     true for the tabbed shape (Add): six tabs in one card,
+                      a summary strip over them and Back / Next / Add along
+                      the bottom (Jordan's brief, 6 Nov 2026)
     $extracted array  values read off an imported PDF, on the review screen
 --}}
 @php($stepper = $stepper ?? false)
+@php($tabbed = ($tabbed ?? false) && ! $stepper)
 @php($extracted = $extracted ?? [])
 @php($fromDocument = fn ($field) => filled($extracted[$field] ?? null))
 @php($fieldClass = fn ($field) => 'cs-input'.($fromDocument($field) ? ' cs-from-doc' : ''))
@@ -33,11 +37,28 @@
     return $value instanceof \Carbon\CarbonInterface ? $value->toDateString() : $value;
 })
 
+{{-- The two contact fields drawn as a pick-list rather than a box: the
+     state, and Parents status. A Parents status somebody typed or imported
+     before the list existed stays on as a choice of its own, so opening and
+     saving the record never quietly blanks it. Null for every other field. --}}
+@php($choices = function (string $field, $current) {
+    if ($field === 'state') {
+        return ['' => 'Select a state'] + \App\Models\Child::STATES;
+    }
+    if ($field === 'parents_status') {
+        $options = ['' => 'Not recorded'] + array_combine(\App\Models\Child::PARENTS_STATUSES, \App\Models\Child::PARENTS_STATUSES);
+
+        return filled($current) && ! isset($options[$current]) ? $options + [$current => $current] : $options;
+    }
+
+    return null;
+})
+
 {{-- The repeated sections, as data: the same seven blocks of short fields make
      up steps 2 to 4, and writing them out would be four hundred lines of markup
      differing only in a prefix. --}}
 @php($sections = [
-    'Contact' => ['Nickname' => 'nickname', 'Address' => 'address', 'City' => 'city', 'Zip' => 'zip', 'Telephone' => 'telephone', 'Parents Status' => 'parents_status', 'Responsible for Payment' => 'responsible_for_payment'],
+    'Contact' => ['Nickname' => 'nickname', 'Address' => 'address', 'City' => 'city', 'State' => 'state', 'Zip' => 'zip', 'Telephone' => 'telephone', 'Parents Status' => 'parents_status', 'Responsible for Payment' => 'responsible_for_payment'],
     'Mother / Legal Guardian' => ['Mother Name' => 'mother_name', 'Mother Address' => 'mother_address', 'Mother Home Phone' => 'mother_home_phone', 'Mother Employer' => 'mother_employer', 'Mother Work Phone' => 'mother_work_phone', 'Mother Fax' => 'mother_fax', 'Mother Cell' => 'mother_cell', 'Mother Email' => 'mother_email', 'Mother Title' => 'mother_title', 'Mother SSN' => 'mother_ssn'],
     'Father / Legal Guardian' => ['Father Name' => 'father_name', 'Father Address' => 'father_address', 'Father Home Phone' => 'father_home_phone', 'Father Employer' => 'father_employer', 'Father Work Phone' => 'father_work_phone', 'Father Fax' => 'father_fax', 'Father Cell' => 'father_cell', 'Father Email' => 'father_email', 'Father Title' => 'father_title', 'Father SSN' => 'father_ssn'],
     'Emergency contacts' => ['Emergency Contact' => 'emergency_contact', 'Secondary Emergency Contact' => 'secondary_emergency_contact', 'Emergency Telephone' => 'emergency_telephone', 'Emergency Relationship' => 'emergency_relationship', 'Emergency License #' => 'emergency_license_number'],
@@ -69,7 +90,17 @@
 --}}
 @php($usesPeopleStep = $child !== null)
 
-@php($steps = array_values(array_filter([
+{{-- Add, as tabs: the Basics step split in two, the nickname moved up to sit
+     with the names, and the parents and pick-ups one person at a time. --}}
+@php($contactFields = array_values(array_diff($sections['Contact'], ['nickname'])))
+@php($steps = $tabbed ? [
+    ['label' => 'Basics', 'fields' => array_merge(['photo', 'nickname'], $identityFields)],
+    ['label' => 'Enrollment', 'fields' => $enrollmentFields],
+    ['label' => 'Child details', 'fields' => $contactFields],
+    ['label' => 'Parents', 'fields' => array_merge(array_values($sections['Mother / Legal Guardian']), array_values($sections['Father / Legal Guardian']))],
+    ['label' => 'Emergency & pickup', 'fields' => array_merge(array_values($sections['Emergency contacts']), array_values($sections['Authorized Pickup 1']), array_values($sections['Authorized Pickup 2']), array_values($sections['Authorized Pickup 3']))],
+    ['label' => 'Notes', 'fields' => $noteFields],
+] : array_values(array_filter([
     ['label' => 'Basics', 'blurb' => 'Who the child is, and how their place at the centre is set up.', 'fields' => array_merge(['photo'], $identityFields, $enrollmentFields)],
     ['label' => 'Child details', 'blurb' => 'Where they live, and the number to ring first.', 'fields' => array_values($sections['Contact'])],
 
@@ -95,16 +126,48 @@
      like a finished one until something counts it. --}}
 @php($filledCount = fn (array $fields) => collect($fields)->filter(fn ($field) => filled(old($field, $fieldValue($field))))->count())
 @php($showCounts = (bool) $child)
+{{-- Read the date of birth the form is actually showing,
+     not the one on the record: on a document import
+     there is no record yet, and the date came out of
+     the PDF.
+
+     Where there is a record, read it the way the model
+     does — the date sits in `dob` on everything that
+     predates the enrolment form and in `birth_date`
+     after it. Reading only the newer column opened
+     those records with the field blank, which then
+     saved the date away. --}}
+@php($formBirthDate = old('birth_date', $child?->birthDate()?->toDateString() ?? ($extracted['birth_date'] ?? null)) ?: null)
+@php($formFirst = old('first_name', $child?->first_name ?? ($extracted['first_name'] ?? '')))
+@php($formLast = old('last_name', $child?->last_name ?? ($extracted['last_name'] ?? '')))
+{{-- What the Classroom group says before there is a date of birth; the tabbed
+     shape keeps the date on another tab, so it says where. --}}
+@php($noBirthDateNote = $tabbed ? 'Add a date of birth on Basics and the room follows automatically.' : 'Add a date of birth and the room follows it.')
 
 <form
     method="POST"
     action="{{ $action }}"
     enctype="multipart/form-data"
-    class="cs-form"
+    class="cs-form @if($tabbed) ca @endif"
+    @if($tabbed)
+        {{-- The browser's own check stops at a required box on a hidden tab
+             and says nothing anyone can see; the submit guard below checks the
+             names itself and opens Basics, and the server checks the rest
+             and opens the tab that holds what it refused. --}}
+        novalidate
+        x-ref="card"
+    @endif
     {{-- index is the stepper's place; status is read by the save buttons,
          which say "Save and archive" when that is what saving would do. --}}
     x-data="{
         index: {{ $initialStep }},
+        firstName: @js($formFirst),
+        lastName: @js($formLast),
+        nameMissing: false,
+        go(i) {
+            this.index = Math.max(0, Math.min({{ $last }}, i));
+            if (this.$refs.card && this.$refs.card.getBoundingClientRect().top < 0) this.$refs.card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        },
         status: @js(old('status', $child?->status ?? 'Active')),
         {{-- What the record said when the form opened. A save that changes it
              is held for a word first, whichever way it went: moving a child
@@ -118,7 +181,7 @@
          rather than from the top of the page. The submit guard is the second
          lock: nothing with a changed status posts without the word. --}}
     x-init="$watch('status', value => { if (originalStatus !== null && value !== originalStatus && ! statusConfirmed) { confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) } })"
-    @submit="if (originalStatus !== null && status !== originalStatus && ! statusConfirmed) { $event.preventDefault(); confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) }"
+    @submit="if (@js($tabbed) && (! firstName.trim() || ! lastName.trim())) { $event.preventDefault(); nameMissing = true; go(0); $nextTick(() => (firstName.trim() ? $refs.lastName : $refs.firstName)?.focus()) } else if (originalStatus !== null && status !== originalStatus && ! statusConfirmed) { $event.preventDefault(); confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) }"
     @keydown.escape.window="if (confirmingStatus) { confirmingStatus = false; status = originalStatus }"
 >
     @csrf
@@ -170,11 +233,156 @@
         </header>
     @endif
 
+    @if($tabbed)
+        {{-- Who is being added, as it is typed: the initials, the name, the
+             number the save will issue, and the status picked on Enrollment. --}}
+        <div class="ca-summary">
+            <span class="ca-avatar" aria-hidden="true" x-text="((firstName.trim()[0] || '') + (lastName.trim()[0] || '')).toUpperCase() || '+'">{{ strtoupper(mb_substr(trim($formFirst), 0, 1).mb_substr(trim($formLast), 0, 1)) ?: '+' }}</span>
+            <div class="min-w-0">
+                <p class="ca-name truncate" x-text="(firstName.trim() + ' ' + lastName.trim()).trim() || 'New child'">{{ trim($formFirst.' '.$formLast) ?: 'New child' }}</p>
+                <p class="ca-meta">LAN {{ $nextLan ?? '' }} · assigned on save · Classroom follows date of birth</p>
+            </div>
+            <span class="ca-status" :data-status="status" data-status="{{ old('status', 'Active') }}">
+                <span class="ca-status-dot" aria-hidden="true"></span>
+                <span x-text="status">{{ old('status', 'Active') }}</span>
+            </span>
+        </div>
+
+        {{-- Arrow keys move along the tabs, Home and End jump to the ends; only
+             the open tab is in the Tab order, as the ARIA tabs pattern has it. --}}
+        <div class="ca-tabs" role="tablist" aria-label="Child record sections"
+             @keydown.arrow-right.prevent="go(index + 1); $nextTick(() => $el.querySelector('[aria-selected=true]')?.focus())"
+             @keydown.arrow-left.prevent="go(index - 1); $nextTick(() => $el.querySelector('[aria-selected=true]')?.focus())"
+             @keydown.home.prevent="go(0); $nextTick(() => $el.querySelector('[aria-selected=true]')?.focus())"
+             @keydown.end.prevent="go({{ $last }}); $nextTick(() => $el.querySelector('[aria-selected=true]')?.focus())">
+            @foreach($steps as $i => $step)
+                <button type="button" role="tab" id="ca-tab-{{ $i }}" aria-controls="ca-panel-{{ $i }}" class="ca-tab"
+                        @click="go({{ $i }})"
+                        aria-selected="{{ $i === $initialStep ? 'true' : 'false' }}" :aria-selected="index === {{ $i }} ? 'true' : 'false'"
+                        tabindex="{{ $i === $initialStep ? 0 : -1 }}" :tabindex="index === {{ $i }} ? 0 : -1"
+                        @if($stepHasError($step['fields'])) data-invalid="true" @endif>
+                    <span class="ca-num" aria-hidden="true">{{ $i + 1 }}</span>
+                    <span>{{ $step['label'] }}</span>
+                    @if($i === 0)
+                        <span class="ca-required" x-show="! firstName.trim() || ! lastName.trim()" @if(filled(trim($formFirst)) && filled(trim($formLast))) x-cloak @endif>Required</span>
+                    @endif
+                </button>
+            @endforeach
+        </div>
+    @endif
+
+    {{-- A panel's switches: shown when its step or tab is the open one. --}}
+    @php($panel = function (int $i) use ($stepper, $tabbed, $initialStep) {
+        if ($tabbed) {
+            return 'id="ca-panel-'.$i.'" role="tabpanel" aria-labelledby="ca-tab-'.$i.'" tabindex="0" x-show="index === '.$i.'"'.($i === $initialStep ? '' : ' x-cloak');
+        }
+
+        return $stepper ? 'x-show="index === '.$i.'"'.($i === 0 ? '' : ' x-cloak') : '';
+    })
+
     <div class="cs-body">
         {{-- gap rather than margins: a hidden step is display:none and takes no
              gap with it, so the stepper has no stray space above the card. --}}
         <div class="flex flex-col gap-[22px]">
 
+            @if($tabbed)
+            {{-- ---- Add, tab 1: Basics ---- --}}
+            <div {!! $panel(0) !!}>
+                <div class="cs-cards">
+                    <section class="cs-card">
+                        <h3 class="cs-card-title">Identity</h3>
+                        <div class="ca-identity">
+                            {{-- The tile is the file box: a click anywhere on it
+                                 opens the picker, and the chosen photo shows in it
+                                 at once, so the wrong one is caught here. --}}
+                            <label class="ca-photo" x-data="{ preview: null }">
+                                <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" class="sr-only"
+                                       @change="preview = $event.target.files[0] ? URL.createObjectURL($event.target.files[0]) : null">
+                                <img x-show="preview" x-cloak :src="preview" alt="Chosen photo">
+                                <span x-show="! preview" class="ca-photo-add" aria-hidden="true">＋</span>
+                                <span class="sr-only">Photo</span>
+                            </label>
+                            <label>
+                                <span class="cs-label">First name <span class="cs-req">*</span></span>
+                                <input name="first_name" x-ref="firstName" x-model="firstName" value="{{ $formFirst }}" class="cs-input" required autocomplete="off"
+                                       :aria-invalid="nameMissing && ! firstName.trim() ? 'true' : null">
+                                <x-input-error :messages="$errors->get('first_name')" />
+                                <span class="ca-error" x-show="nameMissing && ! firstName.trim()" x-cloak>Add the child's first name.</span>
+                            </label>
+                            <label>
+                                <span class="cs-label">Last name <span class="cs-req">*</span></span>
+                                <input name="last_name" x-ref="lastName" x-model="lastName" value="{{ $formLast }}" class="cs-input" required autocomplete="off"
+                                       :aria-invalid="nameMissing && ! lastName.trim() ? 'true' : null">
+                                <x-input-error :messages="$errors->get('last_name')" />
+                                <span class="ca-error" x-show="nameMissing && ! lastName.trim()" x-cloak>Add the child's last name.</span>
+                            </label>
+                            <span class="cs-help ca-identity-help">
+                                Photo: JPG, PNG or WebP, up to 4 MB. Kept off the public web — only staff who may see this child can open it.
+                                @error('photo')<span class="ca-error">{{ $message }}</span>@enderror
+                            </span>
+                        </div>
+                        <div class="cs-grid mt-4">
+                            <label>
+                                <span class="cs-label">Nickname</span>
+                                <input name="nickname" value="{{ old('nickname') }}" class="cs-input">
+                                <x-input-error :messages="$errors->get('nickname')" />
+                            </label>
+                            <label>
+                                <span class="cs-label">Date of birth</span>
+                                <input id="birth_date" type="date" name="birth_date" value="{{ $formBirthDate }}" class="cs-input">
+                                <x-input-error :messages="$errors->get('birth_date')" />
+                                <span id="age-preview" class="cs-help">The age on the roster follows this date.</span>
+                            </label>
+                            <label>
+                                <span class="cs-label">Girl or boy</span>
+                                <select name="gender" class="cs-input"><option value="">Not recorded</option>@foreach(\App\Models\Child::GENDERS as $gender)<option value="{{ $gender }}" @selected(old('gender') === $gender)>{{ $gender }}</option>@endforeach</select>
+                                <x-input-error :messages="$errors->get('gender')" />
+                            </label>
+                            <label class="cs-wide">
+                                <span class="cs-label">Description</span>
+                                <input type="text" name="description" value="{{ old('description') }}" class="cs-input" maxlength="255" placeholder="e.g. blonde long hair">
+                                <x-input-error :messages="$errors->get('description')" />
+                                <span class="cs-help">A few words on how the child looks, to tell one face from the next.</span>
+                            </label>
+                            <label class="cs-wide">
+                                <span class="cs-label">Child name <span class="cs-optional">· as written on the enrollment form, if different</span></span>
+                                <input name="child_name" value="{{ old('child_name') }}" class="cs-input">
+                                <x-input-error :messages="$errors->get('child_name')" />
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="cs-card">
+                        <h3 class="cs-card-title">Record numbers</h3>
+                        <div class="cs-grid">
+                            <label>
+                                <span class="cs-label">LAN <span class="cs-badge">Auto</span></span>
+                                <input value="{{ $nextLan ?? '' }}" class="cs-input" readonly tabindex="-1" aria-readonly="true">
+                                <span class="cs-help">The next number in sequence, issued when this record is saved.</span>
+                            </label>
+                            <label>
+                                <span class="cs-label">DSS case no.</span>
+                                <input name="dss_case_no" value="{{ old('dss_case_no') }}" class="cs-input" autocapitalize="characters" spellcheck="false" placeholder="e.g. S1177706D">
+                                <x-input-error :messages="$errors->get('dss_case_no')" />
+                            </label>
+                            <label>
+                                <span class="cs-label">DSS CIN</span>
+                                <input name="dss_cin" value="{{ old('dss_cin') }}" class="cs-input" autocapitalize="characters" spellcheck="false" placeholder="e.g. HB14137F">
+                                <x-input-error :messages="$errors->get('dss_cin')" />
+                                <span class="cs-help">This child's own client number, not the family's.</span>
+                            </label>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            {{-- ---- Add, tab 2: Enrollment ---- --}}
+            <div {!! $panel(1) !!}>
+                <div class="cs-cards">
+                    @include('children.partials.enrollment-card')
+                </div>
+            </div>
+            @else
             {{-- ---- 1. Basics ---- --}}
             <div @if($stepper) x-show="index === 0" @endif>
                 <h2 class="cs-title">{{ $steps[0]['label'] }}</h2>
@@ -267,18 +475,6 @@
                                 <input name="last_name" value="{{ old('last_name', $child?->last_name ?? ($extracted['last_name'] ?? '')) }}" class="{{ $fieldClass('last_name') }}" required>
                                 <x-input-error :messages="$errors->get('last_name')" />
                             </label>
-                            {{-- Read the date of birth the form is actually showing,
-                                 not the one on the record: on a document import
-                                 there is no record yet, and the date came out of
-                                 the PDF.
-
-                                 Where there is a record, read it the way the model
-                                 does — the date sits in `dob` on everything that
-                                 predates the enrolment form and in `birth_date`
-                                 after it. Reading only the newer column opened
-                                 those records with the field blank, which then
-                                 saved the date away. --}}
-                            @php($formBirthDate = old('birth_date', $child?->birthDate()?->toDateString() ?? ($extracted['birth_date'] ?? null)) ?: null)
                             {{-- The date of birth is the fact that gets typed in;
                                  the roster's Age column is this same date written
                                  2026/03/15, so there is no second field to keep in
@@ -307,242 +503,10 @@
                         </div>
                     </section>
 
-                    @php($statusHelp = [
-                        'Active' => 'Enrolled and attending. Shows on the Children page and in counts.',
-                        'Pending' => 'A place agreed and not yet started. On the Children page, not counted as here.',
-                        'Inactive' => 'Not attending right now. Still shows on the Children page under Inactive.',
-                        'Archived' => 'Hidden from the Children page, search, Export and all counts. Restore anytime from Settings.',
-                    ])
-                    {{-- The dot each status wears, here and on the pill in the card's
-                         head: the roll's colours, so the two screens agree. --}}
-                    @php($statusDot = ['Active' => '#2fb37a', 'Pending' => '#e6a23c', 'Inactive' => '#9aa5a0', 'Archived' => '#b9c2bd'])
-                    @php($statusOptions = auth()->user()?->isAdmin() ? \App\Models\Child::STATUSES : \App\Models\Child::ROLL_STATUSES)
-                    <section class="cs-card">
-                        <div class="cs-card-head">
-                            <h3 class="cs-card-title">Enrollment</h3>
-                            {{-- The status, as the roll draws it, following the control below. --}}
-                            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
-                                  :class="{
-                                      'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300': status === 'Active',
-                                      'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200': status === 'Pending',
-                                      'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300': status === 'Inactive',
-                                      'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200': status === 'Archived',
-                                  }">
-                                <span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true"></span>
-                                <span x-text="status">{{ old('status', $child?->status ?? 'Active') }}</span>
-                            </span>
-                            @if($showCounts)<span class="cs-pill">{{ $filledCount($enrollmentFields) }}/{{ count($enrollmentFields) }}</span>@endif
-                        </div>
-
-                        {{-- ---- Status ---- --}}
-                        <fieldset class="cs-group">
-                            <legend class="cs-group-label">Status <span class="cs-req">*</span></legend>
-                            {{-- The four words in a row, a dot apiece in the status's
-                                 colour, and what the chosen one means on the line
-                                 under. Archived is offered to the director only; the
-                                 rules refuse it from anybody else either way. --}}
-                            <div class="cs-seg">
-                                @foreach($statusOptions as $option)
-                                    <label>
-                                        <input type="radio" name="status" value="{{ $option }}" x-model="status"
-                                               @checked(old('status', $child?->status ?? 'Active') === $option)
-                                               aria-describedby="status-help">
-                                        <span style="--seg-dot: {{ $statusDot[$option] }}">{{ $option }}</span>
-                                    </label>
-                                @endforeach
-                            </div>
-                            <x-input-error :messages="$errors->get('status')" />
-                            <span id="status-help" class="cs-help" x-text="@js($statusHelp)[status] ?? ''">{{ $statusHelp[old('status', $child?->status ?? 'Active')] ?? '' }}</span>
-                        </fieldset>
-
-                        {{-- The word before a status changes. Save is held until
-                             "Save as …" is pressed here, because the next press
-                             moves the child on or off the Children page — and,
-                             for Archived, off every count the centre keeps. --}}
-                        @php($statusChangeNotice = [
-                            'Active' => ':name will be back on the Children page as Active, counted as attending, and will appear on the attendance sheet from the next week.',
-                            'Pending' => ':name will show on the Children page under Pending — a place held, not counted as here.',
-                            'Inactive' => ':name will show on the Children page under Inactive and will no longer be counted as attending.',
-                            'Archived' => ':name will disappear from the Children page, search, Export and all counts. Their records are kept. To see or restore them, go to Settings › Children.',
-                        ])
-                        @php($statusChangeName = $child?->first_name ?: 'This child')
-                        <div x-show="confirmingStatus" x-cloak
-                             class="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center"
-                             @click.self="confirmingStatus = false; status = originalStatus">
-                            <div role="dialog" aria-modal="true" aria-labelledby="status-dialog-title" aria-describedby="status-dialog-body"
-                                 class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-slate-900">
-                                <h2 id="status-dialog-title" class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-                                    Change status to <span x-text="status"></span>?
-                                </h2>
-                                <p id="status-dialog-body" class="mt-2 text-sm text-slate-600 dark:text-slate-300"
-                                   x-text="(@js($statusChangeNotice)[status] ?? '').replace(':name', @js($statusChangeName))"></p>
-                                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                    Was <span class="font-semibold" x-text="originalStatus"></span>. The change is recorded in the child's history.
-                                </p>
-                                <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                                    {{-- Cancel puts the status back as well as closing: a
-                                         change that was not agreed to is not left sitting
-                                         in the form for the next Save to carry. --}}
-                                    <button type="button" @click="confirmingStatus = false; status = originalStatus"
-                                            class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-white/10 dark:text-slate-200 dark:hover:bg-white/10">Cancel</button>
-                                    <button type="button" x-ref="statusConfirm"
-                                            @click="statusConfirmed = true; confirmingStatus = false; $root.requestSubmit()"
-                                            :class="status === 'Archived' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-slate-900 hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'"
-                                            class="inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                                            x-text="status === 'Archived' ? 'Save and archive' : 'Save as ' + status">Save</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {{-- ---- Classroom ---- --}}
-                        @php($automaticRoom = $formBirthDate ? \App\Services\ClassroomAssignment::automaticFor(\Illuminate\Support\Carbon::parse($formBirthDate)) : null)
-                        @php($chosenRoom = old('classroom_override', $child?->classroom_override))
-                        {{-- What the room this child lands in actually runs as. Read
-                             only: it is set once for the whole room on the Room
-                             Schedules page, not per child. --}}
-                        @php($roomSchedule = \App\Models\RoomSchedule::byRoom()[$chosenRoom ?: $automaticRoom] ?? null)
-                        {{-- The override fields open when there is one already, or when
-                             one was refused; otherwise they wait behind the button. --}}
-                        <div class="cs-group" x-data="{ moving: @js(filled($chosenRoom) || $errors->has('classroom_override') || $errors->has('classroom_override_from')), override: @js($chosenRoom ?? '') }">
-                            <span class="cs-group-label">Classroom</span>
-                            <div class="cs-room">
-                                <span class="cs-room-icon"><x-room-icon :room="$chosenRoom ?: ($automaticRoom ?? '')" size="text-lg" /></span>
-                                <div class="cs-room-body">
-                                    <p class="cs-room-name">
-                                        <span id="classroom-effective" class="truncate">{{ $chosenRoom ?: ($automaticRoom ?? 'Add a date of birth') }}</span>
-                                        <span class="cs-tag" x-text="override ? 'Set by hand' : 'Automatic'">{{ $chosenRoom ? 'Set by hand' : 'Automatic' }}</span>
-                                    </p>
-                                    <p class="cs-room-sub">
-                                        <span id="classroom-note">@if($automaticRoom)Automatic: {{ $automaticRoom }}@elseif($formBirthDate)No band covers this date of birth — set the room by hand.@else Add a date of birth and the room follows it.@endif</span>
-                                        @if($roomSchedule?->hoursLabel()) · {{ $roomSchedule->hoursLabel() }}@endif
-                                    </p>
-                                </div>
-                                <button type="button" class="cs-btn cs-btn-ghost" @click="moving = !moving" :aria-expanded="moving" aria-controls="classroom-move"
-                                        x-text="moving ? 'Keep this room' : 'Move to another room'">Move to another room</button>
-                            </div>
-                            <div id="classroom-move" class="cs-room-move cs-two" x-show="moving" @if(! filled($chosenRoom) && ! $errors->has('classroom_override') && ! $errors->has('classroom_override_from')) x-cloak @endif>
-                                <label>
-                                    <span class="cs-label">Room</span>
-                                    <select name="classroom_override" class="cs-input" x-model="override"><option value="">Use the automatic room</option>@foreach(\App\Services\ClassroomAssignment::rooms() as $room)<option value="{{ $room }}" @selected($chosenRoom === $room)>{{ $room }}</option>@endforeach</select>
-                                    <x-input-error :messages="$errors->get('classroom_override')" />
-                                    <span class="cs-help">For moving a child up early. It holds until you set it back to the automatic room.</span>
-                                </label>
-                                <label>
-                                    <span class="cs-label">Starts on</span>
-                                    <input type="date" name="classroom_override_from" value="{{ old('classroom_override_from', $child?->classroom_override_from?->toDateString()) }}" class="cs-input">
-                                    <x-input-error :messages="$errors->get('classroom_override_from')" />
-                                    <span class="cs-help">Blank means today. An earlier date changes the room counts on days already reported.</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        {{-- ---- Dates ---- --}}
-                        <div class="cs-group">
-                            <span class="cs-group-label">Dates</span>
-                            <div class="cs-two">
-                                <label>
-                                    <span class="cs-label">Enrolled on{!! $fromDocument('enrolled_on') ? $documentBadge : '' !!}</span>
-                                    <input type="date" name="enrolled_on" value="{{ old('enrolled_on', $child?->enrolled_on?->toDateString() ?? ($extracted['enrolled_on'] ?? '')) }}" class="{{ $fieldClass('enrolled_on') }}">
-                                    <x-input-error :messages="$errors->get('enrolled_on')" />
-                                    <span class="cs-help">Attendance starts on this day. Blank if they've always been here.</span>
-                                </label>
-                                <label>
-                                    <span class="cs-label">Withdrawn on <span class="cs-optional">· optional</span></span>
-                                    <input type="date" name="withdrawn_on" value="{{ old('withdrawn_on', $child?->withdrawn_on?->toDateString()) }}" class="cs-input">
-                                    <x-input-error :messages="$errors->get('withdrawn_on')" />
-                                    <span class="cs-help">Last day attending. Leave blank while they're enrolled.</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        {{-- ---- Schedule ---- --}}
-                        <div class="cs-group">
-                        <span class="cs-group-label">Schedule</span>
-                        <div class="cs-grid">
-                            {{-- Which days the parent signed up for.
- 
-                                 The hours below say when in the day a child is
-                                 here; this says which days they come at all, and
-                                 until now nothing on the record did. A
-                                 Monday-Wednesday-Friday child and a full-week
-                                 child were the same record, and every newly
-                                 enrolled child's first week came up blank because
-                                 there was nothing to copy forward and nothing to
-                                 fall back on.
-
-                                 It is the standing arrangement, not the week: a
-                                 week is still ticked and corrected on its own, and
-                                 a holiday never reaches back to this.
-
-                                 Rendered as checkboxes with a hidden empty value
-                                 in front, so clearing every day posts "no days"
-                                 rather than posting nothing and being read as
-                                 "leave it alone". --}}
-                            @php($chosenDays = collect(old('schedule_days', $child?->scheduleDays() ?? [])) ->map(fn ($day) => (int) $day))
-                            @php($everSet = old('schedule_days') !== null || $child?->scheduleDays() !== null)
-                            <div class="cs-wide" x-data="{ days: @js($chosenDays->values()) }">
-                                <span class="cs-label">Days they attend</span>
-                                <input type="hidden" name="schedule_days" value="">
-                                <div class="flex flex-wrap items-center gap-1.5">
-                                    @foreach(\App\Models\Child::WEEKDAYS as $number => $label)
-                                        <label class="cs-day">
-                                            <input type="checkbox" name="schedule_days[]" value="{{ $number }}" x-model.number="days" class="sr-only">
-                                            <span>{{ $label }}</span>
-                                        </label>
-                                    @endforeach
-                                    {{-- The full week in one click, because it is
-                                         the commonest arrangement by far. --}}
-                                    <button type="button" class="cs-btn cs-btn-ghost ml-1 h-[26px] px-2.5 text-[11px]"
-                                            @click="days = days.length === {{ count(\App\Models\Child::WEEKDAYS) }} ? [] : @js(array_keys(\App\Models\Child::WEEKDAYS))"
-                                            x-text="days.length === {{ count(\App\Models\Child::WEEKDAYS) }} ? 'Clear' : 'Every day'"></button>
-                                </div>
-                                <x-input-error :messages="$errors->get('schedule_days')" />
-                                <span class="cs-help">
-                                    @if($everSet)
-                                        A new week starts with these days ticked. Change a single week on the attendance sheet instead — that never comes back here.
-                                    @else
-                                        Nobody has said yet, so this child's weeks start blank. Tick the days they are signed up for and every new week starts from them.
-                                    @endif
-                                </span>
-                            </div>
-                            {{-- Hours are what the parent contracted for, against
-                                 which the week's projection is measured. They do not
-                                 decide which days a child comes — the attendance
-                                 does that — so a wrong number here never puts a
-                                 child in a room nobody staffed for. --}}
-                            <label class="cs-wide">
-                                <span class="cs-label">Expected hours a week</span>
-                                <input type="number" name="expected_hours_per_week" step="0.25" min="0" max="168" value="{{ old('expected_hours_per_week', $child?->expected_hours_per_week) }}" placeholder="e.g. {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS * 5, 1) }} for a full week" class="cs-input">
-                                <x-input-error :messages="$errors->get('expected_hours_per_week')" />
-                                <span class="cs-help">A full day counts as {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS, 1) }} h, a morning or afternoon as {{ number_format(\App\Services\AttendanceProjection::FULL_DAY_HOURS / 2, 1) }} h. Leave blank if it has not been agreed — the week's projection then reports the days without a target to hit. Zero means they are not expected at all.</span>
-                            </label>
-                            {{-- The hours of the day, as against the expected hours
-                                 of the week and the schedule boxes on the attendance
-                                 page — those say which days a child comes, these say
-                                 when in the day they arrive and go home.
-
-                                 A new record opens on the full day the centre is
-                                 open; narrowing it is the edit that gets made, and
-                                 starting from the widest pair means nobody has to
-                                 type both ends to say "the usual". --}}
-                            @php($scheduleDefault = fn ($field, $default) => \App\Models\Child::timeInputValue(old($field, $child ? $child->{$field} : $default)))
-                            <label>
-                                <span class="cs-label">Drop-off time</span>
-                                <input type="time" name="drop_off_time" value="{{ $scheduleDefault('drop_off_time', \App\Models\Child::DAY_OPENS_AT) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="cs-input">
-                                <x-input-error :messages="$errors->get('drop_off_time')" />
-                                <span class="cs-help">When they normally arrive. The centre opens at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_OPENS_AT) }}.</span>
-                            </label>
-                            <label>
-                                <span class="cs-label">Pick-up time</span>
-                                <input type="time" name="pick_up_time" value="{{ $scheduleDefault('pick_up_time', \App\Models\Child::DAY_CLOSES_AT) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="cs-input">
-                                <x-input-error :messages="$errors->get('pick_up_time')" />
-                                <span class="cs-help">When they normally go home. The centre closes at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_CLOSES_AT) }}.</span>
-                            </label>
-                        </div>
-                        </div>
-                    </section>
+                    @include('children.partials.enrollment-card')
                 </div>
             </div>
+            @endif
 
             {{-- ---- 2: the repeated blocks of short fields ----
 
@@ -552,6 +516,130 @@
                  on the table and still hold what they held — nothing on this
                  form posts them any more, so a save leaves them exactly as the
                  migration found them until they are dropped. --}}
+            @if($tabbed)
+            {{-- One field of the tabbed shape: [label, column, input type, help, wide]. --}}
+            @php($tabField = function (array $f) use ($errors) {
+                [$label, $name, $type, $help, $wide] = $f + [2 => 'text', 3 => null, 4 => false];
+                $value = e(old($name));
+                $masked = $type === 'ssn';
+                $input = '<input id="'.$name.'" name="'.$name.'" value="'.$value.'" class="cs-input'.($masked ? ' ca-masked' : '').'"'
+                    .' type="'.($masked ? 'text' : $type).'"'
+                    .($type === 'tel' ? ' inputmode="tel" autocomplete="off"' : '')
+                    .($masked ? ' inputmode="numeric" autocomplete="off" spellcheck="false" :class="{ \'ca-shown\': shown }"' : '').'>';
+                $error = $errors->has($name) ? '<p class="mt-1.5 text-xs font-medium text-rose-600">'.e($errors->first($name)).'</p>' : '';
+
+                return '<label class="'.($wide ? 'cs-wide' : '').'"'.($masked ? ' x-data="{ shown: false }"' : '').'>'
+                    .'<span class="cs-label">'.e($label).'</span>'
+                    .($masked ? '<span class="ca-masked-row">'.$input.'<button type="button" class="ca-show" @click="shown = ! shown" :aria-pressed="shown" x-text="shown ? \'Hide\' : \'Show\'">Show</button></span>' : $input)
+                    .$error
+                    .($help ? '<span class="cs-help">'.e($help).'</span>' : '')
+                    .'</label>';
+            })
+
+            {{-- ---- Add, tab 3: Child details ---- --}}
+            <div {!! $panel(2) !!}>
+                <div class="cs-cards">
+                    <section class="cs-card">
+                        <h3 class="cs-card-title">Home and contact</h3>
+                        <div class="cs-grid">
+                            {!! $tabField(['Address', 'address', 'text', null, true]) !!}
+                            {!! $tabField(['City', 'city']) !!}
+                            <label>
+                                <span class="cs-label">State</span>
+                                <select id="state" name="state" class="cs-input">@foreach($choices('state', old('state')) as $value => $text)<option value="{{ $value }}" @selected((string) old('state') === (string) $value)>{{ $text }}</option>@endforeach</select>
+                                <x-input-error :messages="$errors->get('state')" />
+                            </label>
+                            {!! $tabField(['Zip', 'zip']) !!}
+                            {!! $tabField(['Telephone', 'telephone', 'tel']) !!}
+                            <label>
+                                <span class="cs-label">Parents status</span>
+                                <select id="parents_status" name="parents_status" class="cs-input">@foreach($choices('parents_status', old('parents_status')) as $value => $text)<option value="{{ $value }}" @selected((string) old('parents_status') === (string) $value)>{{ $text }}</option>@endforeach</select>
+                                <x-input-error :messages="$errors->get('parents_status')" />
+                            </label>
+                            {!! $tabField(['Responsible for payment', 'responsible_for_payment']) !!}
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            {{-- ---- Add, tab 4: Parents, one guardian at a time ----
+                 Both guardians' boxes are in the form the whole time, the other
+                 one only hidden, so switching never loses a word and the save
+                 posts both. A refused field opens its guardian. --}}
+            @php($guardianError = collect($sections['Father / Legal Guardian'])->contains(fn ($f) => $errors->has($f)) && ! collect($sections['Mother / Legal Guardian'])->contains(fn ($f) => $errors->has($f)))
+            <div {!! $panel(3) !!} x-data="{ guardian: @js($guardianError ? 'father' : 'mother') }">
+                <div class="cs-cards">
+                    <section class="cs-card">
+                        <div class="ca-card-head">
+                            <h3 class="cs-card-title">Parents</h3>
+                            <div class="ca-switch" role="group" aria-label="Which guardian">
+                                <button type="button" @click="guardian = 'mother'" :aria-pressed="guardian === 'mother'" aria-pressed="{{ $guardianError ? 'false' : 'true' }}">Mother / legal guardian</button>
+                                <button type="button" @click="guardian = 'father'" :aria-pressed="guardian === 'father'" aria-pressed="{{ $guardianError ? 'true' : 'false' }}">Father / legal guardian</button>
+                            </div>
+                        </div>
+                        @foreach(['mother' => 'Mother', 'father' => 'Father'] as $who => $Who)
+                            <div x-show="guardian === @js($who)" @if(($who === 'father') !== $guardianError) x-cloak @endif data-guardian="{{ $who }}">
+                                <div class="cs-grid">
+                                    {!! $tabField([$Who.' name', $who.'_name']) !!}
+                                    {!! $tabField([$Who.' email', $who.'_email', 'email']) !!}
+                                    {!! $tabField([$Who.' address', $who.'_address', 'text', null, true]) !!}
+                                </div>
+                                <p class="ca-eyebrow">Phones</p>
+                                <div class="cs-grid">
+                                    {!! $tabField([$Who.' cell', $who.'_cell', 'tel']) !!}
+                                    {!! $tabField([$Who.' home phone', $who.'_home_phone', 'tel']) !!}
+                                    {!! $tabField([$Who.' work phone', $who.'_work_phone', 'tel']) !!}
+                                    {!! $tabField([$Who.' fax', $who.'_fax', 'tel']) !!}
+                                </div>
+                                <p class="ca-eyebrow">Work and ID</p>
+                                <div class="cs-grid">
+                                    {!! $tabField([$Who.' employer', $who.'_employer']) !!}
+                                    {!! $tabField([$Who.' title', $who.'_title']) !!}
+                                    {!! $tabField([$Who.' SSN', $who.'_ssn', 'ssn']) !!}
+                                </div>
+                            </div>
+                        @endforeach
+                    </section>
+                </div>
+            </div>
+
+            {{-- ---- Add, tab 5: Emergency & pickup, one pick-up adult at a time ---- --}}
+            @php($pickupError = collect([1, 2, 3])->first(fn ($n) => collect($sections['Authorized Pickup '.$n])->contains(fn ($f) => $errors->has($f))) ?? 1)
+            <div {!! $panel(4) !!} x-data="{ pickup: {{ $pickupError }} }">
+                <div class="cs-cards">
+                    <section class="cs-card">
+                        <h3 class="cs-card-title">Emergency contact</h3>
+                        <div class="cs-grid">
+                            {!! $tabField(['Emergency contact', 'emergency_contact']) !!}
+                            {!! $tabField(['Secondary emergency contact', 'secondary_emergency_contact']) !!}
+                            {!! $tabField(['Telephone', 'emergency_telephone', 'tel']) !!}
+                            {!! $tabField(['Relationship', 'emergency_relationship']) !!}
+                            {!! $tabField(['License #', 'emergency_license_number']) !!}
+                        </div>
+                    </section>
+                    <section class="cs-card">
+                        <div class="ca-card-head">
+                            <h3 class="cs-card-title">Authorized pickup</h3>
+                            <div class="ca-switch" role="group" aria-label="Which pick-up adult">
+                                @foreach([1, 2, 3] as $n)
+                                    <button type="button" @click="pickup = {{ $n }}" :aria-pressed="pickup === {{ $n }}" aria-pressed="{{ $n === $pickupError ? 'true' : 'false' }}">Pickup {{ $n }}</button>
+                                @endforeach
+                            </div>
+                        </div>
+                        @foreach([1, 2, 3] as $n)
+                            <div class="cs-grid" x-show="pickup === {{ $n }}" @if($n !== $pickupError) x-cloak @endif data-pickup="{{ $n }}">
+                                {!! $tabField(['Name', 'pickup_'.$n.'_name']) !!}
+                                {!! $tabField(['Relationship', 'pickup_'.$n.'_relationship']) !!}
+                                {!! $tabField(['Address', 'pickup_'.$n.'_address', 'text', null, true]) !!}
+                                {!! $tabField(['Telephone', 'pickup_'.$n.'_telephone', 'tel']) !!}
+                                {!! $tabField(['Alternate phone', 'pickup_'.$n.'_alternate', 'tel']) !!}
+                                {!! $tabField(['License #', 'pickup_'.$n.'_license_number', 'text', 'Checked at the door before release.']) !!}
+                            </div>
+                        @endforeach
+                    </section>
+                </div>
+            </div>
+            @else
             @foreach($usesPeopleStep
                 ? [1 => ['Contact']]
                 : [1 => ['Contact'], 2 => ['Mother / Legal Guardian', 'Father / Legal Guardian'], 3 => ['Emergency contacts', 'Authorized Pickup 1', 'Authorized Pickup 2', 'Authorized Pickup 3']]
@@ -571,7 +659,12 @@
                                     @foreach($fields as $label => $field)
                                         <label class="{{ str_contains($field, 'address') ? 'cs-wide' : '' }}">
                                             <span class="cs-label">{{ $label }}{!! $fromDocument($field) ? $documentBadge : '' !!}</span>
-                                            <input id="{{ $field }}" type="text" name="{{ $field }}" value="{{ old($field, $fieldValue($field)) }}" class="{{ $fieldClass($field) }}">
+                                            @php($current = old($field, $fieldValue($field)))
+                                            @if($options = $choices($field, $current))
+                                                <select id="{{ $field }}" name="{{ $field }}" class="{{ $fieldClass($field) }}">@foreach($options as $value => $text)<option value="{{ $value }}" @selected((string) $current === (string) $value)>{{ $text }}</option>@endforeach</select>
+                                            @else
+                                                <input id="{{ $field }}" type="text" name="{{ $field }}" value="{{ $current }}" class="{{ $fieldClass($field) }}">
+                                            @endif
                                             <x-input-error :messages="$errors->get($field)" />
                                         </label>
                                     @endforeach
@@ -581,6 +674,7 @@
                     </div>
                 </div>
             @endforeach
+            @endif
 
             {{-- ---- 3. People: one row per adult, saved as it goes ---- --}}
             @if($usesPeopleStep)
@@ -590,11 +684,15 @@
             @endif
 
             {{-- ---- 4. Notes: two boxes of prose, a card each ---- --}}
-            <div @if($stepper) x-show="index === {{ $last }}" x-cloak @endif>
-                <h2 class="cs-title">{{ $steps[$last]['label'] }}</h2>
-                <p class="cs-blurb">{{ $steps[$last]['blurb'] }}</p>
+            <div @if($tabbed) {!! $panel($last) !!} @elseif($stepper) x-show="index === {{ $last }}" x-cloak @endif>
+                @unless($tabbed)
+                    <h2 class="cs-title">{{ $steps[$last]['label'] }}</h2>
+                    <p class="cs-blurb">{{ $steps[$last]['blurb'] }}</p>
+                @endunless
                 <div class="cs-cards">
-                    <section class="cs-card">
+                    {{-- On Add the important card leads, in amber; the order
+                         is the layout's, so the markup stays one. --}}
+                    <section class="cs-card" @if($tabbed) style="order: 2" @endif>
                         <div class="cs-card-head"><h3 class="cs-card-title">Other notes</h3></div>
                         <label>
                             <span class="cs-label">Anything worth knowing{!! $fromDocument('other_notes') ? $documentBadge : '' !!}</span>
@@ -602,7 +700,7 @@
                             <x-input-error :messages="$errors->get('other_notes')" />
                         </label>
                     </section>
-                    <section class="cs-card">
+                    <section class="cs-card @if($tabbed) ca-important @endif">
                         <div class="cs-card-head"><h3 class="cs-card-title">Important notes</h3></div>
 
                         {{-- The short form of what is below, so it can be read
@@ -666,6 +764,15 @@
             <button type="button" class="cs-btn cs-btn-primary" x-show="index < {{ $last }}" @click="index++">Next section ›</button>
             <button class="cs-btn cs-btn-primary" x-show="index === {{ $last }}" x-cloak x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
             <span class="cs-counter">Section <span x-text="index + 1">{{ $initialStep + 1 }}</span> of {{ count($steps) }}</span>
+        @elseif($tabbed)
+            <a href="{{ route('children.index') }}" class="ca-cancel">Cancel</a>
+            <span class="ca-step">Step <span x-text="index + 1">{{ $initialStep + 1 }}</span> of {{ count($steps) }}</span>
+            <button type="button" class="ca-btn" @click="go(index - 1)" x-show="index > 0" @if($initialStep === 0) x-cloak @endif>Back</button>
+            {{-- Next is a plain button and Add is the submit, so Enter in a text
+                 box adds the child rather than turning the page. --}}
+            <button type="button" class="ca-btn" @click="go(index + 1)" x-show="index < {{ $last }}" @if($initialStep === $last) x-cloak @endif
+                    x-text="'Next: ' + @js(array_column($steps, 'label'))[index + 1]">Next: {{ $steps[min($initialStep + 1, $last)]['label'] }}</button>
+            <button class="ca-btn ca-btn-primary" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
         @else
             <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain">Cancel</a>
             <button class="cs-btn cs-btn-primary ml-auto" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
@@ -746,7 +853,7 @@
                     ? `Automatic: ${automatic}`
                     : automatic === null
                         ? 'No band covers this date of birth — set the room by hand.'
-                        : 'Add a date of birth and the room follows it.';
+                        : @js($noBirthDateNote);
             };
 
             birth.addEventListener('change', refresh);

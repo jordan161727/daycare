@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * An adult connected to one or more children.
@@ -20,9 +23,18 @@ use Illuminate\Support\Str;
  * linked to, which is the point of the table and also the thing the screens
  * have to say out loud before saving.
  */
-class Person extends Model
+class Person extends Model implements AuthenticatableContract
 {
+    // Signed in to the parent app, a Person is the request's user, and the
+    // framework asks any user for its id the standard way (logs, limiters).
+    // There is no password column: the app signs in by texted code.
+    use Authenticatable;
+
     use HasFactory;
+
+    // The parent app signs a person in with a token (see ParentPortal); the
+    // API never sends this model as it is — it carries an SSN.
+    use HasApiTokens;
 
     protected $fillable = [
         'name', 'address',

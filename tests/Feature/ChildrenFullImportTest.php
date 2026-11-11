@@ -68,6 +68,21 @@ class ChildrenFullImportTest extends TestCase
         $this->assertSame('Collected early on Fridays', $child->important_notes);
     }
 
+    public function test_a_state_is_read_as_its_two_letters_and_a_made_up_one_is_refused(): void
+    {
+        $this->import([
+            ['lan', 'first_name', 'last_name', 'state'],
+            ['10001', 'Nora', 'Named', 'New York'],
+            ['10002', 'Cody', 'Coded', 'nj'],
+            ['10003', 'Atla', 'Nowhere', 'Atlantis'],
+        ]);
+
+        $this->assertSame('NY', Child::where('lan', '10001')->value('state'));
+        $this->assertSame('NJ', Child::where('lan', '10002')->value('state'));
+        // Reported on its row, not saved with a state nobody can post to.
+        $this->assertNull(Child::where('lan', '10003')->value('state'));
+    }
+
     public function test_a_blank_cell_leaves_what_is_on_record_alone(): void
     {
         /*

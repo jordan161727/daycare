@@ -289,13 +289,15 @@ class ChildScheduleTest extends TestCase
         $this->assertSame('7:30 AM – 5:45 PM', $child->fresh()->scheduleLabel());
     }
 
-    public function test_the_add_form_opens_on_the_hours_the_centre_keeps(): void
+    public function test_the_add_form_opens_on_the_usual_day(): void
     {
         $this->actingAs(User::factory()->create(['role' => 'admin']))
             ->get(route('children.create'))
             ->assertOk()
-            ->assertSee('name="drop_off_time" value="07:00"', false)
-            ->assertSee('name="pick_up_time" value="20:00"', false);
+            ->assertSee('name="drop_off_time" value="07:30"', false)
+            ->assertSee('name="pick_up_time" value="18:00"', false)
+            ->assertSee('The centre opens at 7:00 AM.')
+            ->assertSee('The centre closes at 8:00 PM.');
     }
 
     public function test_the_edit_form_keeps_the_times_already_agreed(): void

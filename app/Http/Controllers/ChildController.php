@@ -716,6 +716,9 @@ class ChildController extends Controller
             // this, and a record that does not say is drawn as one that does
             // not say rather than being guessed at from the name.
             'gender' => ['nullable', Rule::in(Child::GENDERS)],
+            // Two letters from the list; Parents status stays free text (see
+            // Child::PARENTS_STATUSES) so an imported word is not refused.
+            'state' => ['nullable', Rule::in(array_keys(Child::STATES))],
             // A few words on how the child looks, as the centre's sheet keeps it.
             'description' => ['nullable', 'string', 'max:255'],
             'other_notes' => ['nullable', 'string'],
@@ -865,7 +868,7 @@ class ChildController extends Controller
 
     private function enrollmentFields(): array
     {
-        $fields = ['dss_case_no','dss_cin','nickname','address','city','zip','telephone','mother_name','mother_address','mother_home_phone','mother_employer','mother_work_phone','mother_fax','mother_cell','mother_email','mother_title','mother_ssn','father_name','father_address','father_home_phone','father_employer','father_work_phone','father_fax','father_cell','father_email','father_title','father_ssn','email_address','parents_status','responsible_for_payment','emergency_contact','secondary_emergency_contact','emergency_telephone','emergency_relationship','emergency_license_number'];
+        $fields = ['dss_case_no','dss_cin','nickname','address','city','state','zip','telephone','mother_name','mother_address','mother_home_phone','mother_employer','mother_work_phone','mother_fax','mother_cell','mother_email','mother_title','mother_ssn','father_name','father_address','father_home_phone','father_employer','father_work_phone','father_fax','father_cell','father_email','father_title','father_ssn','email_address','parents_status','responsible_for_payment','emergency_contact','secondary_emergency_contact','emergency_telephone','emergency_relationship','emergency_license_number'];
         for ($number = 1; $number <= 3; $number++) foreach (['name','address','telephone','alternate','relationship','license_number'] as $field) $fields[] = "pickup_{$number}_{$field}";
         return $fields;
     }

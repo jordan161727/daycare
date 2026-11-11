@@ -130,7 +130,7 @@ class ChildrenExportTest extends TestCase
             'dob',                           // the older birth-date column; exported as Date of birth
             'schedule_days',                 // exported as Days, in words
             'drop_off_time', 'pick_up_time', // exported together as Hours
-            'city', 'zip',                   // exported joined, as Address
+            'city', 'state', 'zip',          // exported joined, as Address
             'alerts',                        // exported as Alerts, in words
             // Archived children are not in the export at all, so the trail of
             // their archiving — when, who, what they were — would be an empty

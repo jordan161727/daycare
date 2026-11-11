@@ -18,7 +18,12 @@ class Message extends Model
 
     public const IN = 'in';
 
-    protected $fillable = ['thread_id', 'direction', 'body', 'user_id', 'person_id', 'media', 'broadcast_key', 'delivered', 'skipped', 'sent_at'];
+    /** How it travelled: a text, or the parent app. */
+    public const SMS = 'sms';
+
+    public const APP = 'app';
+
+    protected $fillable = ['thread_id', 'direction', 'channel', 'body', 'user_id', 'person_id', 'media', 'broadcast_key', 'delivered', 'skipped', 'sent_at'];
 
     protected $casts = [
         'media' => 'array',

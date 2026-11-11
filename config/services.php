@@ -45,6 +45,12 @@ return [
         'token' => env('TWILIO_TOKEN'),
     ],
 
+    // Pushes to the parent app go through Expo (ParentPush). The access token
+    // is optional unless "enhanced push security" is turned on in Expo.
+    'expo' => [
+        'access_token' => env('EXPO_ACCESS_TOKEN'),
+    ],
+
     // Email over Mailtrap's HTTP API (App\Services\Mail\MailtrapMailer).
     // "sandbox" lands every email in a Mailtrap test inbox; "live" delivers.
     'mailtrap' => [

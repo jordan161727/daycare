@@ -210,7 +210,7 @@ class PeopleStepTest extends TestCase
 
         $this->assertStringContainsString('Must not collect', $html);
         $this->assertStringContainsString('Court order', $html);
-        $this->assertStringContainsString('Nobody is cleared to collect this child.', $html);
+        $this->assertStringContainsString('Nobody cleared yet', $html);
     }
 
     public function test_creating_a_person_takes_the_reader_to_the_form(): void

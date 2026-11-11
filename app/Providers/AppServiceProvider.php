@@ -29,6 +29,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // The parent app's sign-in: a texted code costs money and is a door,
+        // so a few tries a minute from one place and a few an hour for one
+        // number. After sign-in, a generous limit per parent that still stops
+        // a stuck poll from hammering the server.
+        RateLimiter::for('parent-login-start', fn (Request $request) => [
+            Limit::perMinute(5)->by('start-ip:'.$request->ip()),
+            Limit::perHour(10)->by('start-phone:'.substr(\App\Models\Person::digits((string) $request->input('phone')), -10)),
+        ]);
+        // Checking a code: each code already dies after five wrong tries.
+        RateLimiter::for('parent-login-verify', fn (Request $request) => Limit::perMinute(20)->by('verify-ip:'.$request->ip()));
+        RateLimiter::for('parent-api', fn (Request $request) => Limit::perMinute(120)->by('parent:'.($request->user()?->id ?? $request->ip())));
+
         // Who sees the DSS page (Phase 8.1, "Only you"): the users named in
         // DAYCARE_DSS_USERS, or any director when nobody is named.
         \Illuminate\Support\Facades\Gate::define('see-dss', function (\App\Models\User $user) {

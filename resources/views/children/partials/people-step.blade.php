@@ -36,7 +36,7 @@
 <div
     x-data="peopleStep({
         childId: @js($child->id),
-        household: @js(trim(collect([$child->address, $child->city, $child->zip])->filter()->implode(', '))),
+        household: @js(trim(collect([$child->address, $child->city, trim($child->state.' '.$child->zip)])->filter()->implode(', '))),
         childName: @js($child->first_name),
         rows: @js($links->map(fn ($link) => [
             'id' => $link->person_id,

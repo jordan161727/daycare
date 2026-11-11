@@ -27,6 +27,11 @@ class Child extends Model
 
     public const DAY_CLOSES_AT = '20:00';
 
+    /** The usual day a new record starts on (Jordan, 6 Nov 2026): 7:30 to 6. */
+    public const DEFAULT_DROP_OFF = '07:30';
+
+    public const DEFAULT_PICK_UP = '18:00';
+
     protected $casts = [
         'dob' => 'date',
         'birth_date' => 'date',
@@ -50,7 +55,7 @@ class Child extends Model
         // The two numbers the state knows a subsidised child by: the family's
         // case and this child's own CIN. See the migration that adds them.
         'dss_case_no', 'dss_cin',
-        'child_name', 'nickname', 'address', 'city', 'zip', 'telephone', 'birth_date',
+        'child_name', 'nickname', 'address', 'city', 'state', 'zip', 'telephone', 'birth_date',
         'status',
         'enrolled_on',
         'withdrawn_on',
@@ -384,7 +389,10 @@ class Child extends Model
      */
     public function displayName(?string $format = null): string
     {
-        $format ??= auth()->user()?->nameFormat() ?? User::NAME_FORMAT_DEFAULT;
+        // Only a staff account has a preference; a parent signed in to the
+        // app (a Person) reads names the default way.
+        $reader = auth()->user();
+        $format ??= $reader instanceof User ? $reader->nameFormat() : User::NAME_FORMAT_DEFAULT;
 
         return $format === 'last_first'
             ? trim($this->last_name.', '.$this->first_name, ' ,')
@@ -593,6 +601,28 @@ class Child extends Model
     }
 
     public const WEEKDAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri'];
+
+    /** The state in the home address: postal code => name, DC included. */
+    public const STATES = [
+        'AL' => 'Alabama', 'AK' => 'Alaska', 'AZ' => 'Arizona', 'AR' => 'Arkansas', 'CA' => 'California',
+        'CO' => 'Colorado', 'CT' => 'Connecticut', 'DE' => 'Delaware', 'DC' => 'District of Columbia', 'FL' => 'Florida',
+        'GA' => 'Georgia', 'HI' => 'Hawaii', 'ID' => 'Idaho', 'IL' => 'Illinois', 'IN' => 'Indiana',
+        'IA' => 'Iowa', 'KS' => 'Kansas', 'KY' => 'Kentucky', 'LA' => 'Louisiana', 'ME' => 'Maine',
+        'MD' => 'Maryland', 'MA' => 'Massachusetts', 'MI' => 'Michigan', 'MN' => 'Minnesota', 'MS' => 'Mississippi',
+        'MO' => 'Missouri', 'MT' => 'Montana', 'NE' => 'Nebraska', 'NV' => 'Nevada', 'NH' => 'New Hampshire',
+        'NJ' => 'New Jersey', 'NM' => 'New Mexico', 'NY' => 'New York', 'NC' => 'North Carolina', 'ND' => 'North Dakota',
+        'OH' => 'Ohio', 'OK' => 'Oklahoma', 'OR' => 'Oregon', 'PA' => 'Pennsylvania', 'RI' => 'Rhode Island',
+        'SC' => 'South Carolina', 'SD' => 'South Dakota', 'TN' => 'Tennessee', 'TX' => 'Texas', 'UT' => 'Utah',
+        'VT' => 'Vermont', 'VA' => 'Virginia', 'WA' => 'Washington', 'WV' => 'West Virginia', 'WI' => 'Wisconsin',
+        'WY' => 'Wyoming',
+    ];
+
+    /**
+     * The choices for Parents status (Jordan, 6 Nov 2026). Still a free-text
+     * column underneath: imports and older records carry their own words,
+     * and the form keeps any of those as an extra choice rather than losing it.
+     */
+    public const PARENTS_STATUSES = ['Married', 'Single', 'Divorced', 'Separated', 'Widowed', 'Living together'];
 
     /**
      * The days this child is registered to attend, or null when nobody has said.
