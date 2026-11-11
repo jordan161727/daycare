@@ -106,8 +106,10 @@ class CheckSchema extends Command
     {
         $schema = Schema::connection($connection);
         $out = [];
-        foreach ($schema->getTableListing() as $table) {
-            $table = str_contains($table, '.') ? substr($table, strrpos($table, '.') + 1) : $table;
+        // Only this connection's own database. Without it, MySQL lists the
+        // tables of every database the user can see, and a table missing
+        // here but present next door would read as an empty one.
+        foreach ($schema->getTableListing($schema->getCurrentSchemaListing(), false) as $table) {
             if (str_starts_with($table, 'sqlite_')) {
                 continue;
             }
