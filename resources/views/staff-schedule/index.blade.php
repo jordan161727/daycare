@@ -26,7 +26,9 @@
     $rangeLabel = $monday->format('M j').' – '.$last->format($last->isSameMonth($monday) ? 'j' : 'M j');
     $span = max(1, $close - $open);
     $place = fn (int $from, int $to) => sprintf('left:%.2f%%;width:%.2f%%', (max($open, $from) - $open) / $span * 100, (min($close, $to) - max($open, $from)) / $span * 100);
-    $link = fn (array $extra = []) => route('staff-schedule.index', array_filter(['week' => $weekStart, 'view' => $view, 'layout' => $layout === 'table' ? 'table' : null, 'day' => $day] + $extra, fn ($v) => $v !== null && $v !== ''));
+    // $extra first: "+" keeps the left-hand key, so the week asked for must
+    // be on the left or every arrow pointed at the week on screen (QA, 17 Nov 2026).
+    $link = fn (array $extra = []) => route('staff-schedule.index', array_filter($extra + ['week' => $weekStart, 'view' => $view, 'layout' => $layout === 'table' ? 'table' : null, 'day' => $day], fn ($v) => $v !== null && $v !== ''));
     $plural = fn (int $n, string $word) => $n.' '.\Illuminate\Support\Str::plural($word, $n);
     $isThisWeek = $monday->isSameDay(today()->startOfWeek(Carbon::MONDAY));
     $hours = range((int) ceil($open / 60), (int) floor($close / 60), 2);
@@ -37,7 +39,7 @@
         'view' => $view,
         'layout' => $layout,
         'day' => $day,
-        'days' => collect($dates)->map(fn ($date, $code) => ['code' => $code, 'label' => $date->format('D j'), 'gap' => (bool) ($gaps[$code] ?? false)])->values(),
+        'days' => collect($dates)->map(fn ($date, $code) => ['code' => $code, 'label' => $date->format('D j'), 'gap' => (bool) ($gaps[$code] ?? false), 'closed' => $closures[$date->toDateString()] ?? null])->values(),
         'd' => $dayData,
         'open' => $open, 'close' => $close,
         'colours' => $colours,
@@ -129,7 +131,7 @@
         </div>
         <div x-show="view === 'room'" x-cloak style="display: flex; gap: 6px; flex-wrap: wrap;" role="group" aria-label="Day" data-day-chips>
             <template x-for="dd in days" :key="dd.code">
-                <button type="button" class="chip day" :class="dd.code === day ? 'on' : ''" @click="pickDay(dd.code)"><span x-text="dd.label"></span><span x-show="dd.gap" class="gapdot" title="Something to look at"></span></button>
+                <button type="button" class="chip day" :class="dd.code === day ? 'on' : ''" @click="pickDay(dd.code)"><span x-text="dd.label"></span><span x-show="dd.closed" class="faint" style="font-size: 11px;" :title="dd.closed" data-day-closed> · Closed</span><span x-show="dd.gap" class="gapdot" title="Something to look at"></span></button>
             </template>
         </div>
         <div style="display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; margin-left: auto;" class="muted">
@@ -301,7 +303,7 @@
     <section x-show="view === 'teacher'" class="ch-card" style="overflow: hidden;" data-teacher-view>
         <div style="overflow-x: auto;">
             <table class="tbl sched">
-                <thead><tr><th>Teacher</th>@foreach($dates as $date)<th>{{ $date->format('D j') }} <span style="font-weight: 400; text-transform: none; letter-spacing: 0;">{{ StaffRule::compactTime($open) }} – {{ StaffRule::compactTime($close) }}</span></th>@endforeach<th style="text-align: right;">Hours</th></tr></thead>
+                <thead><tr><th>Teacher</th>@foreach($dates as $date)<th>{{ $date->format('D j') }} <span style="font-weight: 400; text-transform: none; letter-spacing: 0;" @if(isset($closures[$date->toDateString()])) data-day-closed="{{ $date->toDateString() }}" @endif>{{ isset($closures[$date->toDateString()]) ? 'Closed · '.$closures[$date->toDateString()] : StaffRule::compactTime($open).' – '.StaffRule::compactTime($close) }}</span></th>@endforeach<th style="text-align: right;">Hours</th></tr></thead>
                 <tbody>
                     @foreach($teach as $t)
                         <tr data-teacher-row="{{ $t['id'] }}">

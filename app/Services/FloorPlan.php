@@ -274,7 +274,7 @@ class FloorPlan
     private function staff(string $today, Carbon $at, string $timezone, bool $projected): Collection
     {
         $minute = $at->copy()->timezone($timezone)->hour * 60 + $at->copy()->timezone($timezone)->minute;
-        $shifts = StaffShift::whereDate('shift_date', $today)->get()->groupBy('user_id');
+        $shifts = StaffShift::live()->whereDate('shift_date', $today)->get()->groupBy('user_id');
 
         return User::teachers()->get()->map(function (User $user) use ($shifts, $minute, $today, $timezone, $projected) {
             $own = $shifts[$user->id] ?? collect();
@@ -288,7 +288,8 @@ class FloorPlan
                 // The afternoon is the roster: whoever is rostered then is counted as there.
                 $projected => ($shift !== null && $shift->covers($minute)) ? 'in' : ($shift !== null ? 'due' : 'off'),
                 $working => 'in',
-                $shift !== null && $shift->starts_at <= $minute => 'late',
+                // Late only from when the week was published (StaffShift::lateFrom).
+                $shift !== null && $shift->lateFrom() !== null && $shift->lateFrom() <= $minute => 'late',
                 $shift !== null => 'due',
                 default => 'off',
             };

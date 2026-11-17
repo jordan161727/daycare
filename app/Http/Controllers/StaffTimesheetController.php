@@ -280,7 +280,7 @@ class StaffTimesheetController extends Controller
         $to = $end->toDateString();
         $ids = $staff->pluck('id')->all();
 
-        foreach (StaffShift::whereIn('user_id', $ids)->whereBetween('shift_date', [$from, $to])->orderBy('starts_at')->get() as $shift) {
+        foreach (StaffShift::live()->whereIn('user_id', $ids)->whereBetween('shift_date', [$from, $to])->orderBy('starts_at')->get() as $shift) {
             $this->shifts[$shift->user_id.'|'.$shift->shift_date->toDateString()][] = $shift;
         }
 
@@ -303,7 +303,7 @@ class StaffTimesheetController extends Controller
         $key = $userId.'|'.$date;
 
         if (! isset($this->loaded[$key])) {
-            $this->shifts[$key] = StaffShift::where('user_id', $userId)->whereDate('shift_date', $date)->orderBy('starts_at')->get()->all();
+            $this->shifts[$key] = StaffShift::live()->where('user_id', $userId)->whereDate('shift_date', $date)->orderBy('starts_at')->get()->all();
             $this->changes[$key] = StaffTimeOff::where('user_id', $userId)->onDate($date)->orderByDesc('id')->first();
             $this->loaded[$key] = true;
         }
@@ -335,8 +335,25 @@ class StaffTimesheetController extends Controller
         $change = $this->changeOn($userId, $date);
 
         $window = $shifts->isEmpty() ? null : ['start' => (int) $shifts->min('starts_at'), 'end' => (int) $shifts->max('ends_at')];
+        $window = $change ? $change->applyTo($window) : $window;
 
-        return $change ? $change->applyTo($window) : $window;
+        if ($window !== null) {
+            // Late runs from when the schedule was published, never earlier
+            // (StaffShift::lateFrom) — and a time-off change that moves the
+            // start moves it too. Null: nobody is late off this day.
+            $first = $shifts->sortBy('starts_at')->first();
+            $from = $first?->lateFrom();
+            $window['late_from'] = $first === null ? $window['start'] : ($from === null ? null : max($from, $window['start']));
+        }
+
+        return $window;
+    }
+
+    /** Not in, and past the minute late counts from (with the grace). */
+    private function lateNow(?array $window, int $now): bool
+    {
+        return $window !== null && ($window['late_from'] ?? null) !== null
+            && $now > $window['late_from'] + PaidHours::lateGrace();
     }
 
     /** The room a person is scheduled in on a day, or their usual one. */
@@ -452,7 +469,7 @@ class StaffTimesheetController extends Controller
             $status === self::ON_TIME => ['', $in.' – '.($out ?: '—'), $this->duration((int) $day['worked']), 'mut', null],
             // Nothing punched. Today that is a fact about the morning so far;
             // ahead it is the plan; behind, with nobody expected, a day off.
-            $today && $window && $now > $window['start'] + PaidHours::lateGrace() => ['c-bad', 'Not in', 'Late · due '.StaffRule::formatTime($window['start']), 'bad', null],
+            $today && $window && $this->lateNow($window, $now) => ['c-bad', 'Not in', 'Late · due '.StaffRule::formatTime($window['start']), 'bad', null],
             $today && $window => ['c-wait', 'Not in', 'Due '.StaffRule::formatTime($window['start']), 'mut', null],
             $future && $window => ['c-off', $this->short($window['start']).' – '.$this->short($window['end']), 'Scheduled', 'mut', null],
             default => ['c-off', 'Off', $change?->kind === 'all' ? $change->reasonLabel() : '', 'mut', null],
@@ -550,7 +567,7 @@ class StaffTimesheetController extends Controller
             return self::MISSING_OUT;
         }
 
-        if ($window !== null && $day['first_in'] > $window['start'] + PaidHours::lateGrace()) {
+        if ($window !== null && ($window['late_from'] ?? null) !== null && $day['first_in'] > $window['late_from'] + PaidHours::lateGrace()) {
             return self::LATE;
         }
 
@@ -622,12 +639,12 @@ class StaffTimesheetController extends Controller
                 $day['open'] && $day['state'] === TimeClock::BREAK => ['in', 'On break', 'ok'],
                 $day['open'] && $day['state'] === TimeClock::LUNCH => ['in', 'At lunch', 'ok'],
                 $day['open'] => ['in', 'On shift', 'ok'],
-                $later !== null && $now > $later->starts_at + PaidHours::lateGrace() => ['late', 'Not back · due '.StaffRule::formatTime($later->starts_at), 'bad'],
+                $later !== null && $later->isLateAt($now, PaidHours::lateGrace()) => ['late', 'Not back · due '.StaffRule::formatTime($later->starts_at), 'bad'],
                 $later !== null => ['due', 'Due back '.StaffRule::formatTime($later->starts_at), 'mut'],
                 $arrived => ['done', 'Done for today', 'mut'],
                 $change?->kind === 'all' => ['off', 'Off · '.strtolower($change->reasonLabel()), 'mut'],
                 $window === null => ['off', 'Off', 'mut'],
-                $now > $window['start'] + PaidHours::lateGrace() => ['late', 'Not in · due '.StaffRule::formatTime($window['start']), 'bad'],
+                $this->lateNow($window, $now) => ['late', 'Not in · due '.StaffRule::formatTime($window['start']), 'bad'],
                 default => ['due', 'Due '.StaffRule::formatTime($window['start']), 'mut'],
             };
 

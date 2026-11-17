@@ -12,12 +12,21 @@ use Illuminate\Support\Carbon;
  */
 class ClosureDay extends Model
 {
-    protected $fillable = ['closed_on', 'reason', 'cleared_slots', 'holiday_rule_id', 'created_by'];
+    protected $fillable = ['closed_on', 'reason', 'cleared_slots', 'cleared_shifts', 'holiday_rule_id', 'created_by'];
 
     protected $casts = [
         'closed_on' => 'date:Y-m-d',
         'cleared_slots' => 'array',
+        // The staff shifts the closure took off, each with whether its week
+        // was published — so reopening can put them back (WeekSchedule::setClosure).
+        'cleared_shifts' => 'array',
     ];
+
+    /** How many people had a shift on the day when it was closed. */
+    public function clearedStaffCount(): int
+    {
+        return collect($this->cleared_shifts ?? [])->pluck('user_id')->unique()->count();
+    }
 
     /** Who entered the closure — the audit line on the holidays page. */
     public function creator()

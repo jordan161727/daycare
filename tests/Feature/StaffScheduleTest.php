@@ -78,9 +78,9 @@ class StaffScheduleTest extends TestCase
         $this->rule($hannah, 'CAN_OPEN');
         $emily = $this->teacher('Emily Carter', 'FT');
 
-        // Everyone starts at opening under the default config, so the rule is
-        // only observable once the floor is raised for non-keyholders.
-        config(['daycare.default_earliest' => 8 * 60]);
+        // The floor for non-keyholders is Settings' "Earliest start for
+        // everyone else" (QA, 17 Nov 2026 — it used to be config).
+        \App\Models\Setting::put('centre.earliest_start', '08:00');
 
         $this->scheduler->generate(self::WEEK);
 
@@ -157,10 +157,15 @@ class StaffScheduleTest extends TestCase
         // sixteen at 1:15 needs two staff, eight needs one, and only the
         // morning is short. Asserted on the count rather than the times,
         // because a morning gap legitimately ends at "12:00 PM".
+        // One teacher inside the limits (10h a day, 40h a week — QA, 17 Nov
+        // 2026) cannot cover 7–6 every day, so the afternoon can be short of
+        // its one adult too — but only ever by the afternoon's own figure:
+        // eight children needing one, never the morning's sixteen needing two.
         $this->assertTrue(
-            $shortfalls->every(fn ($warning) => str_contains($warning, '16 children')),
-            'Only the morning is short; the afternoon is within ratio. Got: '.$shortfalls->implode(' | ')
+            $shortfalls->every(fn ($warning) => str_contains($warning, '16 children need 2') || str_contains($warning, '8 children need 1')),
+            'Each half is short against its own headcount. Got: '.$shortfalls->implode(' | ')
         );
+        $this->assertTrue($shortfalls->contains(fn ($w) => str_contains($w, '16 children need 2')));
     }
 
     public function test_a_gap_lasting_all_afternoon_is_reported_once_rather_than_per_half_hour(): void
@@ -169,6 +174,9 @@ class StaffScheduleTest extends TestCase
         // it once per coverage slice buries everything else in the list.
         $grace = $this->teacher('Grace Lee', 'PT', 'PreK');
         $this->rule($grace, 'AVAILABLE_WINDOW', ['day' => 'ALL', 'time_1' => 7 * 60, 'time_2' => 12 * 60]);
+        // A keyholder, so her morning starts at 7:00 — a non-opener starts at
+        // 7:30 and the half hour before would be a second, separate gap.
+        $this->rule($grace, 'CAN_OPEN');
         $this->bookChildren('PreK', 3);
 
         $week = $this->scheduler->generate(self::WEEK);

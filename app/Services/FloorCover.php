@@ -41,7 +41,7 @@ class FloorCover
         }
 
         return DB::transaction(function () use ($person, $to, $for, $actor, $date, $minute, $now) {
-            $own = StaffShift::where('user_id', $person->id)->whereDate('shift_date', $date)->orderBy('starts_at')->get();
+            $own = StaffShift::live()->where('user_id', $person->id)->whereDate('shift_date', $date)->orderBy('starts_at')->get();
             $current = $own->first(fn (StaffShift $s) => $s->covers($minute));
             $end = $current?->ends_at ?? max($minute + 60, $own->max('ends_at') ?? (int) config('daycare.close'));
             $base = $this->base($now);
@@ -87,7 +87,7 @@ class FloorCover
         $date = $at->toDateString();
         $minute = $at->hour * 60 + $at->minute;
 
-        $floats = StaffShift::where('covers_user_id', $arrived->id)->whereDate('shift_date', $date)
+        $floats = StaffShift::live()->where('covers_user_id', $arrived->id)->whereDate('shift_date', $date)
             ->where('ends_at', '>', $minute)->get();
 
         if ($floats->isEmpty()) {

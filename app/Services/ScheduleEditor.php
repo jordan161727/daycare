@@ -67,8 +67,10 @@ class ScheduleEditor
 
     public function __construct(private StaffSchedule $scheduler, private RoomDemand $demand)
     {
-        $this->open = (int) config('daycare.open');
-        $this->close = (int) config('daycare.close');
+        // Opening hours from Settings > Rooms & hours, as the generator reads them.
+        $centre = app(CentreSettings::class);
+        $this->open = $centre->minutes($centre->get('centre_opens'));
+        $this->close = $centre->minutes($centre->get('centre_closes'));
         $this->step = (int) config('daycare.coverage_step');
         $this->staff = collect();
     }
@@ -451,8 +453,8 @@ class ScheduleEditor
             $cv = $this->cover($shifts, $day, $date, $room);
             $steps = $this->demandWeek[$day][$room] ?? [];
             $peak = $this->demand->peak($steps);
-            $ratio = config('daycare.ratios')[$room] ?? null;
-            $cap = config('daycare.capacity')[$room] ?? null;
+            $ratio = app(CentreSettings::class)->ratio($room) ?: null;
+            $cap = app(CentreSettings::class)->capacity($room) ?: null;
             [$fill, $border, $text] = self::colour($room);
 
             $lanes = [];

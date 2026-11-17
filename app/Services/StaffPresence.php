@@ -339,7 +339,7 @@ class StaffPresence
     public function scheduledRoom(User $user): ?string
     {
         $minute = now()->hour * 60 + now()->minute;
-        $shifts = StaffShift::where('user_id', $user->id)->whereDate('shift_date', today())->orderBy('starts_at')->get();
+        $shifts = StaffShift::live()->where('user_id', $user->id)->whereDate('shift_date', today())->orderBy('starts_at')->get();
         $shift = $shifts->first(fn (StaffShift $shift) => $shift->covers($minute)) ?? $shifts->first();
 
         return $shift?->classroom ?: $user->classroom;
@@ -509,7 +509,7 @@ class StaffPresence
             }
         }
 
-        $shift = StaffShift::where('user_id', $user->id)->whereDate('shift_date', $today)->orderBy('starts_at')->first();
+        $shift = StaffShift::live()->where('user_id', $user->id)->whereDate('shift_date', $today)->orderBy('starts_at')->first();
 
         if ($shift === null) {
             return ['note' => 'Not scheduled', 'tone' => 'mut'];
@@ -517,7 +517,7 @@ class StaffPresence
 
         $due = \App\Models\StaffRule::formatTime($shift->starts_at);
 
-        return $minute > $shift->starts_at + self::LATE_AFTER_MINUTES
+        return $shift->isLateAt($minute, self::LATE_AFTER_MINUTES)
             ? ['note' => 'Late · due '.$due, 'tone' => 'bad']
             : ['note' => 'Due '.$due, 'tone' => 'mut'];
     }

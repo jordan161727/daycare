@@ -54,6 +54,15 @@ class ChildrenImport implements ToCollection, WithHeadingRow
     public array $errors = [];
 
     /**
+     * Rows the sheet called Active that are not ready to be — no guardian,
+     * no emergency contact or no date of birth, the Add form's rule — so the
+     * child was added as Pending, or kept at the status they had, and named.
+     *
+     * @var array<int, string>
+     */
+    public array $notActive = [];
+
+    /**
      * Every column this understands, and what else a sheet might call it.
      *
      * The key is the column on the record; the values are headings that mean
@@ -247,8 +256,30 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             $child = $this->find($data);
 
             if ($child) {
-                $child->fill($data)->save();
+                /*
+                 * Made Active by the sheet only if it is ready to be (QA bug
+                 * 6, Nov 2026) — the same rule the edit form asks, after the
+                 * row's own guardians and emergency contacts are linked, so a
+                 * sheet that adds the missing contact can still activate. A
+                 * child already Active is left alone, as the form leaves it.
+                 */
+                $activating = ($data['status'] ?? null) === 'Active' && $child->status !== 'Active';
+                $fill = $activating ? array_diff_key($data, ['status' => true]) : $data;
+
+                $child->fill($fill)->save();
                 $this->linkPeople($child, $data);
+
+                if ($activating) {
+                    $missing = $child->load('personLinks')->missingForActive();
+
+                    if ($missing === []) {
+                        $child->update(['status' => 'Active']);
+                    } else {
+                        $this->notActive[] = "Row {$rowNumber}: ".$this->nameOf($child).' kept as '
+                            .Child::statusLabel($child->status).', not made Active — '.Child::activeMissingReason($missing).'.';
+                    }
+                }
+
                 $this->updated++;
 
                 continue;
@@ -282,11 +313,33 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             // app's, not theirs — so one is issued here. See nextLan.
             $data['lan'] = $data['lan'] ?? $this->nextLan();
 
-            $child = Child::create($data + ['status' => $data['status'] ?? 'Active']);
+            /*
+             * A row with no status is added as Active, as before — but only
+             * when it carries what the Add form asks of an Active child (QA
+             * bug 6, Nov 2026). Otherwise it is added as Pending and named,
+             * which is what the form tells a person to do by hand.
+             */
+            $data['status'] = $data['status'] ?? 'Active';
+            $missing = $data['status'] === 'Active' ? Child::missingForActiveOnAdd($data) : [];
+
+            if ($missing !== []) {
+                $data['status'] = 'Pending';
+            }
+
+            $child = Child::create($data);
 
             $this->linkPeople($child, $data);
             $this->created++;
+
+            if ($missing !== []) {
+                $this->notActive[] = "Row {$rowNumber}: ".$this->nameOf($child).' created as Pending — '.Child::activeMissingReason($missing).'.';
+            }
         }
+    }
+
+    private function nameOf(Child $child): string
+    {
+        return trim($child->first_name.' '.$child->last_name);
     }
 
     /**

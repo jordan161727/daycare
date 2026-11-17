@@ -41,7 +41,7 @@ class RoomCover
      */
     public function forWeek(string $weekStart, Collection $children): array
     {
-        $shifts = StaffShift::with('user:id,name')
+        $shifts = StaffShift::live()->with('user:id,name')
             ->where('week_start', $weekStart)
             ->orderBy('starts_at')
             ->get();

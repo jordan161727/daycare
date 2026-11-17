@@ -1121,11 +1121,7 @@ class ChildController extends Controller
 
         $missing = $child
             ? $child->loadMissing('personLinks')->missingForActive(array_key_exists('birth_date', $data) ? ['birth_date' => filled($data['birth_date'])] : [])
-            : (new Child)->missingForActive([
-                'birth_date' => filled($data['birth_date'] ?? null),
-                'guardian' => filled($data['mother_name'] ?? null) || filled($data['father_name'] ?? null),
-                'emergency' => filled($data['emergency_contact'] ?? null) || filled($data['secondary_emergency_contact'] ?? null),
-            ]);
+            : Child::missingForActiveOnAdd($data);
 
         if ($missing === []) {
             return;

@@ -4,7 +4,7 @@
 {{-- One dialog for the whole page rather than one per row: the list runs to
      dozens of days once a year of statutory holidays is seeded, and that many
      hidden modals is a lot of DOM for a control used once in a while. --}}
-<div x-data="holidayDialog(@js($restores))" @keydown.escape.window="close()">
+<div x-data="holidayDialog(@js($restores), @js($staffRestores))" @keydown.escape.window="close()">
     {{-- A plain "&": the header escapes its title itself, so "&amp;" here
          came out on the page as the literal text (QA #11, 12 Nov 2026). --}}
     <x-page-title eyebrow="Office" title="Holidays & Closures" subtitle="The days the center is shut. Set one here and every room's attendance schedule closes for that day."/>
@@ -219,8 +219,20 @@
 
                 <template x-if="kind === 'reopen'">
                     <div>
-                        <template x-if="rows.length === 0">
-                            <p class="text-sm text-slate-600 dark:text-slate-300">Nothing was scheduled on this day, so it will simply open — the column stays empty until somebody ticks it.</p>
+                        <template x-if="rows.length === 0 && ! staff.shifts">
+                            <p class="text-sm text-slate-600 dark:text-slate-300">Nothing was scheduled on this day — no children and no staff — so it will simply open; the column stays empty until somebody ticks it.</p>
+                        </template>
+
+                        {{-- The staff roster as well as the children (QA, 17 Nov 2026). --}}
+                        <template x-if="staff.shifts > 0">
+                            <p class="mb-3 text-sm text-slate-600 dark:text-slate-300" data-reopen-staff>
+                                <span class="font-semibold" x-text="staff.shifts"></span>
+                                <span x-text="(staff.shifts === 1 ? ' staff shift' : ' staff shifts') + ' for ' + staff.people + (staff.people === 1 ? ' person' : ' people') + ' go back on the schedule, unless the week has been generated again since.'"></span>
+                                <span x-show="staff.published > 0" x-text="' ' + staff.published + ' of them are on a published schedule — let them know.'"></span>
+                            </p>
+                        </template>
+                        <template x-if="rows.length === 0 && staff.shifts > 0">
+                            <p class="text-sm text-slate-600 dark:text-slate-300">No children were scheduled on this day.</p>
                         </template>
 
                         <template x-if="rows.length > 0">
@@ -320,9 +332,10 @@
     </div>
 </div>
 <script>
-    function holidayDialog(restores) {
+    function holidayDialog(restores, staffRestores = {}) {
         return {
             showing: false,
+            staff: { shifts: 0, people: 0, published: 0 },
             kind: 'reopen',
             method: 'DELETE',
             destructive: true,
@@ -343,6 +356,7 @@
                     // Keyed by closure id, so a day with nothing cleared is an
                     // empty list rather than a missing one.
                     rows: restores[id] ?? [],
+                    staff: staffRestores[id] ?? { shifts: 0, people: 0, published: 0 },
                 });
             },
 
@@ -378,6 +392,7 @@
                into the next one — the reopen list in particular. */
             open(state) {
                 this.rows = [];
+                this.staff = { shifts: 0, people: 0, published: 0 };
                 this.ruleFixed = true;
                 this.form = { closed_on: '', reason: '', month: '', day: '' };
                 this.original = { closed_on: '' };

@@ -427,6 +427,34 @@ class Child extends Model
         return array_filter(self::ACTIVE_REQUIRES, fn ($label, $key) => ! $has[$key], ARRAY_FILTER_USE_BOTH);
     }
 
+    /**
+     * missingForActive for a child not yet on file, read off the names the
+     * Add form or an import row carries — its guardians and emergency
+     * contacts are those names, which become people once it is saved. The
+     * one rule both use (QA bug 6, Nov 2026), so the importer cannot make a
+     * child Active that the form would refuse.
+     *
+     * @return array<string, string>
+     */
+    public static function missingForActiveOnAdd(array $data): array
+    {
+        return (new self)->missingForActive([
+            'birth_date' => filled($data['birth_date'] ?? null) || filled($data['dob'] ?? null),
+            'guardian' => filled($data['mother_name'] ?? null) || filled($data['father_name'] ?? null),
+            'emergency' => filled($data['emergency_contact'] ?? null) || filled($data['secondary_emergency_contact'] ?? null),
+        ]);
+    }
+
+    /** "no date of birth and no emergency contact" — the import summary's reason. */
+    public static function activeMissingReason(array $missing): string
+    {
+        $items = array_map(fn ($label) => 'no '.preg_replace('/^(a|an) /', '', $label), array_values($missing));
+
+        return count($items) > 1
+            ? implode(', ', array_slice($items, 0, -1)).' and '.end($items)
+            : ($items[0] ?? '');
+    }
+
     /** "Add a date of birth and an emergency contact before marking Ava Active." */
     public static function activeRequirementMessage(array $missing, ?string $firstName = null): string
     {

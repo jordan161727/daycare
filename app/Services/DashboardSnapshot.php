@@ -196,7 +196,7 @@ class DashboardSnapshot
     private function staffOnTheFloor(string $today, Carbon $now, string $timezone): Collection
     {
         $minute = $now->copy()->timezone($timezone)->hour * 60 + $now->copy()->timezone($timezone)->minute;
-        $shifts = StaffShift::whereDate('shift_date', $today)->get()->groupBy('user_id');
+        $shifts = StaffShift::live()->whereDate('shift_date', $today)->get()->groupBy('user_id');
 
         $presence = app(StaffPresence::class);
 
@@ -229,7 +229,7 @@ class DashboardSnapshot
      */
     private function ratios(Collection $roll, array $states, array $late, Collection $staff, Collection $planned, string $today, string $timezone): array
     {
-        $rostered = StaffShift::with('user')->whereDate('shift_date', $today)->get()->groupBy('classroom');
+        $rostered = StaffShift::live()->with('user')->whereDate('shift_date', $today)->get()->groupBy('classroom');
         $out = [];
 
         foreach (ClassroomAssignment::rooms() as $room) {

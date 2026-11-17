@@ -668,7 +668,7 @@ class StaffKiosk
      */
     private function todayLine(User $user, string $today): ?string
     {
-        $shift = \App\Models\StaffShift::where('user_id', $user->id)->whereDate('shift_date', $today)->orderBy('starts_at')->first();
+        $shift = \App\Models\StaffShift::live()->where('user_id', $user->id)->whereDate('shift_date', $today)->orderBy('starts_at')->first();
         $change = \App\Models\StaffTimeOff::where('user_id', $user->id)->onDate($today)->orderByDesc('id')->first();
 
         $parts = [];

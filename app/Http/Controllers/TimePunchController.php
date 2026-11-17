@@ -379,7 +379,7 @@ class TimePunchController extends Controller
         $day = $this->clock->day($user->id, $date, $all);
         $when = Carbon::parse($date);
 
-        $shifts = StaffShift::where('user_id', $user->id)->whereDate('shift_date', $date)->orderBy('starts_at')->get();
+        $shifts = StaffShift::live()->where('user_id', $user->id)->whereDate('shift_date', $date)->orderBy('starts_at')->get();
         $hm = fn (?int $minutes) => $minutes === null ? null : sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
 
         // Newest first: the entry just written is the one being looked for.

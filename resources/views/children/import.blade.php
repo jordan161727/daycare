@@ -51,6 +51,21 @@
                     </div>
                 @endif
 
+                @if(session('import_not_active'))
+                    {{-- Rows the sheet would have made Active without a
+                         guardian, an emergency contact or a date of birth —
+                         the Add form's rule (QA bug 6, Nov 2026). Added as
+                         Pending, or left at their status, and named. --}}
+                    <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" data-import-not-active>
+                        <p class="font-semibold">Not ready to be Active:</p>
+                        <ul class="mt-2 list-inside list-disc space-y-1 text-sm">
+                            @foreach(session('import_not_active') as $line)
+                                <li>{{ $line }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
                 @if($errors->any())
                     <div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
                         <p class="font-semibold">Please fix the following:</p>

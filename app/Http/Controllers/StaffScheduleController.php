@@ -70,8 +70,8 @@ class StaffScheduleController extends Controller
             'teach' => $hidden ? [] : $this->editor->week($weekStart),
             'dayData' => $hidden ? null : $this->editor->day($weekStart, $day),
             'gaps' => $hidden ? [] : $this->editor->gaps($weekStart),
-            'open' => (int) config('daycare.open'),
-            'close' => (int) config('daycare.close'),
+            'open' => app(\App\Services\CentreSettings::class)->minutes(app(\App\Services\CentreSettings::class)->get('centre_opens')),
+            'close' => app(\App\Services\CentreSettings::class)->minutes(app(\App\Services\CentreSettings::class)->get('centre_closes')),
             'closures' => ClosureDay::betweenDates(reset($dates), end($dates))->get()
                 ->keyBy(fn ($closed) => $closed->closed_on->toDateString())
                 ->map(fn ($closed) => $closed->label()),
@@ -176,7 +176,8 @@ class StaffScheduleController extends Controller
     {
         $weekStart = StaffScheduleWeek::startOf($request->input('week', now()->toDateString()));
 
-        $week = $this->scheduler->generate($weekStart, $request->user());
+        // Days already gone by are left as they are unless asked for (QA, 17 Nov 2026).
+        $week = $this->scheduler->generate($weekStart, $request->user(), includePast: $request->boolean('include_past'));
         $week->forceFill(['published_at' => null, 'published_by' => null, 'edits' => 0])->save();
 
         $warnings = count($week->warnings ?? []);

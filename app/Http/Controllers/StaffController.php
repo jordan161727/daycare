@@ -262,7 +262,7 @@ class StaffController extends Controller
     {
         $today = today()->toDateString();
         $now = now()->hour * 60 + now()->minute;
-        $shifts = StaffShift::whereDate('shift_date', $today)->orderBy('starts_at')->get()->groupBy('user_id');
+        $shifts = StaffShift::live()->whereDate('shift_date', $today)->orderBy('starts_at')->get()->groupBy('user_id');
         $off = StaffTimeOff::onDate($today)->orderByDesc('id')->get()->keyBy('user_id');
 
         $out = [];
@@ -280,7 +280,7 @@ class StaffController extends Controller
 
             $out[$person->id] = match (true) {
                 $day['open'] => ['key' => 'in', 'dot' => '#10b981', 'text' => 'In since '.Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A'), 'tone' => 'ok', 'since' => Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A')],
-                $later !== null && $now > $later->starts_at + PaidHours::lateGrace() => ['key' => 'late', 'dot' => '#f43f5e', 'text' => 'Late · not back yet', 'tone' => 'bad'],
+                $later !== null && $later->isLateAt($now, PaidHours::lateGrace()) => ['key' => 'late', 'dot' => '#f43f5e', 'text' => 'Late · not back yet', 'tone' => 'bad'],
                 $later !== null => ['key' => 'due', 'dot' => '#cfd3de', 'text' => 'Due back '.StaffRule::formatTime($later->starts_at), 'tone' => 'mut'],
                 $day['first_in'] !== null => ['key' => 'done', 'dot' => '#5b8fd6', 'text' => 'Done for today', 'tone' => 'info'],
                 $change?->kind === 'all' => ['key' => 'off', 'dot' => '#e7e9f0', 'text' => 'Off today · '.strtolower($change->reasonLabel()), 'tone' => 'mut'],
@@ -291,7 +291,10 @@ class StaffController extends Controller
                         $start = max($start, $change->from_minute);
                     }
 
-                    return $now > $start + PaidHours::lateGrace()
+                    // Late from the later of the start and the publish (StaffShift::lateFrom).
+                    $from = $shift->lateFrom();
+
+                    return $from !== null && $now > max($start, $from) + PaidHours::lateGrace()
                         ? ['key' => 'late', 'dot' => '#f43f5e', 'text' => 'Late · not in yet', 'tone' => 'bad']
                         : ['key' => 'due', 'dot' => '#cfd3de', 'text' => 'Due '.StaffRule::formatTime($start), 'tone' => 'mut'];
                 })(),
@@ -325,7 +328,7 @@ class StaffController extends Controller
         $range = in_array($range, ['last', 'this', 'two', 'month', 'custom'], true) ? $range : 'this';
 
         $days = config('daycare.days');
-        $shifts = StaffShift::where('user_id', $staff->id)->whereBetween('shift_date', [$from->toDateString(), $to->toDateString()])
+        $shifts = StaffShift::live()->where('user_id', $staff->id)->whereBetween('shift_date', [$from->toDateString(), $to->toDateString()])
             ->orderBy('starts_at')->get()->groupBy(fn (StaffShift $s) => $s->shift_date->toDateString());
         $changes = StaffTimeOff::byUserAndDate($from->toDateString(), $to->toDateString())[$staff->id] ?? [];
 
@@ -376,7 +379,7 @@ class StaffController extends Controller
                     $row['in'] = Carbon::today()->addMinutes((int) $day['first_in'])->format('g:i A');
                     $row['status'] = 'Today · on shift';
                     $row['tone'] = 'info';
-                } elseif ($window && $now > $window['start'] + PaidHours::lateGrace()) {
+                } elseif ($window && $shift->lateFrom() !== null && $now > max($window['start'], $shift->lateFrom()) + PaidHours::lateGrace()) {
                     $row['status'] = 'Late · not in';
                     $row['tone'] = 'bad';
                 } else {
@@ -418,7 +421,8 @@ class StaffController extends Controller
             $row['hrs'] = $this->duration((int) $day['worked']);
             $minutes += (int) $day['worked'];
 
-            $lateBy = $window && $day['first_in'] !== null ? $day['first_in'] - $window['start'] : 0;
+            $lateFrom = $shift?->lateFrom();
+            $lateBy = $window && $day['first_in'] !== null && $lateFrom !== null ? $day['first_in'] - max($window['start'], $lateFrom) : 0;
             if ($lateBy > PaidHours::lateGrace()) {
                 $late++;
                 $row['status'] = 'Late '.$lateBy.' min';
@@ -498,7 +502,7 @@ class StaffController extends Controller
      */
     private function shiftOn(User $staff, Carbon $date): ?array
     {
-        $shift = StaffShift::where('user_id', $staff->id)->whereDate('shift_date', $date->toDateString())->orderBy('starts_at')->first();
+        $shift = StaffShift::live()->where('user_id', $staff->id)->whereDate('shift_date', $date->toDateString())->orderBy('starts_at')->first();
 
         if ($shift) {
             return ['start' => $shift->starts_at, 'end' => $shift->ends_at, 'room' => $shift->classroom];

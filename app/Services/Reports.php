@@ -187,7 +187,7 @@ class Reports
         $days = $this->weekdays($from, $to);
         $today = today()->toDateString();
         $staff = User::whereIn('role', ['admin', 'teacher'])->where(fn ($q) => $q->whereNull('employment')->orWhere('employment', '!=', 'INACTIVE'))->with('staffRules')->orderBy('name')->get();
-        $shifts = StaffShift::whereIn('user_id', $staff->pluck('id'))->whereBetween('shift_date', [$from->toDateString(), $to->toDateString()])->orderBy('starts_at')->get()
+        $shifts = StaffShift::live()->whereIn('user_id', $staff->pluck('id'))->whereBetween('shift_date', [$from->toDateString(), $to->toDateString()])->orderBy('starts_at')->get()
             ->groupBy(fn ($s) => $s->user_id.'|'.$s->shift_date->toDateString());
         $off = StaffTimeOff::byUserAndDate($from->toDateString(), $to->toDateString());
         $leave = LeaveRequest::byUserAndDate($from->toDateString(), $to->toDateString());

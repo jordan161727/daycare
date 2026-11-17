@@ -7,6 +7,8 @@ use App\Models\Child;
 use App\Models\ClosureDay;
 use App\Models\ScheduleSlot;
 use App\Models\ScheduleWeek;
+use App\Models\StaffScheduleWeek;
+use App\Models\StaffShift;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +22,15 @@ use Illuminate\Support\Facades\DB;
  */
 class WeekSchedule
 {
+    /**
+     * What the last setClosure() did to the staff roster: shifts removed or
+     * put back, the people they belong to, and how many of those had them on
+     * a published schedule (and so need telling).
+     *
+     * @var array{shifts: int, people: int, published_people: int, not_restored?: int}
+     */
+    public array $lastStaff = ['shifts' => 0, 'people' => 0, 'published_people' => 0];
+
 
 
     /**
@@ -188,6 +199,8 @@ class WeekSchedule
      */
     public function setClosure(string $date, bool $closed, ?string $reason = null, ?User $user = null, ?int $ruleId = null): int
     {
+        $this->lastStaff = ['shifts' => 0, 'people' => 0, 'published_people' => 0];
+
         return DB::transaction(function () use ($date, $closed, $reason, $user, $ruleId) {
             if (! $closed) {
                 return $this->reopen($date);
@@ -196,6 +209,28 @@ class WeekSchedule
             $cleared = ScheduleSlot::where('slot_date', $date)
                 ->where('is_scheduled', true)
                 ->get(['child_id', 'session']);
+
+            // And the staff shifts on the day, draft or published: a closed day
+            // has nobody on the roster (QA, 17 Nov 2026: six teachers kept their
+            // 7a–3p shifts on a closed Thursday). Kept on the closure so a
+            // reopen can put them back; whether their week was published is
+            // kept too, because those people were told and must be told again.
+            $shifts = StaffShift::whereDate('shift_date', $date)->get();
+            $published = StaffScheduleWeek::whereNotNull('published_at')->get()
+                ->map(fn ($w) => $w->week_start->toDateString())->flip();
+            $existing = ClosureDay::firstWhere('closed_on', $date);
+            $clearedShifts = array_merge($existing?->cleared_shifts ?? [], $shifts->map(fn (StaffShift $s) => [
+                'user_id' => $s->user_id, 'week_start' => $s->week_start->toDateString(), 'day' => $s->day,
+                'starts_at' => $s->starts_at, 'ends_at' => $s->ends_at, 'classroom' => $s->classroom,
+                'role' => $s->role, 'covers_user_id' => $s->covers_user_id,
+                'published' => $published->has($s->week_start->toDateString()),
+            ])->all());
+            StaffShift::whereKey($shifts->pluck('id'))->delete();
+            $this->lastStaff = [
+                'shifts' => $shifts->count(),
+                'people' => $shifts->pluck('user_id')->unique()->count(),
+                'published_people' => collect($clearedShifts)->where('published', true)->pluck('user_id')->unique()->count(),
+            ];
 
             ClosureDay::updateOrCreate(
                 ['closed_on' => $date],
@@ -209,7 +244,11 @@ class WeekSchedule
                         'child_id' => $slot->child_id,
                         'session' => $slot->session,
                     ])->all(),
-                ],
+                ] + (\Illuminate\Support\Facades\Schema::hasColumn('closure_days', 'cleared_shifts')
+                    // Until the migration has run the shifts are still taken off;
+                    // they just cannot be put back on a reopen.
+                    ? ['cleared_shifts' => $clearedShifts]
+                    : []),
             );
 
             return ScheduleSlot::where('slot_date', $date)
@@ -242,6 +281,38 @@ class WeekSchedule
                 ->whereIn('child_id', collect($rows)->pluck('child_id'))
                 ->update(['is_scheduled' => true]);
         }
+
+        // The staff shifts come back as they were — unless the person has
+        // been given something else on that day since, or has left. A shift
+        // in a week that has been regenerated since the closure is not put
+        // back either: that roster was solved without the day.
+        $back = 0;
+        $people = [];
+        $publishedPeople = [];
+        foreach ($closure->cleared_shifts ?? [] as $s) {
+            $week = StaffScheduleWeek::whereDate('week_start', $s['week_start'])->first();
+            $regenerated = $week?->generated_at !== null && $week->generated_at->gt($closure->updated_at ?? $closure->created_at);
+            $taken = StaffShift::where('user_id', $s['user_id'])->whereDate('shift_date', $date)->exists() && ! in_array($s['user_id'], $people, true);
+            if ($regenerated || $taken || ! User::whereKey($s['user_id'])->exists()) {
+                continue;
+            }
+            StaffShift::create([
+                'week_start' => $s['week_start'], 'user_id' => $s['user_id'], 'shift_date' => $date, 'day' => $s['day'],
+                'starts_at' => $s['starts_at'], 'ends_at' => $s['ends_at'], 'classroom' => $s['classroom'],
+                'role' => $s['role'], 'covers_user_id' => $s['covers_user_id'] ?? null,
+            ]);
+            $back++;
+            $people[] = $s['user_id'];
+            if ($week?->isPublished()) {
+                $publishedPeople[] = $s['user_id'];
+            }
+        }
+        $this->lastStaff = [
+            'shifts' => $back,
+            'people' => count(array_unique($people)),
+            'published_people' => count(array_unique($publishedPeople)),
+            'not_restored' => count($closure->cleared_shifts ?? []) - $back,
+        ];
 
         $closure->delete();
 

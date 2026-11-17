@@ -98,6 +98,7 @@ class ChildrenController extends Controller
         $created = $updated = $skipped = 0;
         $errors = [];
         $duplicates = [];
+        $notActive = [];
         $unread = [];
         $several = count($files) > 1;
 
@@ -137,6 +138,10 @@ class ChildrenController extends Controller
             foreach ($import->duplicates as $duplicate) {
                 $duplicates[] = $several ? "{$name} — {$duplicate}" : $duplicate;
             }
+
+            foreach ($import->notActive as $line) {
+                $notActive[] = $several ? "{$name} — {$line}" : $line;
+            }
         }
 
         // Every file failed: that is an error, not an import that did nothing.
@@ -159,10 +164,15 @@ class ChildrenController extends Controller
             $message .= ' '.count($duplicates).' row(s) look like a child already on file and were not added — see below.';
         }
 
+        if ($notActive !== []) {
+            $message .= ' '.count($notActive).' child(ren) not ready to be Active — see below.';
+        }
+
         return back()
             ->with('success', $message)
             ->with('import_errors', array_merge($unread, $errors))
-            ->with('import_duplicates', $duplicates);
+            ->with('import_duplicates', $duplicates)
+            ->with('import_not_active', $notActive);
     }
 
     public function showImport()

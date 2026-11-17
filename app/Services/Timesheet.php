@@ -51,7 +51,7 @@ class Timesheet
 
         $range = $period->range();
 
-        $shifts = StaffShift::whereBetween('shift_date', [
+        $shifts = StaffShift::live()->whereBetween('shift_date', [
             $range->start->toDateString(),
             $range->end->toDateString(),
         ])->get();

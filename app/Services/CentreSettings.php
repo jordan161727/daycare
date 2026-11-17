@@ -257,7 +257,8 @@ class CentreSettings
             ->values();
     }
 
-    private function minutes(mixed $time): int
+    /** "07:30" (or "07:30:00") as minutes past midnight; 0 when blank. */
+    public function minutes(mixed $time): int
     {
         if (blank($time)) {
             return 0;

@@ -67,6 +67,13 @@ class HolidayController extends Controller
             // does not answer the question actually being asked at that moment
             // — which children am I putting back on the roster?
             'restores' => $this->restorePreview($upcoming),
+            // And the staff shifts each one took off, which reopening puts
+            // back (QA, 17 Nov 2026: the dialog only ever spoke of children).
+            'staffRestores' => $upcoming->mapWithKeys(fn ($day) => [$day->id => [
+                'shifts' => count($day->cleared_shifts ?? []),
+                'people' => $day->clearedStaffCount(),
+                'published' => collect($day->cleared_shifts ?? [])->where('published', true)->pluck('user_id')->unique()->count(),
+            ]])->all(),
             // The first day that can still be closed: this week's Monday, or
             // next week's once this Friday has passed. The date pickers start
             // there, and grey out weekends (data-date-weekdays).
@@ -181,6 +188,7 @@ class HolidayController extends Controller
         $closed = [];
         $frozen = [];
         $cleared = 0;
+        $staff = ['shifts' => 0, 'people' => 0, 'published_people' => 0];
 
         for ($date = $from->copy(); $date->lte($to); $date->addDay()) {
             if ($date->isWeekend()) {
@@ -199,6 +207,9 @@ class HolidayController extends Controller
             }
 
             $cleared += $this->weeks->setClosure($day, true, $reason, $request->user());
+            foreach ($staff as $key => $n) {
+                $staff[$key] = $n + ($this->weeks->lastStaff[$key] ?? 0);
+            }
             $closed[] = $day;
         }
 
@@ -217,6 +228,16 @@ class HolidayController extends Controller
         $message .= $cleared > 0
             ? ' '.$cleared.' scheduled day(s) were cleared from the attendance board.'
             : ' No scheduled days needed clearing.';
+
+        // The staff roster too (QA, 17 Nov 2026): closing a day takes its
+        // shifts off, draft or published. Nobody is messaged automatically —
+        // the people on a published schedule are named as needing telling.
+        $message .= $staff['shifts'] > 0
+            ? ' '.$staff['shifts'].' staff shift(s) for '.$staff['people'].' '.($staff['people'] === 1 ? 'person' : 'people').' were taken off the schedule.'
+            : ' No staff shifts were on it.';
+        if ($staff['published_people'] > 0) {
+            $message .= ' '.$staff['published_people'].' of them had it on a published schedule — let them know the day is closed.';
+        }
 
         if ($frozen !== []) {
             $message .= ' '.count($frozen).' day(s) were skipped — their week has already ended.';
@@ -243,6 +264,7 @@ class HolidayController extends Controller
         }
 
         $restored = $this->weeks->setClosure($date, false);
+        $staff = $this->weeks->lastStaff;
 
         $message = $holiday->closed_on->format('l, j F Y').' is open again.';
 
@@ -256,8 +278,21 @@ class HolidayController extends Controller
         // did less than it appears.
         if ($restored < $expected) {
             $message .= ' '.($expected - $restored).' could not be put back — those children have left or changed room since.';
-        } elseif ($restored === 0) {
-            $message .= ' Nothing was scheduled on it, so the day is open and empty.';
+        }
+
+        // The staff shifts the closure took off come back too (QA, 17 Nov 2026).
+        if ($staff['shifts'] > 0) {
+            $message .= ' '.$staff['shifts'].' staff shift(s) for '.$staff['people'].' '.($staff['people'] === 1 ? 'person' : 'people').' were put back on the schedule.';
+            if ($staff['published_people'] > 0) {
+                $message .= ' '.$staff['published_people'].' of them are on a published schedule — let them know they are working that day after all.';
+            }
+        }
+        if (($staff['not_restored'] ?? 0) > 0) {
+            $message .= ' '.$staff['not_restored'].' staff shift(s) were not put back — the week was generated again since, or the person has another shift or has left. Generate the week again to cover the day.';
+        }
+
+        if ($restored === 0 && $expected === 0 && $staff['shifts'] === 0 && ($staff['not_restored'] ?? 0) === 0) {
+            $message .= ' Nothing was scheduled on it — no children and no staff — so the day is open and empty.';
         }
 
         return redirect()->route('holidays.index')->with('success', $message);

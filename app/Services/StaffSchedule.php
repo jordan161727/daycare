@@ -71,11 +71,37 @@ class StaffSchedule
     /** @var list<string> */
     private array $warnings = [];
 
+    /** Earliest start for anybody who may not open the building (minutes). */
+    private int $earliest;
+
+    /** Longest shift, and most minutes in a week — Settings > Rooms & hours. */
+    private int $longest;
+
+    private int $maxWeek;
+
+    /** @var array<int, int> Minutes each person already has on days this solve keeps as they are. */
+    private array $kept = [];
+
     public function __construct(private RoomDemand $demand)
     {
-        $this->open = (int) config('daycare.open');
-        $this->close = (int) config('daycare.close');
         $this->step = (int) config('daycare.coverage_step');
+        $this->loadSettings();
+    }
+
+    /**
+     * The limits the solve keeps, from Settings > Rooms & hours — not
+     * config/daycare.php, which only holds the defaults until the page is
+     * saved (QA, 17 Nov 2026: every FT teacher got 7a–6p, 55 hours, and
+     * non-openers started at 7:00, because the generator read config).
+     */
+    private function loadSettings(): void
+    {
+        $centre = app(CentreSettings::class);
+        $this->open = $centre->minutes($centre->get('centre_opens'));
+        $this->close = $centre->minutes($centre->get('centre_closes'));
+        $this->earliest = max($this->open, $centre->minutes($centre->get('earliest_start')));
+        $this->longest = max(60, (int) $centre->get('longest_shift_hours') * 60);
+        $this->maxWeek = max(60, (int) $centre->get('max_week_hours') * 60);
     }
 
     /**
@@ -85,8 +111,10 @@ class StaffSchedule
      * answer to the old rules, and keeping any of it would leave a schedule
      * that matches neither rule set.
      */
-    public function generate(string $weekStart, ?User $actor = null): StaffScheduleWeek
+    public function generate(string $weekStart, ?User $actor = null, bool $includePast = false): StaffScheduleWeek
     {
+        $this->loadSettings();
+        $this->kept = [];
         $this->assigned = [];
         $this->cover = [];
         $this->broken = [];
@@ -142,8 +170,21 @@ class StaffSchedule
         // somebody's holiday costs them nothing here either.
         $this->awayDays = array_map('count', $this->leave);
 
+        // Days already gone by are left as they are (QA, 17 Nov 2026: a
+        // draft for a week already started wrote shifts onto Monday, which
+        // had passed) — unless the director asks for them. Their shifts stay
+        // and count toward the week's hours.
+        $today = now()->timezone(config('app.timezone'))->toDateString();
+        $keepBefore = $includePast ? null : $today;
+        if ($keepBefore !== null) {
+            $this->kept = StaffShift::where('week_start', $weekStart)->whereDate('shift_date', '<', $keepBefore)->get()
+                ->groupBy('user_id')->map(fn ($s) => (int) $s->sum(fn (StaffShift $x) => $x->minutes()))->all();
+            $this->assigned = $this->kept;
+        }
+
+        // Never more than the week's limit, whatever the contract says.
         $targets = $staff->mapWithKeys(fn (User $person) => [
-            $person->id => max(0, $person->weeklyHours() * 60 - array_sum($this->leave[$person->id] ?? [])),
+            $person->id => max(0, min($person->weeklyHours() * 60, $this->maxWeek) - array_sum($this->leave[$person->id] ?? [])),
         ])->all();
 
         $this->reportLeave($staff, $dates, $closed);
@@ -153,6 +194,10 @@ class StaffSchedule
 
         foreach ($dates as $day => $date) {
             if (isset($closed[$date->toDateString()])) {
+                continue;
+            }
+
+            if ($keepBefore !== null && $date->toDateString() < $keepBefore) {
                 continue;
             }
 
@@ -172,7 +217,7 @@ class StaffSchedule
             // changes the Staff page keeps for it (Phase 5 Time off).
             $this->dateToday = $date->toDateString();
 
-            $shifts = $this->shiftsForDay($staff, $day, $targets);
+            $shifts = $this->shiftsForDay($staff, $day, $targets, $demand[$day] ?? []);
 
             $this->checkPreferences($shifts, $staff, $day);
             $this->checkPairs($shifts, $staff, $noPair, $day);
@@ -203,8 +248,10 @@ class StaffSchedule
         $this->reportPreferences($staff);
         $this->checkHours($staff, $targets);
 
-        return DB::transaction(function () use ($weekStart, $rows, $actor) {
-            StaffShift::where('week_start', $weekStart)->delete();
+        return DB::transaction(function () use ($weekStart, $rows, $actor, $keepBefore) {
+            StaffShift::where('week_start', $weekStart)
+                ->when($keepBefore !== null, fn ($q) => $q->whereDate('shift_date', '>=', $keepBefore))
+                ->delete();
 
             foreach (array_chunk($rows, 200) as $chunk) {
                 StaffShift::insert($chunk);
@@ -228,9 +275,13 @@ class StaffSchedule
      * @param  array<int, float>  $targets
      * @return list<array>
      */
-    private function shiftsForDay(Collection $staff, string $day, array $targets): array
+    private function shiftsForDay(Collection $staff, string $day, array $targets, array $dayDemand = []): array
     {
         $shifts = [];
+
+        // Keyholders first, so the opening is theirs and everybody after
+        // them is placed against what is still uncovered.
+        $staff = $staff->sortBy(fn (User $person) => $this->canOpen($person) ? 0 : 1)->values();
 
         foreach ($staff as $person) {
             // Nobody is rostered without a contract to roster them against.
@@ -266,16 +317,68 @@ class StaffSchedule
 
             $remaining = $targets[$person->id] - ($this->assigned[$person->id] ?? 0);
 
+            if ($remaining <= 0 && ! $window['fixed']) {
+                continue;
+            }
+
+            $length = $this->shiftLength($window, $targets[$person->id], $remaining, $this->spreadDays($person->id));
+            // Never past the week's most, the minimum shift included.
+            $length = min($length, $this->maxWeek - ($this->assigned[$person->id] ?? 0));
+            if ($length < $this->step) {
+                continue;
+            }
+            $room = $this->roomFor($person);
+
             $shifts[] = [
                 'user_id' => $person->id,
-                'starts_at' => $window['start'],
-                'ends_at' => $window['start'] + $this->shiftLength($window, $targets[$person->id], $remaining, $this->spreadDays($person->id)),
-                'classroom' => $this->roomFor($person),
+                'starts_at' => $start = $this->bestStart($window, $length, $room, $shifts, $dayDemand),
+                'ends_at' => $start + $length,
+                'classroom' => $room,
                 'role' => StaffShift::ROLE_STAFF,
             ];
         }
 
         return $shifts;
+    }
+
+    private function canOpen(User $person): bool
+    {
+        return $person->staffRules->contains(fn (StaffRule $rule) => $rule->rule_type === 'CAN_OPEN');
+    }
+
+    /**
+     * Where in their window a shift of this length does the most good: the
+     * start that covers the most of the room's still-uncovered need, the
+     * earliest of equals. Everybody used to start the minute the window
+     * opened, so an eight-hour day ended at three and the room stood empty
+     * from three to six (QA, 17 Nov 2026). A room nobody is booked into
+     * keeps the early start.
+     */
+    private function bestStart(array $window, int $length, string $room, array $placed, array $dayDemand): int
+    {
+        $steps = $dayDemand[$room] ?? [];
+        $latest = $window['end'] - $length;
+
+        if ($window['fixed'] || $steps === [] || $latest <= $window['start']) {
+            return $window['start'];
+        }
+
+        $best = $window['start'];
+        $bestScore = -1;
+
+        for ($start = $window['start']; $start <= $latest; $start += $this->step) {
+            $score = 0;
+            for ($minute = $start; $minute < $start + $length; $minute += $this->step) {
+                $have = collect($placed)->where('classroom', $room)
+                    ->filter(fn ($s) => $s['starts_at'] <= $minute && $s['ends_at'] > $minute)->count();
+                $score += max(0, $this->demand->staffNeeded($steps, $room, $minute) - $have);
+            }
+            if ($score > $bestScore) {
+                [$best, $bestScore] = [$start, $score];
+            }
+        }
+
+        return $best;
     }
 
     /**
@@ -294,7 +397,8 @@ class StaffSchedule
      */
     private function shiftLength(array $window, float $weekTarget, float $remaining, int $spreadDays): int
     {
-        $available = $window['end'] - $window['start'];
+        // Never longer than the longest shift (Settings), a fixed one included.
+        $available = min($window['end'] - $window['start'], $this->longest);
 
         if ($window['fixed']) {
             return $available;
@@ -343,9 +447,10 @@ class StaffSchedule
         $start = $this->open;
         $end = $this->close;
 
-        // Only keyholders can be first through the door.
-        if (! $person->staffRules->contains(fn (StaffRule $rule) => $rule->rule_type === 'CAN_OPEN')) {
-            $start = max($start, (int) config('daycare.default_earliest'));
+        // Only keyholders can be first through the door: everybody else
+        // starts no earlier than Settings' "Earliest start for everyone else".
+        if (! $this->canOpen($person)) {
+            $start = max($start, $this->earliest);
         }
 
         foreach ($rules as $rule) {
@@ -620,6 +725,20 @@ class StaffSchedule
             $latest = $nextStart === null
                 ? $window['end']
                 : min($window['end'], $nextStart);
+
+            // The limits are never broken to close a gap (QA, 17 Nov 2026):
+            // not the longest shift — today's minutes, counted from their
+            // first start to the end of this cover — nor the week's most.
+            // Whatever cannot be covered inside them is reported as a gap.
+            $theirs = collect($shifts)->where('user_id', $person->id);
+            $dayStart = min($theirs->min('starts_at') ?? $minute, $minute);
+            $latest = min($latest, $dayStart + $this->longest);
+            // Nor a cover before a shift that already runs late into the day.
+            if (($theirs->max('ends_at') ?? $minute) - $minute > $this->longest) {
+                continue;
+            }
+            $weekLeft = $this->maxWeek - ($this->assigned[$person->id] ?? 0) - (int) $theirs->sum(fn ($s) => $s['ends_at'] - $s['starts_at']);
+            $latest = min($latest, $minute + max(0, $weekLeft));
 
             // Too small a window to be worth anything: it would not close the
             // slice that asked for cover, and the next pass would ask again.

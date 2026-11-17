@@ -193,6 +193,10 @@ class SchedulePageTest extends TestCase
 
     public function test_who_could_cover_lists_only_people_the_rules_allow(): void
     {
+        // Infant is short from 7:00, when only a keyholder may start (Settings'
+        // earliest start for everyone else, QA 17 Nov 2026) — so Olivia opens.
+        $this->olivia->staffRules()->create(['rule_type' => 'CAN_OPEN', 'priority' => 'HARD']);
+
         $json = $this->actingAs($this->admin)->getJson(route('staff-schedule.day', ['week' => self::WEEK, 'day' => 'MON']))->assertOk()->json();
 
         $infant = collect($json['cover'])->firstWhere('room', 'Infant');
