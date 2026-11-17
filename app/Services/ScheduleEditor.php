@@ -570,6 +570,135 @@ class ScheduleEditor
         return $out;
     }
 
+    /**
+     * The week in one sentence, then what is wrong with it day by day (QA
+     * retest, 18 Nov 2026): "76 things to look at" in green said nothing of
+     * the real cause, which was too few staff-hours for the bookings.
+     *
+     * Need: for every open day and every half hour, ceil(children / ratio)
+     * per space — rooms sharing one space are counted together, each class
+     * at its own ratio. Have: each rostered person's week, up to the week's
+     * most, less their leave and their share of the days the centre is shut
+     * or they are out all day.
+     *
+     * State: ok with nothing to look at; bad when children are booked and
+     * nobody at all is in their space (a whole day with no staff included);
+     * warn for anything else — short of ratio, or a Must rule broken.
+     *
+     * @return array{need: int, have: int, short: int, state: string, headline: string, empty: list<string>, days: list<array{day: string, label: string, lines: list<string>}>, issues: int}
+     */
+    public function summary(string $weekStart): array
+    {
+        $this->load($weekStart);
+        $centre = app(CentreSettings::class);
+        $dates = StaffScheduleWeek::datesOf($weekStart);
+        $last = end($dates)->toDateString();
+        $leave = LeaveRequest::minutesByUserAndDate($weekStart, $last);
+        $maxWeek = max(60, (int) $centre->get('max_week_hours') * 60);
+        $open = array_filter($dates, fn ($date) => ! isset($this->closed[$date->toDateString()]));
+
+        // Spaces: host room => its rooms.
+        $spaces = [];
+        foreach (self::rooms() as $room) {
+            $spaces[$centre->sharesWith($room) ?? $room][] = $room;
+        }
+
+        $need = 0;
+        $issues = 0;
+        $empty = [];
+        $days = [];
+
+        foreach ($open as $day => $dateObj) {
+            $date = $dateObj->toDateString();
+            $shifts = $this->shiftsOn($day);
+            $lines = [];
+            $bookedToday = false;
+
+            foreach ($spaces as $rooms) {
+                $nobody = array_fill(0, count($this->slices()), false);
+
+                foreach ($this->slices() as $i => $minute) {
+                    $load = 0.0;
+                    foreach ($rooms as $room) {
+                        $kids = $this->demand->childrenAt($this->demandWeek[$day][$room] ?? [], $minute);
+                        $ratio = $centre->ratio($room);
+                        $load += $kids > 0 && $ratio > 0 ? $kids / $ratio : 0;
+                    }
+                    $need += (int) ceil(round($load, 6)) * $this->step;
+
+                    if ($load > 0) {
+                        $bookedToday = true;
+                        $nobody[$i] = ! collect($shifts)->contains(fn ($s) => in_array($s['classroom'], $rooms, true)
+                            && $s['starts_at'] <= $minute && $s['ends_at'] > $minute && ! $this->busyAt($s['user_id'], $date, $minute));
+                    }
+                }
+
+                foreach ($this->runs($nobody) as $run) {
+                    $empty[] = $dateObj->format('D M j').' '.$centre->spaceLabel($rooms[0]).' '.$this->runText($run);
+                }
+            }
+
+            foreach (self::rooms() as $room) {
+                $cv = $this->cover($shifts, $day, $date, $room);
+                foreach ($this->runs(array_map(fn ($h, $k) => $h < $k, $cv['have'], $cv['need'])) as $run) {
+                    $have = $cv['have'][$run[0]];
+                    $needAt = max(array_slice($cv['need'], $run[0], $run[1] - $run[0]));
+                    $lines[] = $room.' short '.$this->runText($run).' — '.($have === 0 ? 'nobody in the room' : $have.' of '.$needAt.' staff');
+                    $issues++;
+                }
+            }
+
+            foreach ($this->mustErrors($shifts, $day, $date) as $error) {
+                $lines[] = $error;
+                $issues++;
+            }
+
+            if ($bookedToday && $shifts === []) {
+                array_unshift($lines, 'No staff at all this day while children are booked.');
+            }
+
+            if ($lines !== []) {
+                $days[] = ['day' => $day, 'label' => $dateObj->format('D M j'), 'lines' => $lines];
+            }
+        }
+
+        $have = 0;
+        foreach ($this->staff as $person) {
+            if ($person->isOffSchedule() || $person->weeklyHours() <= 0) {
+                continue;
+            }
+
+            $week = min((int) round($person->weeklyHours() * 60), $maxWeek);
+            $share = $week / max(1, count($dates));
+            $lost = 0;
+
+            foreach ($dates as $dateObj) {
+                $date = $dateObj->toDateString();
+                if (isset($this->closed[$date])) {
+                    $lost += $share;
+                } elseif (isset($leave[$person->id][$date])) {
+                    $lost += $leave[$person->id][$date];
+                } elseif (($this->timeOff[$person->id][$date] ?? null)?->kind === 'all') {
+                    $lost += $share;
+                }
+            }
+
+            $have += (int) max(0, $week - $lost);
+        }
+
+        $short = max(0, $need - $have);
+        $hours = fn (int $minutes) => (int) round($minutes / 60);
+        $state = $empty !== [] ? 'bad' : ($issues > 0 || $short > 0 ? 'warn' : 'ok');
+
+        $headline = match (true) {
+            $short > 0 => sprintf('Short about %d staff-hours this week — needs ~%d, have %d. Add staff, substitutes or floaters, or reduce bookings.', $hours($short), $hours($need), $hours($have)),
+            $state === 'ok' => 'Every room at ratio all week.',
+            default => sprintf('Enough staff-hours in total — needs ~%d, have %d — but %d %s to look at below.', $hours($need), $hours($have), $issues + count($empty), \Illuminate\Support\Str::plural('thing', $issues + count($empty))),
+        };
+
+        return compact('need', 'have', 'short', 'state', 'headline', 'empty', 'days', 'issues');
+    }
+
     private function clashes(array $shift, string $date): bool
     {
         foreach ($this->busy($shift['user_id'], $date) as [$a, $b]) {
@@ -652,47 +781,6 @@ class ScheduleEditor
         return $out;
     }
 
-    /**
-     * Who is free for a stretch and breaks no Must rule standing in that room.
-     *
-     * @return list<User>
-     */
-    private function free(array $shifts, string $day, string $date, int $from, int $to, string $room): array
-    {
-        $out = [];
-
-        foreach ($this->staff as $person) {
-            if ($person->isOffSchedule() || $person->weeklyHours() <= 0 || $this->hasRule($person, 'NEEDS_SUPERVISION')) {
-                continue;
-            }
-            if ($this->forbidden($person, $room) || ($this->leave[$person->id][$date] ?? null)) {
-                continue;
-            }
-
-            $window = $this->window($person, $day, $date);
-            if ($window === null || $from < $window['start'] || $to > $window['end']) {
-                continue;
-            }
-
-            $busy = collect($this->busy($person->id, $date))->contains(fn ($b) => $from < $b[1] && $to > $b[0]);
-            $working = collect($shifts)->contains(fn ($s) => $s['user_id'] === $person->id && $s['starts_at'] < $to && $s['ends_at'] > $from);
-            if ($busy || $working) {
-                continue;
-            }
-
-            $pairClash = collect($this->noPair[$person->id] ?? [])->contains(
-                fn ($other) => collect($shifts)->contains(fn ($s) => $s['user_id'] === $other && $s['classroom'] === $room && $s['starts_at'] < $to && $s['ends_at'] > $from)
-            );
-            if ($pairClash) {
-                continue;
-            }
-
-            $out[] = $person;
-        }
-
-        return $out;
-    }
-
     private function coverSuggestions(array $shifts, string $day, string $date, array $shortRuns): array
     {
         $out = [];
@@ -700,20 +788,142 @@ class ScheduleEditor
         foreach ($shortRuns as ['room' => $room, 'run' => $run]) {
             [$from, $to] = $this->runMinutes($run);
             $who = [];
+            $soft = [];
+            $left = [];
 
-            foreach (array_slice($this->free($shifts, $day, $date, $from, $to, $room), 0, 4) as $person) {
-                $entry = $this->timeOff[$person->id][$date] ?? null;
-                $who[] = [
-                    'user_id' => $person->id,
-                    'name' => $person->name,
-                    'note' => $entry?->kind === 'extra' ? 'extra day' : (collect($shifts)->contains(fn ($s) => $s['user_id'] === $person->id) ? 'free then' : 'not working '.ucfirst(strtolower($day))),
-                ];
+            foreach ($this->staff as $person) {
+                [$kind, $note] = $this->coverFit($person, $shifts, $day, $date, $from, $to, $room);
+
+                match ($kind) {
+                    'yes' => $who[] = ['user_id' => $person->id, 'name' => $person->name, 'note' => $note],
+                    'soft' => $soft[] = ['user_id' => $person->id, 'name' => $person->name, 'note' => $note],
+                    'no' => $left[$note][] = $person->name,
+                    default => null,
+                };
             }
 
-            $out[] = ['room' => $room, 'when' => $this->runText($run), 'from' => $from, 'to' => $to, 'who' => $who, 'none' => $who === []];
+            // Why the list is short: everybody not on it, grouped by reason.
+            $why = collect($left)->map(fn ($names, $reason) => implode(', ', $names).' — '.$reason)->values()->implode('; ');
+
+            $out[] = ['room' => $room, 'when' => $this->runText($run), 'from' => $from, 'to' => $to, 'who' => $who, 'soft' => $soft,
+                'why' => $why === '' ? '' : 'Not listed: '.$why.'.', 'none' => $who === [] && $soft === []];
         }
 
         return $out;
+    }
+
+    /**
+     * Whether one person could stand in $room for some of [$from, $to), and
+     * the few words that say so (QA retest, 18 Nov 2026: only the two
+     * openers were ever offered, because anybody whose day starts at 7:30
+     * did not fit a gap from 7:00, and nobody's hours were looked at).
+     *
+     * 'yes'  free for at least a slice of it, inside their limits;
+     * 'soft' free, but only past the week's most, the longest shift or a
+     *        Prefer rule — offered after the others, with the reason;
+     * 'no'   a Must rule, leave or time off, or already working then;
+     * 'skip' not on the roster at all (inactive, director, cook).
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function coverFit(User $person, array $shifts, string $day, string $date, int $from, int $to, string $room): array
+    {
+        $dayName = ucfirst(strtolower($day));
+
+        if ($person->isOffSchedule()) {
+            return ['skip', ''];
+        }
+        if ($person->weeklyHours() <= 0) {
+            return ['no', 'no employment type'];
+        }
+        if ($this->hasRule($person, 'NEEDS_SUPERVISION')) {
+            return ['no', 'can’t be on their own'];
+        }
+        if ($this->forbidden($person, $room)) {
+            return ['no', 'never in '.$room];
+        }
+        if ($leave = $this->leave[$person->id][$date] ?? null) {
+            return ['no', 'on '.strtolower($leave->label())];
+        }
+
+        $window = $this->window($person, $day, $date);
+        if ($window === null) {
+            return ['no', (($this->timeOff[$person->id][$date] ?? null)?->kind === 'all') ? 'out '.$dayName : 'can’t work '.$dayName];
+        }
+
+        $pairClash = collect($this->noPair[$person->id] ?? [])->contains(
+            fn ($other) => collect($shifts)->contains(fn ($s) => $s['user_id'] === $other && $s['classroom'] === $room && $s['starts_at'] < $to && $s['ends_at'] > $from)
+        );
+        if ($pairClash) {
+            return ['no', 'never scheduled with someone in '.$room];
+        }
+
+        // The longest stretch of the gap they are free for — inside their
+        // window, off their time off and any shift they already have — and
+        // only if it is an hour or more (or the whole gap, when that is
+        // shorter): half an hour before their own shift starts is not cover
+        // anybody would arrange.
+        $mine = array_values(array_filter($shifts, fn ($s) => $s['user_id'] === $person->id));
+        $start = null;
+        $end = null;
+        $runStart = null;
+        for ($minute = max($from, $window['start']); $minute <= min($to, $window['end']); $minute += $this->step) {
+            $taken = $minute >= min($to, $window['end'])
+                || $this->busyAt($person->id, $date, $minute)
+                || collect($mine)->contains(fn ($s) => $s['starts_at'] <= $minute && $s['ends_at'] > $minute);
+            if (! $taken) {
+                $runStart ??= $minute;
+            } elseif ($runStart !== null) {
+                if ($minute - $runStart >= min(60, $to - $from) && ($start === null || $minute - $runStart > $end - $start)) {
+                    [$start, $end] = [$runStart, $minute];
+                }
+                $runStart = null;
+            }
+        }
+
+        if ($start === null) {
+            // A fixed shift is a Must: say so, or "working elsewhere" reads as
+            // a choice the director could undo by moving them.
+            $hours = StaffRule::compactTime($window['start']).'–'.StaffRule::compactTime($window['end']);
+
+            $fixed = (bool) ($this->scheduler->windowFor($person, $day, $date)['fixed'] ?? false);
+
+            return ['no', match (true) {
+                $fixed => 'fixed shift '.$hours.' (Must)',
+                $mine !== [] => 'working elsewhere then',
+                default => 'only free '.$hours,
+            }];
+        }
+
+        // The limits from Settings, and the Prefer rules. What is offered is
+        // trimmed to fit them — a 7a–6p gap is offered as the longest shift
+        // anybody may work, not refused for being longer — and only somebody
+        // with no room left under a limit is offered after, with why.
+        $centre = app(CentreSettings::class);
+        $maxWeek = max(60, (int) $centre->get('max_week_hours') * 60);
+        $longest = max(60, (int) $centre->get('longest_shift_hours') * 60);
+        $week = $this->weekMinutes($person->id, $day, $shifts);
+        $first = $mine === [] ? $start : min($start, min(array_column($mine, 'starts_at')));
+        $end = min($end, $first + $longest);
+        if ($week < $maxWeek) {
+            $end = min($end, $start + ($maxWeek - $week));
+        }
+        $end = max($end, $start + $this->step);
+        $span = max($end, $mine === [] ? $end : max(array_column($mine, 'ends_at'))) - $first;
+        $preferOff = $person->staffRules->contains(fn (StaffRule $r) => ! $r->isHard() && $r->rule_type === 'PREFERRED_DAY_OFF' && $r->appliesOn($day));
+
+        $free = 'free '.StaffRule::compactTime($start).'–'.StaffRule::compactTime($end);
+        $entry = $this->timeOff[$person->id][$date] ?? null;
+        $note = $entry?->kind === 'extra' ? 'extra day · '.$free : ($mine === [] ? 'not working '.$dayName.' · '.$free : $free);
+
+        $soft = match (true) {
+            $week >= $maxWeek => 'at '.round($maxWeek / 60).'h this week',
+            $span > $longest => 'would make a '.round($span / 60, 1).'h day',
+            $preferOff => 'prefers '.$dayName.' off',
+            default => null,
+        };
+
+        return $soft === null ? ['yes', $note] : ['soft', $soft.' · '.$free];
     }
 
     /* ---------------------------------------------------------------

@@ -56,6 +56,22 @@ class CentreSettings
     }
 
     /**
+     * The centre's timezone. Every "today" — the header, a calendar's
+     * highlighted day, the first date a form allows — is the centre's, not
+     * the browser's or the server's (QA retest, 18 Nov 2026).
+     */
+    public static function timezone(): string
+    {
+        return (string) config('app.timezone');
+    }
+
+    /** Today at the centre, as Y-m-d. */
+    public static function today(): string
+    {
+        return now(self::timezone())->toDateString();
+    }
+
+    /**
      * The room whose physical space this room uses, or null for a room of
      * its own (QA retest, 16 Nov 2026: UPK-4 and School Age are one room of
      * 20, and were each warned as if they had 20 places to themselves).

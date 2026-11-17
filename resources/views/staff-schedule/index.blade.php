@@ -112,6 +112,37 @@
         <div class="ch-card" style="padding: 12px 16px; background: #e3f5ec; border-color: #bfe6cf; color: #15803d; font-size: 14px; font-weight: 600;" role="status" data-flash>{{ session('success') }}</div>
     @endif
 
+    {{-- The week in one line, coloured by what it is (QA retest, 18 Nov 2026):
+         green only with nothing to look at, amber for gaps, red when children
+         are booked with nobody in their room. The gaps by day sit under it. --}}
+    @if($summary)
+        @php($tone = ['ok' => ['#e3f5ec', '#bfe6cf', '#15803d'], 'warn' => ['#fef3c7', '#fde68a', '#92400e'], 'bad' => ['#ffe4e6', '#fecdd3', '#be123c']][$summary['state']])
+        <section class="ch-card" style="padding: 12px 16px; background: {{ $tone[0] }}; border-color: {{ $tone[1] }}; color: {{ $tone[2] }}; display: flex; flex-direction: column; gap: 6px; font-size: 14px;" role="status" data-schedule-summary data-state="{{ $summary['state'] }}">
+            @if(session('generated'))<span style="font-size: 13px;" data-flash>{{ session('generated') }}</span>@endif
+            <span style="font-weight: 700;" data-summary-headline>{{ $summary['headline'] }}</span>
+            @if($summary['empty'] !== [])
+                <span style="font-size: 13px;">Children booked with nobody in their room: {{ implode('; ', array_slice($summary['empty'], 0, 6)) }}{{ count($summary['empty']) > 6 ? ' and '.(count($summary['empty']) - 6).' more' : '' }}.</span>
+            @endif
+            @if($summary['days'] !== [])
+                <details @if(session('generated')) open @endif data-summary-days>
+                    <summary style="cursor: pointer; font-size: 13px; font-weight: 600;">Gaps by day</summary>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; color: #1c2130;">
+                        @foreach($summary['days'] as $d)
+                            <div data-summary-day="{{ $d['day'] }}">
+                                <span style="font-size: 13px; font-weight: 700;">{{ $d['label'] }}</span>
+                                <ul style="margin: 2px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5;">
+                                    @foreach($d['lines'] as $line)<li>{{ $line }}</li>@endforeach
+                                </ul>
+                            </div>
+                        @endforeach
+                    </div>
+                </details>
+            @endif
+        </section>
+    @elseif(session('generated'))
+        <div class="ch-card" style="padding: 12px 16px; background: #e3f5ec; border-color: #bfe6cf; color: #15803d; font-size: 14px; font-weight: 600;" role="status" data-flash>{{ session('generated') }}</div>
+    @endif
+
     @if($hidden)
         <section class="ch-card" style="padding: 40px 20px; text-align: center;">
             <p style="margin: 0; font-size: 15px; font-weight: 600;">This week's schedule isn't published yet.</p>
@@ -187,12 +218,17 @@
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px;">
                         <span style="min-width: 210px;"><b x-text="g.room"></b> short <span x-text="g.when"></span></span>
                         <template x-for="w in g.who" :key="w.user_id">
-                            <button type="button" class="chip" :disabled="! canEdit" @click="add(w.user_id, g.room)"><span x-text="w.name"></span>&nbsp;<span style="font-weight: 500;" class="muted">· <span x-text="w.note"></span></span></button>
+                            <button type="button" class="chip" :disabled="! canEdit" @click="add(w.user_id, g.room)" data-cover-who><span x-text="w.name"></span>&nbsp;<span style="font-weight: 500;" class="muted">· <span x-text="w.note"></span></span></button>
+                        </template>
+                        {{-- Free, but only past a limit or a Prefer rule: offered after, with why. --}}
+                        <template x-for="w in (g.soft || [])" :key="'s' + w.user_id">
+                            <button type="button" class="chip" style="opacity: .75; border-style: dashed;" :disabled="! canEdit" @click="add(w.user_id, g.room)" data-cover-soft><span x-text="w.name"></span>&nbsp;<span style="font-weight: 500; color: #92400e;">· <span x-text="w.note"></span></span></button>
                         </template>
                         <span x-show="g.none" style="color: #be123c;">Nobody free who fits the rules — call a substitute.</span>
+                        <span x-show="g.why" style="flex-basis: 100%; font-size: 12px;" class="faint" x-text="g.why"></span>
                     </div>
                 </template>
-                <span style="font-size: 12px;" class="faint">Only people who are free then and don’t break a Must rule — a room they are never in, a day they can’t work, someone they are never scheduled with.</span>
+                <span style="font-size: 12px;" class="faint">Free people first. Dashed: free, but over a limit (the week’s most hours, the longest shift) or against a Prefer rule. Nobody who would break a Must rule — a room they are never in, a day they can’t work, someone they are never scheduled with.</span>
             </section>
 
             {{-- The day in one line. --}}

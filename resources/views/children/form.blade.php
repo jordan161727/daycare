@@ -947,7 +947,7 @@
                 if (!birth.value) return 'The age on the roster follows this date.';
                 const dob = new Date(`${birth.value}T00:00:00`);
                 if (isNaN(dob)) return 'The age on the roster follows this date.';
-                const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const now = new Date(), today = window.centreTodayDate ? window.centreTodayDate() : new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 if (dob > today) return 'That date is in the future — check the year.';
                 // m/d/y, padded, exactly as Child::ageLabelFor writes it on the
                 // server, so the preview under the field agrees with every
@@ -995,7 +995,7 @@
                 const dob = new Date(`${birth.value}T00:00:00`);
                 if (isNaN(dob)) return undefined;
                 const now = new Date();
-                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const today = window.centreTodayDate ? window.centreTodayDate() : new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
                 return bands.find((band) => fits(band, dob, today))?.room ?? null;
             };

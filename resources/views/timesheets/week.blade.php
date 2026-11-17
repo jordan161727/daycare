@@ -342,6 +342,9 @@ function staffAttendance(opts) { return {
     },
 
     tick() {
+        // The centre's clock, not the computer's (QA retest, 18 Nov 2026).
+        const zone = document.querySelector('meta[name="centre-timezone"]')?.content;
+        try { this.now = new Date().toLocaleTimeString('en-US', { timeZone: zone, hour: 'numeric', minute: '2-digit' }); return; } catch {}
         const d = new Date(); const h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0');
         this.now = ((h % 12) || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM');
     },

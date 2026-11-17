@@ -71,7 +71,8 @@
               // evening here it is already tomorrow there, so presets drifted a day.
               iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') },
               shift(d, days) { const c = new Date(d + 'T00:00:00'); c.setDate(c.getDate() + days); return this.iso(c) },
-              monday(offsetWeeks) { const d = new Date(); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day + offsetWeeks * 7); return this.iso(d) },
+              today() { return window.centreTodayDate ? window.centreTodayDate() : new Date() },
+              monday(offsetWeeks) { const d = this.today(); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day + offsetWeeks * 7); return this.iso(d) },
               // The date fields belong to the date picker (see dates.js), so a
               // preset writes into the field itself and the picker follows;
               // Alpine only listens to the field's change event. Binding the
@@ -81,8 +82,8 @@
                   let start = this.start, end = this.end;
                   if (name === 'this-week') { start = this.monday(0); end = this.shift(start, 6) }
                   if (name === 'last-week') { start = this.monday(-1); end = this.shift(start, 6) }
-                  if (name === 'this-month') { const d = new Date(); start = this.iso(new Date(d.getFullYear(), d.getMonth(), 1, 12)); end = this.iso(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12)) }
-                  if (name === 'last-30') { end = this.iso(new Date()); start = this.shift(end, -29) }
+                  if (name === 'this-month') { const d = this.today(); start = this.iso(new Date(d.getFullYear(), d.getMonth(), 1, 12)); end = this.iso(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12)) }
+                  if (name === 'last-30') { end = this.iso(this.today()); start = this.shift(end, -29) }
                   this.set('start', start); this.set('end', end);
               },
               get endsOn() { return Number.isInteger(this.period) && this.start ? new Date(this.shift(this.start, this.period - 1) + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '' }
@@ -163,8 +164,8 @@
                     <input id="start" type="date" name="start" value="{{ $start->toDateString() }}" @change="start = $event.target.value" required class="{{ $field }}">
                 </label>
                 <div class="flex flex-wrap items-center gap-1" role="group" aria-label="Quick days">
-                    <button type="button" @click="set('start', iso(new Date()))" class="inline-flex min-h-[36px] items-center rounded-full px-3 text-xs font-semibold text-la-accent transition hover:bg-la-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent dark:text-indigo-300 dark:hover:bg-indigo-500/20">Today</button>
-                    <button type="button" @click="set('start', shift(iso(new Date()), -1))" class="inline-flex min-h-[36px] items-center rounded-full px-3 text-xs font-semibold text-la-accent transition hover:bg-la-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent dark:text-indigo-300 dark:hover:bg-indigo-500/20">Yesterday</button>
+                    <button type="button" @click="set('start', iso(today()))" class="inline-flex min-h-[36px] items-center rounded-full px-3 text-xs font-semibold text-la-accent transition hover:bg-la-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent dark:text-indigo-300 dark:hover:bg-indigo-500/20">Today</button>
+                    <button type="button" @click="set('start', shift(iso(today()), -1))" class="inline-flex min-h-[36px] items-center rounded-full px-3 text-xs font-semibold text-la-accent transition hover:bg-la-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-la-accent dark:text-indigo-300 dark:hover:bg-indigo-500/20">Yesterday</button>
                 </div>
             @elseif($period !== 'none')
                 <label class="inline-flex items-center gap-2 text-sm text-la-muted dark:text-slate-300">

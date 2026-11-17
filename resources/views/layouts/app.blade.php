@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{-- The centre's today, for every calendar and "today" on the page —
+         see resources/js/centre-today.js (QA retest, 18 Nov 2026). --}}
+    <meta name="centre-timezone" content="{{ \App\Services\CentreSettings::timezone() }}">
+    <meta name="centre-today" content="{{ \App\Services\CentreSettings::today() }}">
+    <script>{!! file_get_contents(resource_path('js/centre-today.js')) !!}</script>
 
     <title>
         @yield('title', 'AngelNest')

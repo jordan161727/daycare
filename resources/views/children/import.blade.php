@@ -51,6 +51,20 @@
                     </div>
                 @endif
 
+                @if(session('import_notes'))
+                    {{-- Imported, with something left blank or issued — days
+                         that could not be read, no LAN on the sheet (QA
+                         retest, 18 Nov 2026). Never changed without a word. --}}
+                    <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" data-import-notes>
+                        <p class="font-semibold">Imported — check these:</p>
+                        <ul class="mt-2 list-inside list-disc space-y-1 text-sm">
+                            @foreach(session('import_notes') as $line)
+                                <li>{{ $line }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
                 @if(session('import_not_active'))
                     {{-- Rows the sheet would have made Active without a
                          guardian, an emergency contact or a date of birth —

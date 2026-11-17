@@ -82,6 +82,12 @@ class StaffSchedule
     /** @var array<int, int> Minutes each person already has on days this solve keeps as they are. */
     private array $kept = [];
 
+    /**
+     * @var array<string, string> The days this solve places shifts on, in
+     *                            order, weekday => date: open, and not kept.
+     */
+    private array $solveDays = [];
+
     public function __construct(private RoomDemand $demand)
     {
         $this->step = (int) config('daycare.coverage_step');
@@ -188,6 +194,17 @@ class StaffSchedule
         ])->all();
 
         $this->reportLeave($staff, $dates, $closed);
+
+        // The whole week is planned before any day is: cover on Monday may
+        // only use hours nobody's own shift later in the week needs (QA
+        // retest, 18 Nov 2026 — cover on Monday to Thursday used up every
+        // teacher's forty hours and Friday had nobody in any room).
+        $this->solveDays = [];
+        foreach ($dates as $day => $date) {
+            if (! isset($closed[$date->toDateString()]) && ($keepBefore === null || $date->toDateString() >= $keepBefore)) {
+                $this->solveDays[$day] = $date->toDateString();
+            }
+        }
 
         /** @var list<array> $rows */
         $rows = [];
@@ -366,12 +383,23 @@ class StaffSchedule
         $best = $window['start'];
         $bestScore = -1;
 
+        // Minutes when children are booked somewhere and nobody at all is
+        // placed yet. Only ever a tie-break after the room's own need: with
+        // too few hours for every room all day, the starts are staggered so
+        // the building still has somebody at opening and at closing (QA
+        // retest, 18 Nov 2026), rather than everybody leaving at three.
+        $booked = fn (int $minute) => collect($dayDemand)->contains(fn ($s) => $this->demand->childrenAt($s, $minute) > 0);
+
         for ($start = $window['start']; $start <= $latest; $start += $this->step) {
             $score = 0;
             for ($minute = $start; $minute < $start + $length; $minute += $this->step) {
                 $have = collect($placed)->where('classroom', $room)
                     ->filter(fn ($s) => $s['starts_at'] <= $minute && $s['ends_at'] > $minute)->count();
-                $score += max(0, $this->demand->staffNeeded($steps, $room, $minute) - $have);
+                $score += 10000 * max(0, $this->demand->staffNeeded($steps, $room, $minute) - $have);
+
+                if (! collect($placed)->contains(fn ($s) => $s['starts_at'] <= $minute && $s['ends_at'] > $minute) && $booked($minute)) {
+                    $score++;
+                }
             }
             if ($score > $bestScore) {
                 [$best, $bestScore] = [$start, $score];
@@ -567,6 +595,27 @@ class StaffSchedule
      */
     private function fillRatioGaps(array &$shifts, Collection $staff, array $dayDemand, string $day, array $targets): void
     {
+        // One adult in every room with children in it first, across all the
+        // rooms, and only then the full ratio: a spare hour is worth more in a
+        // room with nobody than as a second pair of hands in one already
+        // staffed (QA retest, 18 Nov 2026). Gaps are reported from the second
+        // pass only.
+        foreach ($dayDemand as $room => $steps) {
+            for ($minute = $this->open; $minute < $this->close; $minute += $this->step) {
+                if ($this->demand->staffNeeded($steps, $room, $minute) === 0) {
+                    continue;
+                }
+
+                $nobody = ! collect($shifts)->contains(
+                    fn ($shift) => $shift['classroom'] === $room && $shift['starts_at'] <= $minute && $shift['ends_at'] > $minute
+                );
+
+                if ($nobody && ($cover = $this->findCover($shifts, $staff, $room, $day, $minute, $targets))) {
+                    $shifts[] = $cover;
+                }
+            }
+        }
+
         foreach ($dayDemand as $room => $steps) {
             /** @var list<array> $gaps */
             $gaps = [];
@@ -737,7 +786,9 @@ class StaffSchedule
             if (($theirs->max('ends_at') ?? $minute) - $minute > $this->longest) {
                 continue;
             }
-            $weekLeft = $this->maxWeek - ($this->assigned[$person->id] ?? 0) - (int) $theirs->sum(fn ($s) => $s['ends_at'] - $s['starts_at']);
+            $today = (int) $theirs->sum(fn ($s) => $s['ends_at'] - $s['starts_at']);
+            $weekLeft = $this->maxWeek - ($this->assigned[$person->id] ?? 0) - $today
+                - $this->reserveAfter($person, $day, $targets, $today);
             $latest = min($latest, $minute + max(0, $weekLeft));
 
             // Too small a window to be worth anything: it would not close the
@@ -767,6 +818,53 @@ class StaffSchedule
         }
 
         return null;
+    }
+
+    /**
+     * The minutes this person's own shifts on the rest of the week still
+     * need — kept back from cover today, so no day is emptied to pad another.
+     *
+     * Each later day they can work gets what shiftLength() would give it (their
+     * share of the week, inside their window and the longest shift), and never
+     * more in all than their target has left. A substitute has no shifts of
+     * their own to keep hours for.
+     *
+     * @param  array<int, float>  $targets
+     */
+    private function reserveAfter(User $person, string $day, array $targets, int $today): int
+    {
+        if ($person->isSubstitute()) {
+            return 0;
+        }
+
+        $perDay = (int) (($targets[$person->id] ?? 0) / $this->spreadDays($person->id));
+        $reserve = 0;
+        $after = false;
+
+        foreach ($this->solveDays as $later => $date) {
+            if (! $after) {
+                $after = $later === $day;
+
+                continue;
+            }
+
+            if (isset($this->leave[$person->id][$date])) {
+                continue;
+            }
+
+            $window = $this->windowFor($person, $later, $date);
+
+            if (! $window) {
+                continue;
+            }
+
+            $length = min($window['end'] - $window['start'], $this->longest);
+            $reserve += $window['fixed'] ? $length : min($perDay, $length);
+        }
+
+        $left = (int) ($targets[$person->id] ?? 0) - ($this->assigned[$person->id] ?? 0) - $today;
+
+        return (int) min($reserve, max(0, $left));
     }
 
     /**

@@ -1040,7 +1040,7 @@ function weekPicker() { return {
         const base = new Date(this.cursor + 'T00:00:00');
         const first = new Date(base.getFullYear(), base.getMonth(), 1);
         const start = new Date(base.getFullYear(), base.getMonth(), 1 - first.getDay());
-        const today = this.iso(new Date());
+        const today = window.centreToday ? window.centreToday() : this.iso(new Date());
         const out = [];
 
         for (let i = 0; i < 42; i++) {

@@ -70,6 +70,8 @@ class StaffScheduleController extends Controller
             'teach' => $hidden ? [] : $this->editor->week($weekStart),
             'dayData' => $hidden ? null : $this->editor->day($weekStart, $day),
             'gaps' => $hidden ? [] : $this->editor->gaps($weekStart),
+            // The shortage in one line and the gaps by day, for the director.
+            'summary' => $isAdmin && ($week || $shifts->isNotEmpty()) ? $this->editor->summary($weekStart) : null,
             'open' => app(\App\Services\CentreSettings::class)->minutes(app(\App\Services\CentreSettings::class)->get('centre_opens')),
             'close' => app(\App\Services\CentreSettings::class)->minutes(app(\App\Services\CentreSettings::class)->get('centre_closes')),
             'closures' => ClosureDay::betweenDates(reset($dates), end($dates))->get()
@@ -180,13 +182,11 @@ class StaffScheduleController extends Controller
         $week = $this->scheduler->generate($weekStart, $request->user(), includePast: $request->boolean('include_past'));
         $week->forceFill(['published_at' => null, 'published_by' => null, 'edits' => 0])->save();
 
-        $warnings = count($week->warnings ?? []);
-
+        // The page's summary says what came out, in the colour it deserves
+        // (QA retest, 18 Nov 2026) — not a count, always in green.
         return redirect()
             ->route('staff-schedule.index', ['week' => $weekStart, 'mode' => $request->input('mode', 'teacher')])
-            ->with('success', $warnings === 0
-                ? 'Schedule generated with no conflicts. It is a draft until you publish it.'
-                : "Schedule generated with {$warnings} thing".($warnings === 1 ? '' : 's').' to look at. It is a draft until you publish it.');
+            ->with('generated', 'Schedule generated. It is a draft until you publish it.');
     }
 
     /** Make the week visible to staff, and start counting edits from here. */

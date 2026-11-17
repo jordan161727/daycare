@@ -99,6 +99,7 @@ class ChildrenController extends Controller
         $errors = [];
         $duplicates = [];
         $notActive = [];
+        $notes = [];
         $unread = [];
         $several = count($files) > 1;
 
@@ -139,6 +140,10 @@ class ChildrenController extends Controller
                 $duplicates[] = $several ? "{$name} — {$duplicate}" : $duplicate;
             }
 
+            foreach ($import->notes as $line) {
+                $notes[] = $several ? "{$name} — {$line}" : $line;
+            }
+
             foreach ($import->notActive as $line) {
                 $notActive[] = $several ? "{$name} — {$line}" : $line;
             }
@@ -164,6 +169,10 @@ class ChildrenController extends Controller
             $message .= ' '.count($duplicates).' row(s) look like a child already on file and were not added — see below.';
         }
 
+        if ($notes !== []) {
+            $message .= ' '.count($notes).' row(s) imported with something to check — see below.';
+        }
+
         if ($notActive !== []) {
             $message .= ' '.count($notActive).' child(ren) not ready to be Active — see below.';
         }
@@ -172,7 +181,8 @@ class ChildrenController extends Controller
             ->with('success', $message)
             ->with('import_errors', array_merge($unread, $errors))
             ->with('import_duplicates', $duplicates)
-            ->with('import_not_active', $notActive);
+            ->with('import_not_active', $notActive)
+            ->with('import_notes', $notes);
     }
 
     public function showImport()

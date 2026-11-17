@@ -182,6 +182,8 @@ function dateRange(config) { return {
        than once. */
 
     today() {
+        // The centre's today (centre-today.js), not the browser's.
+        if (window.centreToday) return window.centreToday();
         const at = new Date();
 
         return this.iso(at.getFullYear(), at.getMonth(), at.getDate());
@@ -358,7 +360,7 @@ function dateRange(config) { return {
 
         const [ay, am] = this.from.split('-').map(Number);
         const [by, bm] = this.to.split('-').map(Number);
-        const thisYear = new Date().getFullYear();
+        const thisYear = Number(this.today().slice(0, 4));
         const showYear = ay !== thisYear || by !== thisYear;
 
         if (this.from === this.to) return this.pretty(this.from, showYear);

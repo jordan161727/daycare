@@ -204,9 +204,13 @@ class SchedulePageTest extends TestCase
 
         $names = array_column($infant['who'], 'name');
         $this->assertContains('Olivia Turner', $names);
-        // Never in Infant, and already in Toddler then.
+        // Never in Infant: a Must rule.
         $this->assertNotContains('Hannah Brooks', $names);
-        $this->assertNotContains('Emily Carter', $names);
+        // In Toddler 8–4, so offered only for after it (QA retest, 18 Nov
+        // 2026: anyone free for part of a gap is offered for that part).
+        $emily = collect($infant['who'])->firstWhere('name', 'Emily Carter');
+        $this->assertSame('free 4p–6p', $emily['note'] ?? null);
+        $this->assertStringContainsString('Hannah Brooks — never in Infant', $infant['why']);
     }
 
     // ---------------- time off from a bar ----------------

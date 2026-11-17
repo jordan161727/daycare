@@ -63,6 +63,14 @@ class ChildrenImport implements ToCollection, WithHeadingRow
     public array $notActive = [];
 
     /**
+     * Rows imported with something left blank or issued — days it could not
+     * read, no LAN on the sheet — so nothing is changed without a word.
+     *
+     * @var array<int, string>
+     */
+    public array $notes = [];
+
+    /**
      * Every column this understands, and what else a sheet might call it.
      *
      * The key is the column on the record; the values are headings that mean
@@ -237,20 +245,30 @@ class ChildrenImport implements ToCollection, WithHeadingRow
                 continue;
             }
 
-            try {
-                $data = $this->normalise($data);
-            } catch (\Throwable $e) {
-                $this->errors[] = "Row {$rowNumber}: ".$e->getMessage();
+            // Every problem on the row, said together (QA retest, 18 Nov 2026).
+            $problems = [];
+            $notes = [];
 
-                continue;
+            try {
+                $data = $this->normalise($data, $problems, $notes);
+            } catch (\Throwable $e) {
+                $problems[] = $e->getMessage();
             }
 
             $validator = Validator::make($data, $this->rules());
 
             if ($validator->fails()) {
-                $this->errors[] = "Row {$rowNumber}: ".implode(' ', $validator->errors()->all());
+                array_push($problems, ...$validator->errors()->all());
+            }
+
+            if ($problems !== []) {
+                $this->errors[] = "Row {$rowNumber}: ".implode(' ', array_merge($problems, array_map(fn ($n) => ucfirst($n).'.', $notes)));
 
                 continue;
+            }
+
+            if (blank($data['lan'] ?? null)) {
+                $notes[] = 'no LAN on the sheet';
             }
 
             $child = $this->find($data);
@@ -280,6 +298,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
                     }
                 }
 
+                $this->noteRow($rowNumber, $notes, $child);
                 $this->updated++;
 
                 continue;
@@ -289,7 +308,8 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             // and a child cannot be made without a name. An update needs
             // none, because the name is already there.
             if (blank($data['first_name'] ?? null) && blank($data['last_name'] ?? null)) {
-                $this->errors[] = "Row {$rowNumber}: no name, so there is nothing to file this child under.";
+                $this->errors[] = "Row {$rowNumber}: no name, so there is nothing to file this child under."
+                    .($notes === [] ? '' : ' '.ucfirst(implode('; ', $notes)).'.');
 
                 continue;
             }
@@ -329,12 +349,27 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             $child = Child::create($data);
 
             $this->linkPeople($child, $data);
+            $this->noteRow($rowNumber, $notes, $child);
             $this->created++;
 
             if ($missing !== []) {
                 $this->notActive[] = "Row {$rowNumber}: ".$this->nameOf($child).' created as Pending — '.Child::activeMissingReason($missing).'.';
             }
         }
+    }
+
+    /** "Row 4: Ada Lovelace — days 'Xyz' not recognised — left blank; no LAN on the sheet — given 10023." */
+    private function noteRow(int $rowNumber, array $notes, Child $child): void
+    {
+        if ($notes === []) {
+            return;
+        }
+
+        $notes = array_map(fn ($note) => $note === 'no LAN on the sheet'
+            ? $note.($child->wasRecentlyCreated ? ' — given '.$child->lan : ' — matched by name to '.$child->lan)
+            : $note, $notes);
+
+        $this->notes[] = "Row {$rowNumber}: ".$this->nameOf($child).' — '.implode('; ', $notes).'.';
     }
 
     private function nameOf(Child $child): string
@@ -576,19 +611,22 @@ class ChildrenImport implements ToCollection, WithHeadingRow
      */
     private function nextLan(): string
     {
-        static $next = null;
-
-        if ($next === null) {
+        // Kept on this import, not in a function static: a static outlives
+        // the import, and the next one in the same process would carry on
+        // from numbers it never read.
+        if ($this->nextLan === null) {
             $highest = Child::query()
                 ->selectRaw('MAX(CAST(lan AS UNSIGNED)) AS top')
                 ->value('top');
 
             // 10001 upwards, matching what the centre's records already use.
-            $next = max((int) $highest, 10000) + 1;
+            $this->nextLan = max((int) $highest, 10000) + 1;
         }
 
-        return (string) $next++;
+        return (string) $this->nextLan++;
     }
+
+    private ?int $nextLan = null;
 
     /**
      * "Adkins, Maeve" or "Maeve Adkins" into a first and a last name.
@@ -658,8 +696,17 @@ class ChildrenImport implements ToCollection, WithHeadingRow
         return $map;
     }
 
-    /** Turn what a spreadsheet stores into what the record expects. */
-    private function normalise(array $data): array
+    /**
+     * Turn what a spreadsheet stores into what the record expects.
+     *
+     * Every problem on the row is gathered rather than stopping at the first
+     * (QA retest, 18 Nov 2026): $problems stop the row, $notes do not — the
+     * row is imported and the note says what was left blank.
+     *
+     * @param  list<string>  $problems
+     * @param  list<string>  $notes
+     */
+    private function normalise(array $data, array &$problems = [], array &$notes = []): array
     {
         /*
          * "Known Allergies" is one entry on a list, not the list itself.
@@ -684,19 +731,39 @@ class ChildrenImport implements ToCollection, WithHeadingRow
 
         foreach (self::DATES as $field) {
             if (isset($data[$field])) {
-                $data[$field] = $this->asDate($data[$field], $field);
+                try {
+                    $data[$field] = $this->asDate($data[$field], $field);
+                } catch (\RuntimeException $e) {
+                    $problems[] = ucfirst($e->getMessage());
+                    unset($data[$field]);
+                }
             }
         }
 
         foreach (self::TIMES as $field) {
             if (isset($data[$field])) {
-                $data[$field] = $this->asTime($data[$field]);
+                try {
+                    $data[$field] = $this->asTime($data[$field]);
+                } catch (\RuntimeException $e) {
+                    $problems[] = ucfirst($e->getMessage());
+                    unset($data[$field]);
+                }
             }
         }
 
-        // "Mon, Wed, Fri", "1,3,5", "MWF" — all of them mean the same three days.
+        // "Mon, Wed, Fri", "M,W,F", "1,3,5", "MWF" — all the same three days.
+        // Anything still unreadable is left blank and said so, never dropped
+        // without a word (QA retest, 18 Nov 2026: "M,W,F" made a child
+        // with no days).
         if (isset($data['schedule_days'])) {
-            $data['schedule_days'] = $this->asDays($data['schedule_days']);
+            $days = self::parseDays($data['schedule_days']);
+
+            if ($days === null) {
+                $notes[] = "days '{$data['schedule_days']}' not recognised — left blank";
+                unset($data['schedule_days']);
+            } else {
+                $data['schedule_days'] = $days;
+            }
         }
 
         // A plain age comes back as a number and the string rule would reject it.
@@ -822,47 +889,123 @@ class ChildrenImport implements ToCollection, WithHeadingRow
     }
 
     /**
-     * The days a child comes, however the sheet writes them.
-     *
-     * @return array<int, int> ISO weekdays, ascending
+     * What each way of writing one weekday means, longest first so "th" is
+     * read before "t". "T" on its own is Tuesday and "R" Thursday — the
+     * timetable convention "MTWRF", which "MWF" sheets already used here;
+     * Thursday is written Th, Thu, Thur, Thurs or R.
      */
-    private function asDays(mixed $value): array
-    {
-        $text = strtolower((string) $value);
+    private const DAY_WORDS = [
+        'wednesday' => 3, 'thursday' => 4, 'tuesday' => 2, 'monday' => 1, 'friday' => 5,
+        'thurs' => 4, 'tues' => 2, 'thur' => 4, 'weds' => 3,
+        'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5,
+        'mo' => 1, 'tu' => 2, 'we' => 3, 'th' => 4, 'fr' => 5,
+        'm' => 1, 't' => 2, 'w' => 3, 'r' => 4, 'f' => 5,
+    ];
 
-        // "M-F" and "Mon-Fri" are the commonest arrangement there is.
-        if (preg_match('~^m\s*-\s*f$|^mon\s*-\s*fri$|daily|every\s*day|weekdays$~', trim($text))) {
+    /**
+     * The days a child comes, however the sheet writes them: "M,W,F",
+     * "M W F", "MWF", "Mon, Wed, Fri", "monday wednesday", "Tu,Th", "TTh",
+     * "1,3,5", "M-F", "Mon-Thu", "daily". Any case.
+     *
+     * [] for a blank cell; null when any part of it is not a weekday this
+     * can read ("Xyz", "Sat") — the caller reports it rather than guess.
+     *
+     * @return list<int>|null ISO weekdays, ascending
+     */
+    public static function parseDays(mixed $value): ?array
+    {
+        $text = strtolower(trim((string) $value));
+
+        if ($text === '') {
+            return [];
+        }
+
+        if (preg_match('~^(daily|every\s*day|weekdays|all\s*week)$~', $text)) {
             return [1, 2, 3, 4, 5];
         }
 
-        $names = ['mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5];
+        // "Mon – Thu" is one range: dashes of any kind, spaces round them gone.
+        $text = preg_replace('~\s*[-–—]\s*~u', '-', $text);
         $days = [];
 
-        foreach (preg_split('~[,/;|\s]+~', $text, -1, PREG_SPLIT_NO_EMPTY) as $part) {
-            if (is_numeric($part) && (int) $part >= 1 && (int) $part <= 5) {
-                $days[] = (int) $part;
+        foreach (preg_split('~[\s,/;|&+.]+|\band\b~u', $text, -1, PREG_SPLIT_NO_EMPTY) as $part) {
+            $part = trim($part);
+
+            if ($part === '') {
+                continue;
+            }
+
+            // A range: "M-F", "Mon - Thu", "1-5".
+            if (str_contains($part, '-')) {
+                [$a, $b] = array_map('trim', explode('-', $part, 2)) + [1 => ''];
+                $from = self::oneDay($a);
+                $to = self::oneDay($b);
+
+                if ($from === null || $to === null || $from > $to) {
+                    return null;
+                }
+
+                array_push($days, ...range($from, $to));
 
                 continue;
             }
 
-            foreach ($names as $name => $iso) {
-                if (str_starts_with($part, $name)) {
-                    $days[] = $iso;
-                }
+            if (($one = self::oneDay($part)) !== null) {
+                $days[] = $one;
+
+                continue;
             }
+
+            // Letters run together: "MWF", "TTh", "MTWThF".
+            $run = self::letterRun($part);
+
+            if ($run === null) {
+                return null;
+            }
+
+            array_push($days, ...$run);
         }
 
-        // "MWF" written as one word, which no separator will split.
-        if ($days === [] && preg_match('~^[mtwrf]+$~', trim($text))) {
-            $letters = ['m' => 1, 't' => 2, 'w' => 3, 'r' => 4, 'f' => 5];
-
-            foreach (str_split(trim($text)) as $letter) {
-                $days[] = $letters[$letter];
-            }
+        if ($days === []) {
+            return null;
         }
 
         $days = array_values(array_unique($days));
         sort($days);
+
+        return $days;
+    }
+
+    /** One weekday — a name, an abbreviation, a letter or 1–5 — or null. */
+    private static function oneDay(string $word): ?int
+    {
+        if (preg_match('~^[1-5]$~', $word)) {
+            return (int) $word;
+        }
+
+        return self::DAY_WORDS[$word] ?? null;
+    }
+
+    /** "mwf" or "tth" read letter by letter, Th before T; null if anything is left over. */
+    private static function letterRun(string $word): ?array
+    {
+        if (! preg_match('~^[mtwrfh]+$~', $word)) {
+            return null;
+        }
+
+        $days = [];
+
+        while ($word !== '') {
+            if (str_starts_with($word, 'th')) {
+                $days[] = 4;
+                $word = substr($word, 2);
+            } elseif (isset(self::DAY_WORDS[$word[0]]) && strlen($word[0]) === 1 && $word[0] !== 'h') {
+                $days[] = self::DAY_WORDS[$word[0]];
+                $word = substr($word, 1);
+            } else {
+                return null;
+            }
+        }
 
         return $days;
     }

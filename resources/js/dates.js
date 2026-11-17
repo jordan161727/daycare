@@ -65,6 +65,18 @@ export function parseStrictDate(text) {
     return date;
 }
 
+/**
+ * The day a calendar treats as today: the field's data-today, else the
+ * centre's (window.centreTodayDate, from centre-today.js in the page head),
+ * else — on a page without it — the browser's.
+ */
+export function centreNow(input) {
+    const own = input?.dataset?.today ? parseStrictDate(input.dataset.today) : null;
+    if (own) return own;
+    const view = input?.ownerDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
+    return typeof view?.centreTodayDate === 'function' ? view.centreTodayDate() : new Date();
+}
+
 export function upgradeDateInput(input) {
     if (input._flatpickr || input.dataset.nativeDate !== undefined) return input._flatpickr ?? null;
 
@@ -80,6 +92,10 @@ export function upgradeDateInput(input) {
         disableMobile: true,
         minDate: input.min || undefined,
         maxDate: input.max || undefined,
+        // The centre's today, not the browser's (QA retest, 18 Nov 2026: a
+        // laptop in Manila marked the 18th while New York was on the 17th).
+        // A field can carry its own with data-today; else the page's.
+        now: centreNow(input),
         // data-date-weekdays: Saturdays and Sundays greyed out and not
         // pickable — the Holidays page, where the center is shut anyway
         // (QA, 17 Nov 2026). The server refuses a typed one too.
