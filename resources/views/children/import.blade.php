@@ -4,14 +4,14 @@
 
 @section('content')
     <style>[x-cloak] { display: none !important; }</style>
-    <main x-data="childrenImport" class="mx-auto max-w-3xl">
-        <section class="overflow-hidden rounded-2xl bg-white shadow-xl shadow-slate-200/70">
-            <header class="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-8 sm:px-10">
-                <h1 class="text-3xl font-bold text-white">Import children</h1>
-                <p class="mt-2 text-blue-100">Upload a daycare roster to create or update child records.</p>
-            </header>
+    {{-- The page header every current page draws (QA, 17 Nov 2026): it was
+         a blue gradient banner inside the card, an older, louder style. The
+         form keeps its width, beside the header rather than centred. --}}
+    <div x-data="childrenImport" class="flex flex-col gap-5">
+        <x-page-title eyebrow="Office" title="Import children" subtitle="Upload a daycare roster to create or update child records." />
 
-            <form action="{{ route('children.import') }}" method="POST" enctype="multipart/form-data" @submit="submitForm($event)" class="p-6 sm:p-10">
+        <section class="glass-card max-w-3xl overflow-hidden rounded-2xl">
+            <form action="{{ route('children.import') }}" method="POST" enctype="multipart/form-data" @submit="submitForm($event)" class="p-5 sm:p-6">
                 @csrf
 
                 @if(session('success'))
@@ -136,5 +136,5 @@
                 <p class="mt-1 text-sm text-slate-500">Please keep this page open.</p>
             </div>
         </div>
-    </main>
+    </div>
 @endsection

@@ -20,29 +20,37 @@ use Illuminate\Support\Carbon;
 class ClassroomAssignment
 {
     /**
-     * The rooms, youngest first, with the age each one starts at.
+     * The rooms, youngest first, each with the age range it takes: from
+     * `min_months` (inclusive) up to `max_months` (exclusive). Infant alone
+     * starts at a number of weeks, `min_weeks`, because six weeks is the
+     * licensing floor and is not a whole number of months.
      *
-     * Every band is closed at the top: the child is in the last room whose
-     * starting age they have reached, which puts the boundary age in the higher
-     * band. On the day they turn 19 months they are Transition, not Infant.
+     * The ranges join end to end — each room's max is the next room's min —
+     * so every age from 6 weeks to the 12th birthday is in exactly one room.
+     * On the day a child turns 19 months they are Transition, not Infant.
      *
-     * The client's ranges (QA, 16 Nov 2026): Infant 6 wk–18 mo, Transition
-     * 19–24 mo, Toddler 24–36 mo, PreK 3–4 yrs, UPK-4 4–5 yrs, School Age
-     * 6–12 yrs. "18 mo" is the eighteenth month, so Transition starts at 19;
-     * a five-year-old is UPK-4 until their sixth birthday.
+     * Everything reads these numbers: the automatic room (automaticFor), the
+     * ⚠ on a room the age does not fit (ageFits / fit), and the ages shown
+     * beside each room (ageLabel). Second QA brief, Nov 2026: the labels had
+     * been the client's own wording — "6 wk–18 mo", "19–24 mo", "3–4 yrs",
+     * "4–5 yrs" — which read as a gap between Infant and Transition, a
+     * 4y 0m in PreK flagged although "3–4 yrs", and a 5y 9m in UPK-4 not
+     * flagged although "4–5 yrs". The rule was these numbers all along; the
+     * labels now say them.
      */
     public const BANDS = [
-        ['room' => 'Infant', 'weeks' => 6],
-        ['room' => 'Transition', 'months' => 19],
-        ['room' => 'Toddler', 'months' => 24],
-        ['room' => 'PreK', 'months' => 36],
-        ['room' => 'UPK-4', 'months' => 48],
-        ['room' => 'School Age', 'months' => 72],
+        ['room' => 'Infant', 'min_weeks' => 6, 'max_months' => 19],
+        ['room' => 'Transition', 'min_months' => 19, 'max_months' => 24],
+        ['room' => 'Toddler', 'min_months' => 24, 'max_months' => 36],
+        ['room' => 'PreK', 'min_months' => 36, 'max_months' => 48],
+        ['room' => 'UPK-4', 'min_months' => 48, 'max_months' => 72],
+        ['room' => 'School Age', 'min_months' => 72, 'max_months' => 144],
     ];
 
     /**
      * School Age ends the way every other band ends — exclusive at the top, so
-     * the last day in the room is the day before the 12th birthday.
+     * the last day in the room is the day before the 12th birthday. The same
+     * figure as School Age's max_months, in years.
      */
     public const AGES_OUT_AT_YEARS = 12;
 
@@ -161,66 +169,71 @@ class ClassroomAssignment
             return null;
         }
 
-        $dob = $dob->copy()->startOfDay();
-        $asOf = ($asOf ? $asOf->copy() : Carbon::today())->startOfDay();
-
-        if ($asOf->lt(self::startOf(self::BANDS[0], $dob)) || $asOf->gte($dob->copy()->addYearsNoOverflow(self::AGES_OUT_AT_YEARS))) {
-            return null;
-        }
-
-        $room = null;
-
         foreach (self::BANDS as $band) {
-            if ($asOf->lt(self::startOf($band, $dob))) {
-                break;
+            if (self::ageFits($band['room'], $dob, $asOf)) {
+                return $band['room'];
             }
-
-            $room = $band['room'];
         }
 
-        return $room;
+        return null;
     }
 
     /**
-     * A room's ages as the bands assign them — "6 wk–18 mo", "5–12 yrs" —
-     * for the ⚠ tooltips, so the reason given is the rule actually checked.
-     * The bands follow the client's ranges since 16 Nov 2026, so the label
-     * is the client's own wording (config daycare.room_ages) when there is
-     * one — "6 wk–18 mo", "4–5 yrs" — and worked out from the bands if not.
+     * Whether a date of birth puts a child inside a room's age range on a
+     * date: at least the room's minimum, and under its maximum. The one rule
+     * for age against room — the automatic room is the room this says yes
+     * to, and the ⚠ is drawn where it says no.
+     */
+    public static function ageFits(?string $room, ?Carbon $dob, ?Carbon $asOf = null): bool
+    {
+        $band = self::band($room);
+
+        if (! $band || ! $dob) {
+            return false;
+        }
+
+        $dob = $dob->copy()->startOfDay();
+        $asOf = ($asOf ? $asOf->copy() : Carbon::today())->startOfDay();
+
+        return $asOf->gte(self::startOf($band, $dob))
+            && $asOf->lt($dob->copy()->addMonthsNoOverflow($band['max_months']));
+    }
+
+    /**
+     * A room's ages as the rule checks them, worked out from BANDS — "6 wk–
+     * under 19 mo", "3–under 4 yrs" — so the Rooms page, the floor plan and
+     * every ⚠ say the rule actually applied. "under" because the top is
+     * exclusive: a child is out of PreK on their fourth birthday.
      */
     public static function ageLabel(?string $room): ?string
     {
-        $rank = self::rankOf($room);
+        $band = self::band($room);
 
-        if ($rank === null) {
+        if (! $band) {
             return null;
         }
 
-        if (filled($label = config("daycare.room_ages.$room"))) {
-            return $label;
+        $max = $band['max_months'];
+
+        if (isset($band['min_weeks'])) {
+            return "{$band['min_weeks']} wk–under {$max} mo";
         }
 
-        $say = function (array $band): array {
-            if (isset($band['weeks'])) {
-                return [$band['weeks'], 'wk'];
-            }
+        $min = $band['min_months'];
 
-            return $band['months'] >= 24 && $band['months'] % 12 === 0
-                ? [intdiv($band['months'], 12), 'yrs']
-                : [$band['months'], 'mo'];
-        };
+        // Whole years from three up — "3–under 4 yrs"; months below, as the
+        // centre counts its youngest rooms — "24–under 36 mo".
+        return $min >= 36 && $min % 12 === 0 && $max % 12 === 0
+            ? intdiv($min, 12).'–under '.intdiv($max, 12).' yrs'
+            : "{$min}–under {$max} mo";
+    }
 
-        [$from, $fromUnit] = $say(self::BANDS[$rank]);
-        [$to, $toUnit] = isset(self::BANDS[$rank + 1])
-            ? $say(self::BANDS[$rank + 1])
-            : [self::AGES_OUT_AT_YEARS, 'yrs'];
+    /** A room's entry in BANDS, or null if it is not one of ours. */
+    private static function band(?string $room): ?array
+    {
+        $rank = self::rankOf($room);
 
-        // "2–3 yrs" when both ends are in years; "6 wk–18 mo" when they differ.
-        if ($fromUnit === 'mo' && $toUnit === 'yrs') {
-            [$to, $toUnit] = [$to * 12, 'mo'];
-        }
-
-        return $fromUnit === $toUnit ? "{$from}–{$to} {$toUnit}" : "{$from} {$fromUnit}–{$to} {$toUnit}";
+        return $rank === null ? null : self::BANDS[$rank];
     }
 
     /**
@@ -231,58 +244,54 @@ class ClassroomAssignment
      * had been set by hand to the room her age gives, and "the age has
      * caught up with the override" was being drawn as the same ⚠).
      *
+     * The answer is ageFits on the room the child is in, and nothing else.
+     * A room set by hand does not excuse an age outside it (second QA brief,
+     * Nov 2026: a 2y 10m moved up to PreK by hand wore only the ✎, with no
+     * word that PreK starts at 3). `by_hand` says whether a director chose
+     * the room, so the mark can show both.
+     *
      * Returns one of:
      *
-     *   ok       the room is the room the age bands give, whether or not a
+     *   ok       the age is inside the room's range, whether or not a
      *            director also set it by hand. No mark.
-     *   placed   the director set a different room on purpose, and it is
-     *            one band ahead of the age (moved up early — what
-     *            overrides are for). A soft note (✎), not a warning.
-     *   mismatch the age does not fit the room: no age band covers the
-     *            child at all (under 6 weeks, or 12 and over — no room is
-     *            licensed for them, override or not); or the room is behind
-     *            the age (held back, or an override the age has passed); or
-     *            more than one band ahead; or a room nobody set by hand
-     *            that the age bands disagree with. ⚠.
+     *   mismatch the age is outside the room's range — under it, over it, or
+     *            outside every room (under 6 weeks, or 12 and over), set by
+     *            hand or not. ⚠.
      *   unknown  no date of birth, or no room: nothing to check against.
      *
-     * @return array{state: string, text: ?string, automatic: ?string}
+     * @return array{state: string, text: ?string, automatic: ?string, by_hand: bool}
      */
     public static function fit(Child $child, ?Carbon $asOf = null): array
     {
         $room = $child->classroom;
         $dob = $child->birthDate();
+        $byHand = filled($room) && $child->hasClassroomOverrideOn($asOf) && $child->classroom_override === $room;
 
         if (blank($room) || ! $dob) {
-            return ['state' => 'unknown', 'text' => null, 'automatic' => null];
+            return ['state' => 'unknown', 'text' => null, 'automatic' => null, 'by_hand' => $byHand];
         }
 
         $automatic = $child->automaticClassroom($asOf);
+
+        if (self::ageFits($room, $dob, $asOf)) {
+            return ['state' => 'ok', 'text' => null, 'automatic' => $automatic, 'by_hand' => $byHand];
+        }
+
         $age = $child->ageInWords($asOf);
+        $ages = self::ageLabel($room) ?? 'no age range';
+        $set = $byHand ? ' (room set by hand)' : '';
 
         if ($automatic === null) {
             $asOfDay = ($asOf ? $asOf->copy() : Carbon::today())->startOfDay();
             $tooOld = $asOfDay->gte($dob->copy()->startOfDay()->addYearsNoOverflow(self::AGES_OUT_AT_YEARS));
 
-            return ['state' => 'mismatch', 'automatic' => null, 'text' => $tooOld
-                ? "{$age} — over the School Age limit: {$room} is for ".self::ageLabel($room).'; no room takes '.self::AGES_OUT_AT_YEARS.' and over.'
-                : "{$age} — under 6 weeks: {$room} is for ".self::ageLabel($room).'; no room takes this age yet.'];
+            return ['state' => 'mismatch', 'automatic' => null, 'by_hand' => $byHand, 'text' => $tooOld
+                ? "{$age} — over the School Age limit: {$room} is for {$ages}; no room takes ".self::AGES_OUT_AT_YEARS." and over{$set}."
+                : "{$age} — under 6 weeks: {$room} is for {$ages}; no room takes this age yet{$set}."];
         }
 
-        if ($automatic === $room) {
-            return ['state' => 'ok', 'text' => null, 'automatic' => $automatic];
-        }
-
-        $gap = (self::rankOf($room) ?? -99) - (self::rankOf($automatic) ?? 0);
-        $byHand = $child->hasClassroomOverrideOn($asOf) && $child->classroom_override === $room;
-        $ages = self::ageLabel($room);
-
-        if ($byHand && $gap === 1) {
-            return ['state' => 'placed', 'automatic' => $automatic, 'text' => "{$age} — moved up early to {$room} by hand; {$automatic} by age."];
-        }
-
-        // "5y 1m — Infant is for 6 wk–18 mo; by age, School Age."
-        return ['state' => 'mismatch', 'automatic' => $automatic, 'text' => "{$age} — {$room} is for {$ages}; by age, {$automatic}".($byHand ? ' (room set by hand).' : '.')];
+        // "5y 1m — Infant is for 6 wk–under 19 mo; by age, UPK-4."
+        return ['state' => 'mismatch', 'automatic' => $automatic, 'by_hand' => $byHand, 'text' => "{$age} — {$room} is for {$ages}; by age, {$automatic}{$set}."];
     }
 
     /** Where a room sits in the age order, or null if it is not one of ours. */
@@ -358,8 +367,8 @@ class ClassroomAssignment
      */
     private static function startOf(array $band, Carbon $dob): Carbon
     {
-        return isset($band['weeks'])
-            ? $dob->copy()->addWeeks($band['weeks'])
-            : $dob->copy()->addMonthsNoOverflow($band['months']);
+        return isset($band['min_weeks'])
+            ? $dob->copy()->addWeeks($band['min_weeks'])
+            : $dob->copy()->addMonthsNoOverflow($band['min_months']);
     }
 }

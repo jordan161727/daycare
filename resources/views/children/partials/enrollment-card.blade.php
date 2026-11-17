@@ -219,19 +219,27 @@
                                  (Child::DEFAULT_DROP_OFF / DEFAULT_PICK_UP), so
                                  nobody has to type both ends to say "the usual";
                                  the centre's own hours stay the limits. --}}
+                            {{-- The centre's own hours from Settings › Rooms & hours; DAY_OPENS_AT and
+                                 DAY_CLOSES_AT stay the hard limits the save refuses past. --}}
+                            @php($centreOpens = app(\App\Services\CentreSettings::class)->get('centre_opens'))
+                            @php($centreCloses = app(\App\Services\CentreSettings::class)->get('centre_closes'))
                             @php($scheduleDefault = fn ($field, $default) => \App\Models\Child::timeInputValue(old($field, $child ? $child->{$field} : $default)))
                             <label>
                                 <span class="cs-label">Drop-off time</span>
                                 <input type="time" name="drop_off_time" value="{{ $scheduleDefault('drop_off_time', \App\Models\Child::DEFAULT_DROP_OFF) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="cs-input">
                                 <x-input-error :messages="$errors->get('drop_off_time')" />
-                                <span class="cs-help">When they normally arrive. The center opens at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_OPENS_AT) }}.</span>
+                                <span class="cs-help">When they normally arrive. The center opens at {{ \App\Models\Child::timeLabel($centreOpens) }}.</span>
                             </label>
                             <label>
                                 <span class="cs-label">Pick-up time</span>
                                 <input type="time" name="pick_up_time" value="{{ $scheduleDefault('pick_up_time', \App\Models\Child::DEFAULT_PICK_UP) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="cs-input">
                                 <x-input-error :messages="$errors->get('pick_up_time')" />
-                                <span class="cs-help">When they normally go home. The center closes at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_CLOSES_AT) }}.</span>
+                                <span class="cs-help">When they normally go home. The center closes at {{ \App\Models\Child::timeLabel($centreCloses) }}.</span>
                             </label>
+                            {{-- Hours outside when the room or center is open are saved, and said
+                                 here for as long as they stand (Child::hoursOutsideOpening). --}}
+                            @php($hoursOutside = \App\Models\Child::hoursOutsideOpening($scheduleDefault('drop_off_time', \App\Models\Child::DEFAULT_DROP_OFF), $scheduleDefault('pick_up_time', \App\Models\Child::DEFAULT_PICK_UP), old('classroom_override') ?: $child?->classroom))
+                            @if($hoursOutside)<span class="cs-help" style="grid-column: 1 / -1; color: #8a5a00; font-weight: 500;" role="alert" data-hours-outside>⚠ {{ $hoursOutside }}</span>@endif
                         </div>
                         </div>
                     </section>

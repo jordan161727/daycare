@@ -36,7 +36,7 @@ class RoomsAndHoursSettingsTest extends TestCase
             ->assertSee('Rooms &amp; hours', false)
             ->assertSeeInOrder(['Room', 'Ages', 'Staff : children', 'Capacity', 'NY max group', 'Room open hours', 'Check'])
             ->assertSeeInOrder(['data-room-row="Infant"', 'data-room-row="Transition"', 'data-room-row="Toddler"', 'data-room-row="PreK"', 'data-room-row="UPK-4"', 'data-room-row="School Age"'], false)
-            ->assertSee('6 wk–18 mo')
+            ->assertSee('6 wk–under 19 mo')
             ->assertSee('Center opens')->assertSee('Center closes')->assertSee('Earliest start for everyone else')->assertSee('Early drop-off room')
             ->assertSee('School Age leaves for school')->assertSee('School Age back from school')->assertSee('Longest shift (hours)')->assertSee('Most hours in a week')
             ->assertSee('Only staff who may open the building can start before the earliest start')

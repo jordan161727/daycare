@@ -99,7 +99,7 @@
                         <span class="av" style="width: 52px; height: 52px; font-size: 17px; background: #dcebfa; color: #1b5e91;" title="{{ $selected->name }} — badge {{ $ini($selected) }} (badges are kept unique across the team)">{{ $ini($selected) }}</span>
                         <div style="display: flex; flex-direction: column; gap: 3px;">
                             <span style="font-size: 22px; font-weight: 700;">{{ $selected->name }}</span>
-                            <span style="font-size: 13px;" class="muted">{{ $selected->jobRole() }} · {{ $selected->employmentLabel() }} · {{ $selected->classroom ?: '—' }}</span>
+                            <span style="font-size: 13px;" class="muted">{{ $selected->jobRoleOrLegacy() ?? 'Role not set' }} · {{ $selected->employmentLabel() }} · {{ $selected->classroom ?: '—' }}</span>
                         </div>
                     </div>
                     <span class="pill {{ $status['tone'] }}" data-status-pill>{{ $status['text'] }}</span>

@@ -67,7 +67,18 @@ class HolidayController extends Controller
             // does not answer the question actually being asked at that moment
             // — which children am I putting back on the roster?
             'restores' => $this->restorePreview($upcoming),
+            // The first day that can still be closed: this week's Monday, or
+            // next week's once this Friday has passed. The date pickers start
+            // there, and grey out weekends (data-date-weekdays).
+            'firstOpenDay' => $this->firstOpenDay(),
         ]);
+    }
+
+    private function firstOpenDay(): string
+    {
+        $monday = today()->startOfWeek(Carbon::MONDAY);
+
+        return ($this->weeks->isFrozen($monday->toDateString()) ? $monday->addWeek() : $monday)->toDateString();
     }
 
     /**
@@ -118,9 +129,10 @@ class HolidayController extends Controller
     /**
      * Close a day, or a run of days for a break that spans a week or more.
      *
-     * Weekends are skipped rather than rejected — a break is entered by its real
-     * first and last day, and the centre is not open at the weekend anyway, so
-     * closing Saturday would be a row that says nothing.
+     * Weekends inside a break are skipped rather than rejected — the centre is
+     * not open at the weekend anyway, so closing Saturday would be a row that
+     * says nothing. The first and last day themselves must be weekdays in a
+     * week that has not ended (QA, 17 Nov 2026).
      */
     public function store(Request $request)
     {
@@ -136,6 +148,29 @@ class HolidayController extends Controller
         $from = Carbon::parse($data['closed_on']);
         $to = Carbon::parse($data['ends_on'] ?? $data['closed_on']);
         $reason = filled($data['reason'] ?? null) ? trim($data['reason']) : null;
+
+        // The dates typed are refused when they are ones the page says cannot
+        // be closed (QA, 17 Nov 2026) — the calendar greys them out, and a
+        // typed one is answered here under its field rather than with a
+        // warning that nothing happened. Weekends inside a break are still
+        // skipped; only the ends of it have to be weekdays.
+        $refusals = [];
+
+        foreach (['closed_on' => $from, 'ends_on' => isset($data['ends_on']) ? $to : null] as $field => $date) {
+            if ($date === null) {
+                continue;
+            }
+
+            if ($this->weeks->isFrozen(ScheduleWeek::startOf($date->toDateString()))) {
+                $refusals[$field] = 'That week has already ended and can no longer be closed.';
+            } elseif ($date->isWeekend()) {
+                $refusals[$field] = 'The center is not open on weekends — pick a weekday.';
+            }
+        }
+
+        if ($refusals !== []) {
+            return back()->withInput()->withErrors($refusals);
+        }
 
         if ($from->diffInDays($to) + 1 > self::MAX_RANGE_DAYS) {
             return back()

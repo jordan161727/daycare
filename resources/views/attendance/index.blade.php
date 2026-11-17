@@ -498,10 +498,12 @@
                                  to come, always. The server's figures are drawn
                                  first; Alpine takes over and moves them with
                                  every tap. --}}
-                            <span title="Ticked for this day — any session — or marked Absent, plus anyone who came in unbooked, in the room being looked at"><b class="font-bold text-sky-600 dark:text-sky-400" x-text="expectedCount">{{ $dayCounts['expected'] }}</b> expected</span>
+                            <span title="Ticked for this day — any session — or marked Absent, plus anyone who came in unbooked, in the room being looked at"><b class="font-bold text-sky-600 dark:text-sky-400" x-text="expectedCount">{{ $dayCounts['expected'] }}</b> booked today</span>
                             <span title="Signed in on this day, whether still here or gone home"><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount">{{ $dayCounts['in'] }}</b> in</span>
                             <span x-show="markedAbsentCount > 0" @if($dayCounts['absent'] === 0) x-cloak @endif title="Expected and marked Absent — or, on a day that is over, expected and never came"><b class="font-bold text-rose-600 dark:text-rose-400" x-text="markedAbsentCount">{{ $dayCounts['absent'] }}</b> absent</span>
                             <span title="Expected, not signed in and not marked Absent. Nobody is still to come on a day that is over or in a locked week."><b class="font-bold text-amber-600 dark:text-amber-400" x-text="awaitedCount">{{ $dayCounts['still_to_come'] }}</b> still to come</span>
+                            {{-- Of those, over an hour past an agreed time: late, never absent (RoomCounts::isLate). --}}
+                            <span x-show="lateCount > 0" @if($dayCounts['late'] === 0) x-cloak @endif title="Still to come and more than an hour past the time agreed for them. A child with no agreed hours is never late." data-late-count><b class="font-bold text-rose-600 dark:text-rose-400" x-text="lateCount">{{ $dayCounts['late'] }}</b> late</span>
                             <span title="On the roll and not signed in, whether or not they were expected"><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount">{{ $dayCounts['not_in'] }}</b> not in</span>
                         </p>
                     </div>
@@ -1878,9 +1880,11 @@ function attendanceApp() { return {
      * has been locked (QA #3): those are absences now.
      */
     dayIsOver: @js($dayIsOver),
+    // Today's late children (RoomCounts::isLate), as the server worked them out on load.
+    lateIds: @js($lateIds),
     get dayCounts() {
         const date = this.countDate;
-        let expected = 0, inCount = 0, absent = 0;
+        let expected = 0, inCount = 0, absent = 0, late = 0;
         for (const child of this.countChildren) {
             const mark = this.dayMark(child.id, date);
             const booked = this.isExpectedOn(child.id, date) && mark !== 'none';
@@ -1890,9 +1894,11 @@ function attendanceApp() { return {
             expected++;
             if (arrived) inCount++;
             else if (marked || this.dayIsOver) absent++;
+            else if (date === @js($selectedDate) && this.lateIds.includes(child.id)) late++;
         }
-        return { expected, in: inCount, absent, stillToCome: Math.max(0, expected - inCount - absent) };
+        return { expected, in: inCount, absent, late, stillToCome: Math.max(0, expected - inCount - absent) };
     },
+    get lateCount() { return this.dayCounts.late; },
     get expectedCount() { return this.dayCounts.expected; },
     get markedAbsentCount() { return this.dayCounts.absent; },
     get awaitedCount() { return this.dayCounts.stillToCome; },
@@ -2117,15 +2123,16 @@ function attendanceApp() { return {
     },
     /*
      * The room's mark: ⚠ when the age doesn't fit the room, ✎ when the
-     * room was set by hand and it does (or is one band ahead — moved up
-     * early), nothing otherwise. Both read room_fit, from the one check
+     * room was set by hand, both (⚠✎) when it is both, nothing otherwise.
+     * Both read room_fit, from the one check
      * (App\Services\ClassroomAssignment::fit — QA, 16 Nov 2026: a
      * five-month-old in Infant wore a ⚠ because her room had been set by
      * hand to the room her age gives, while a five-year-old in Infant set
-     * by nobody wore nothing).
+     * by nobody wore nothing; second QA brief: a 2y 10m set by hand into
+     * PreK wore only the ✎).
      */
     roomMark(child) {
-        if (child.room_fit === 'mismatch') return '⚠';
+        if (child.room_fit === 'mismatch') return child.classroom_override ? '⚠✎' : '⚠';
         return child.classroom_override ? '✎' : '';
     },
     roomTitle(child) {

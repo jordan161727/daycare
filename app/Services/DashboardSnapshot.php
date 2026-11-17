@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\Child;
 use App\Models\DssDayMark;
-use App\Models\RoomSchedule;
 use App\Models\ScheduleSlot;
 use App\Models\StaffShift;
 use App\Models\User;
@@ -27,19 +26,18 @@ use Illuminate\Support\Collection;
  *   returning  — clocked out, but with a later session still booked today
  *                (a School Age child at school, back after three)
  *   out        — clocked out for the day
- *   expected   — booked, not yet arrived
- *   absent     — booked, not arrived, and well past when they were due
+ *   expected   — booked, not yet arrived ("still to come" on screen)
+ *   absent     — marked Absent on the register, and not arrived
  *
- * There is no "absent" switch on the register yet (that is Phase 3), so
- * absent is read off the clock: an hour past the hour the child was booked
- * in for — their planned time, else their usual drop-off, else the room's
- * opening — and still no sign of them.
+ * Absent is never read off the clock (QA, 17 Nov 2026: at nine the
+ * dashboard said "Absent 70" while the register said 0, because a child
+ * with no agreed hours was taken as due when the room opened and called
+ * absent an hour later). A child more than an hour past an agreed time is
+ * still to come and counted LATE beside it — RoomCounts::isLate, the one
+ * rule.
  */
 class DashboardSnapshot
 {
-    /** How long past the booked hour before "expected" becomes "absent". */
-    public const ABSENT_AFTER_MINUTES = 60;
-
     public function __construct(private TimeClock $clock, private CentreSettings $centre) {}
 
     /**
@@ -73,7 +71,6 @@ class DashboardSnapshot
             ->whereIn('child_id', $roll->pluck('id'))
             ->get()
             ->groupBy('child_id');
-        $rooms = RoomSchedule::byRoom();
         // The word on the day from the register: Absent, or not coming after
         // all. The register and the reports read it ahead of the tick, so the
         // dashboard does too — else a child marked Absent at eight sat on the
@@ -82,39 +79,79 @@ class DashboardSnapshot
             ->pluck('mark', 'child_id');
 
         $states = [];
+        $late = [];
         foreach ($roll as $child) {
             $mark = $marks[$child->id] ?? null;
             $booked = $scheduled[$child->id] ?? false;
-            $states[$child->id] = $this->stateOf($child, $rows[$child->id] ?? collect(), $booked, $mark === DssDayMark::ABSENT, $planned[$child->id] ?? collect(), $rooms, $now, $timezone);
+            $states[$child->id] = $this->stateOf($child, $rows[$child->id] ?? collect(), $booked, $mark === DssDayMark::ABSENT);
+            $late[$child->id] = $states[$child->id] === 'expected' && RoomCounts::isLate($child, $planned[$child->id] ?? [], $now);
         }
         $counts = array_count_values($states) + ['in' => 0, 'returning' => 0, 'out' => 0, 'expected' => 0, 'absent' => 0, 'none' => 0];
 
-        // Scheduled, arrived, expected and absent through the one rule every
-        // screen counts by (App\Services\RoomCounts, QA #2): scheduled is
-        // everyone the day was for, a walk-in included, so arrived + expected
-        // + absent is always scheduled.
-        $tally = RoomCounts::tally(array_map(fn (string $state) => RoomCounts::child(
-            booked: $state !== 'none',
-            arrived: in_array($state, ['in', 'returning', 'out'], true),
-            absent: $state === 'absent',
-        ), $states));
+        // Booked, arrived, still to come and absent through the one rule every
+        // screen counts by (App\Services\RoomCounts, QA #2): booked today is
+        // everyone the day was for, a walk-in included, so arrived + still to
+        // come + absent is always booked today.
+        $tally = RoomCounts::tally(array_map(fn (int $id) => $this->tallied($states[$id], $late[$id]), array_keys($states)));
 
         $staff = $this->staffOnTheFloor($today, $now, $timezone);
+        $ratios = $this->ratios($roll, $states, $late, $staff, $planned, $today, $timezone);
 
         return [
             'now' => $now,
             'enrolled' => $roll->count(),
+            // Booked today — RoomCounts' "expected" (the key keeps its old name).
             'scheduled' => $tally['expected'],
             'in' => $counts['in'],
             'returning' => $counts['returning'],
             'out' => $counts['out'],
+            // Still to come — booked, not arrived, not marked Absent.
             'expected' => $tally['still_to_come'],
+            // Of those, more than an hour past an agreed time (RoomCounts::isLate).
+            'late' => $tally['late'],
             'absent' => $tally['absent'],
             'arrived' => $tally['in'],
             'staffOnFloor' => $staff->count(),
-            'ratios' => $this->ratios($roll, $states, $staff, $planned, $today, $timezone),
+            'ratios' => $ratios,
+            // Rooms whose roster today cannot cover the children booked in
+            // them (QA, 17 Nov 2026: no week built, every teacher "Off", 74
+            // booked, and "Rooms below ratio: 0" because nobody was in yet).
+            'scheduleShort' => collect($ratios)->filter(fn (array $r) => $r['scheduleWarning'] !== null)->count(),
             'states' => $states,
+            'late_ids' => array_keys(array_filter($late)),
         ];
+    }
+
+    /** One child's state as RoomCounts::tally reads it. */
+    private function tallied(string $state, bool $late = false): array
+    {
+        return RoomCounts::child(
+            booked: $state !== 'none',
+            arrived: in_array($state, ['in', 'returning', 'out'], true),
+            absent: $state === 'absent',
+            late: $late,
+        );
+    }
+
+    /**
+     * Ahead of the day: a room with children booked today and too few staff
+     * on today's roster to take them at the room's ratio — none at all, or
+     * fewer than the bookings would need if they were all in at once. Null
+     * when the roster covers it or nobody is booked.
+     */
+    public static function scheduleWarning(int $booked, int $rostered, int $ratio): ?string
+    {
+        if ($booked <= 0 || $ratio <= 0) {
+            return null;
+        }
+
+        $need = (int) ceil($booked / $ratio);
+
+        return match (true) {
+            $rostered === 0 => "No staff scheduled today for {$booked} booked — needs {$need} at 1:{$ratio}",
+            $rostered < $need => "{$rostered} of {$need} staff scheduled today for {$booked} booked at 1:{$ratio}",
+            default => null,
+        };
     }
 
     /**
@@ -129,7 +166,7 @@ class DashboardSnapshot
         return RoomCounts::bookedOn($roll, $today);
     }
 
-    private function stateOf(Child $child, Collection $rows, bool $scheduled, bool $markedAbsent, Collection $slots, Collection $rooms, Carbon $now, string $timezone): string
+    private function stateOf(Child $child, Collection $rows, bool $scheduled, bool $markedAbsent): string
     {
         if ($rows->isEmpty() && $markedAbsent) {
             return 'absent';
@@ -147,27 +184,7 @@ class DashboardSnapshot
             return ($scheduled && $later !== []) ? 'returning' : 'out';
         }
 
-        if (! $scheduled) {
-            return 'none';
-        }
-
-        $due = $this->dueAt($child, $slots, $rooms, $now, $timezone);
-
-        return $due !== null && $now->greaterThan($due->copy()->addMinutes(self::ABSENT_AFTER_MINUTES)) ? 'absent' : 'expected';
-    }
-
-    /** The hour the child was booked in for today, if anything says. */
-    private function dueAt(Child $child, Collection $slots, Collection $rooms, Carbon $now, string $timezone): ?Carbon
-    {
-        $time = $slots->pluck('planned_time')->filter()->sort()->first()
-            ?: $child->drop_off_time
-            ?: ($rooms[$child->classroom]->opens_at ?? null);
-
-        if (blank($time)) {
-            return null;
-        }
-
-        return Carbon::parse($now->toDateString().' '.substr((string) $time, 0, 5), $timezone);
+        return $scheduled ? 'expected' : 'none';
     }
 
     /**
@@ -210,7 +227,7 @@ class DashboardSnapshot
      * Room by room: children in, staff in, what the ratio asks for, and a
      * word on where that leaves the room.
      */
-    private function ratios(Collection $roll, array $states, Collection $staff, Collection $planned, string $today, string $timezone): array
+    private function ratios(Collection $roll, array $states, array $late, Collection $staff, Collection $planned, string $today, string $timezone): array
     {
         $rostered = StaffShift::with('user')->whereDate('shift_date', $today)->get()->groupBy('classroom');
         $out = [];
@@ -248,18 +265,21 @@ class DashboardSnapshot
                 $notes[] = $returning->count().' checked out · returning'.($back ? ' at '.Carbon::parse($today.' '.substr((string) $back, 0, 5), $timezone)->format('g:i') : ' later today');
             }
 
-            // More enrolled or expected than places: warned, never blocked (QA, 16 Nov 2026).
-            $expectedHere = RoomCounts::tally($children->map(fn (Child $child) => RoomCounts::child(
-                booked: ($states[$child->id] ?? 'none') !== 'none',
-                arrived: in_array($states[$child->id] ?? 'none', ['in', 'returning', 'out'], true),
-                absent: ($states[$child->id] ?? 'none') === 'absent',
-            )))['expected'];
+            // More enrolled or booked than places: warned, never blocked (QA, 16 Nov 2026).
+            $day = RoomCounts::tally($children->map(fn (Child $child) => $this->tallied($states[$child->id] ?? 'none', $late[$child->id] ?? false)));
+            $expectedHere = $day['expected'];
+            $rosteredHere = ($rostered[$room] ?? collect())->pluck('user_id')->unique()->count();
 
             $out[] = [
                 'room' => $room,
                 'capacity' => $this->centre->capacity($room),
                 'enrolled' => $children->count(),
+                // Booked today and still to come, by RoomCounts — the floor plan's figures.
                 'expected' => $expectedHere,
+                'stillToCome' => $day['still_to_come'],
+                'late' => $day['late'],
+                'rostered' => $rosteredHere,
+                'scheduleWarning' => self::scheduleWarning($expectedHere, $rosteredHere, $ratio),
                 'capacityWarning' => RoomCounts::capacityWarning($this->centre->capacity($room), $children->count(), $expectedHere),
                 'children' => $in,
                 'staff' => $here,

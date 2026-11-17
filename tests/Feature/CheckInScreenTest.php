@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\DoorAttendance;
 use App\Models\Child;
 use App\Models\HealthAudit;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -715,7 +716,7 @@ class CheckInScreenTest extends TestCase
 
         $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('Anderson, Joseph', $html);
+        $this->assertStringContainsString('Joseph Anderson', $html);
 
         // Drawn with the same four lines and the same cells as anybody else.
         $this->assertStringContainsString('cell('.$unscheduled->id.',', $html);
@@ -942,7 +943,7 @@ class CheckInScreenTest extends TestCase
         // Mondays, and the grid carries that for each of them.
         // The map itself is in the component's state, quote-escaped by @js.
         $this->assertStringContainsString('booked', $html);
-        $this->assertStringContainsString('Anderson, Joseph', $html);
+        $this->assertStringContainsString('Joseph Anderson', $html);
 
         // Booked reads as something outstanding; not booked reads as an offer.
         $this->assertStringContainsString('Booked in today', $html);
@@ -1235,7 +1236,35 @@ class CheckInScreenTest extends TestCase
         $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
 
         $this->assertStringNotContainsString('data-card-sort', $html);
-        $this->assertStringContainsString(".sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.display.localeCompare(b.display));", $html);
+        // A–Z by surname (the row's sort key), not by the name as written —
+        // QA, 17 Nov 2026: the cards sorted on the "First Last" text.
+        $this->assertStringContainsString(".sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.sort.localeCompare(b.sort));", $html);
         $this->assertStringContainsString("dayRank(row) { return this.isIn(row) ? 0 : (this.isOut(row) ? 1 : 2); },", $html);
+    }
+
+    /**
+     * Settings → Children → Names reads here too (QA, 17 Nov 2026): the door
+     * wrote "First Last" whatever the centre chose. The name follows the
+     * setting; the order is surname either way, as the setting promises.
+     */
+    public function test_the_names_follow_the_centres_setting_and_sort_by_surname(): void
+    {
+        Child::create(['lan' => '10065', 'first_name' => 'Aaron', 'last_name' => 'Zimmer', 'status' => 'Active',
+            'dob' => Carbon::parse('2026-09-23')->subYears(3)->toDateString()]);
+        $q = chr(92).'u0022';
+
+        Setting::put(User::NAME_FORMAT_SETTING, 'last_first');
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString($q.'display'.$q.':'.$q.'Adkins, Maeve'.$q, $html);
+        $this->assertStringContainsString($q.'name'.$q.':'.$q.'Zimmer, Aaron'.$q, $html);
+        $this->assertStringContainsString($q.'sort'.$q.':'.$q.'adkins maeve'.$q, $html);
+
+        Setting::put(User::NAME_FORMAT_SETTING, 'first_last');
+        $html = $this->actingAs($this->admin)->get(route('check-in.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString($q.'display'.$q.':'.$q.'Aaron Zimmer'.$q, $html);
+        // Aaron would lead by first name; the key still files him under Z.
+        $this->assertStringContainsString($q.'sort'.$q.':'.$q.'zimmer aaron'.$q, $html);
     }
 }

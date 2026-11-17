@@ -567,8 +567,15 @@ class Child extends Model
 
         $settings = app(\App\Services\CentreSettings::class);
         $schedule = filled($room) ? (\App\Models\RoomSchedule::byRoom()[$room] ?? null) : null;
-        $opens = substr((string) ($schedule?->opens_at ?: $settings->get('centre_opens')), 0, 5);
-        $closes = substr((string) ($schedule?->closes_at ?: $settings->get('centre_closes')), 0, 5);
+        $centreOpens = substr((string) $settings->get('centre_opens'), 0, 5);
+        $centreCloses = substr((string) $settings->get('centre_closes'), 0, 5);
+        $roomOpens = substr((string) ($schedule?->opens_at ?: $centreOpens), 0, 5);
+        $roomCloses = substr((string) ($schedule?->closes_at ?: $centreCloses), 0, 5);
+        // The narrower of the two: a room set to close after the centre does
+        // (which Rooms & hours warns about) does not keep a child past it.
+        $opens = max($centreOpens, $roomOpens);
+        $closes = min($centreCloses, $roomCloses);
+        $schedule = $schedule && ($roomOpens > $centreOpens || $roomCloses < $centreCloses) ? $schedule : null;
         $hm = fn (?string $time) => blank($time) ? null : substr(Carbon::parse($time)->format('H:i'), 0, 5);
 
         $early = $hm($dropOff) !== null && $hm($dropOff) < $opens;
@@ -706,6 +713,18 @@ class Child extends Model
         return $format === 'last_first'
             ? trim($this->last_name.', '.$this->first_name, ' ,')
             : trim($this->first_name.' '.$this->last_name);
+    }
+
+    /**
+     * The key a list of children is ordered by: surname, then first name,
+     * whichever way displayName() writes the name. Lowercased so "de Souza"
+     * files among the Ds rather than after every capital Z. Settings →
+     * Children promises "Lists still sort by surname"; a list sorted in the
+     * browser takes this key rather than sorting on the text it shows.
+     */
+    public function sortName(): string
+    {
+        return mb_strtolower(trim($this->last_name.' '.$this->first_name));
     }
 
     /**
@@ -1215,12 +1234,11 @@ class Child extends Model
     }
 
     /**
-     * Whether this child's age fits the room they are in: ok, placed (set
-     * by hand, one band ahead — a soft ✎), mismatch (⚠) or unknown. The
-     * one check every age-against-room mark reads; see
-     * ClassroomAssignment::fit.
+     * Whether this child's age fits the room they are in: ok, mismatch (⚠,
+     * set by hand or not) or unknown. The one check every age-against-room
+     * mark reads; see ClassroomAssignment::fit.
      *
-     * @return array{state: string, text: ?string, automatic: ?string}
+     * @return array{state: string, text: ?string, automatic: ?string, by_hand: bool}
      */
     public function roomFit(?Carbon $asOf = null): array
     {

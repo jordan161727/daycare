@@ -51,8 +51,8 @@ class CentreSettings
 
     public function ages(string $room): string
     {
-        // The client's wording, which ClassroomAssignment::BANDS assigns by.
-        return (string) config("daycare.room_ages.$room", '');
+        // From the same numbers the automatic room and the ⚠ are checked by.
+        return (string) ClassroomAssignment::ageLabel($room);
     }
 
     /**
@@ -234,6 +234,27 @@ class CentreSettings
         }
 
         return $out;
+    }
+
+    /**
+     * Children on the roll whose agreed hours fall outside when their room
+     * or the centre is open, by Child::hoursOutsideOpening — listed on Rooms
+     * & hours so they can be put right (second QA brief, Nov 2026: children
+     * agreed until 8:00 PM against a centre that closes at 6). Nothing is
+     * changed; this only says who.
+     *
+     * @return \Illuminate\Support\Collection<int, array{child: \App\Models\Child, text: string}>
+     */
+    public function childrenOutsideHours(): \Illuminate\Support\Collection
+    {
+        return \App\Models\Child::query()
+            ->whereIn('status', ['Active', 'Pending'])
+            ->where(fn ($q) => $q->whereNotNull('drop_off_time')->orWhereNotNull('pick_up_time'))
+            ->orderBy('lan')
+            ->get()
+            ->map(fn ($child) => ['child' => $child, 'text' => \App\Models\Child::hoursOutsideOpening($child->drop_off_time, $child->pick_up_time, $child->classroom)])
+            ->filter(fn ($row) => $row['text'] !== null)
+            ->values();
     }
 
     private function minutes(mixed $time): int

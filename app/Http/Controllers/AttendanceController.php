@@ -318,19 +318,30 @@ class AttendanceController extends Controller
             // figures the getters then keep moving. A day gone by, or a week
             // that has been locked, has nobody still to come (QA #3).
             $dayIsOver = \App\Services\RoomCounts::dayIsOver($selectedDate, $weekIsFrozen);
+            // Late (RoomCounts::isLate): today only, more than an hour past an
+            // agreed time. Shown beside "still to come", never as absent.
+            $centreNow = now()->timezone(config('app.timezone'));
+            $lateIds = [];
+            if ($selectedDate === $centreNow->toDateString()) {
+                $slotsToday = \App\Models\ScheduleSlot::whereDate('slot_date', $selectedDate)->where('is_scheduled', true)
+                    ->whereIn('child_id', $children->pluck('id'))->get()->groupBy('child_id');
+                $lateIds = $children->filter(fn (Child $child) => \App\Services\RoomCounts::isLate($child, $slotsToday[$child->id] ?? [], $centreNow))
+                    ->pluck('id')->values()->all();
+            }
             $dayCounts = \App\Services\RoomCounts::tally(
                 $children->filter(fn (Child $child) => $defaultRoom === '' || $child->classroom === $defaultRoom)
                     // On the roll that day (RoomCounts::isEnrolled), or arrived:
                     // the week's rows include a child starting on Wednesday,
                     // who is not one of Monday's enrolled (QA, 16 Nov 2026).
                     ->filter(fn (Child $child) => \App\Services\RoomCounts::isEnrolled($child, $selectedDate) || ! empty($attendanceMap[$child->id][$selectedDate] ?? []))
-                    ->map(function (Child $child) use ($selectedDate, $scheduleMap, $markMap, $attendanceMap) {
+                    ->map(function (Child $child) use ($selectedDate, $scheduleMap, $markMap, $attendanceMap, $lateIds) {
                         $mark = $markMap[$child->id][$selectedDate] ?? null;
 
                         return \App\Services\RoomCounts::child(
                             booked: in_array(true, $scheduleMap[$child->id][$selectedDate] ?? [], true) && $mark !== \App\Models\DssDayMark::NONE,
                             arrived: ! empty($attendanceMap[$child->id][$selectedDate] ?? []),
                             absent: $mark === \App\Models\DssDayMark::ABSENT,
+                            late: in_array($child->id, $lateIds, true),
                         );
                     }),
                 $dayIsOver,
@@ -345,6 +356,7 @@ class AttendanceController extends Controller
 
             return view('attendance.index', compact(
                 'roomWarnings',
+                'lateIds',
                 'defaultRoom',
                 'dayIsOver',
                 'dayCounts',

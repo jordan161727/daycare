@@ -35,6 +35,10 @@
     .ch .c-plan { color: #a3a9b7; }
     .ch .c-open { background: #fff; color: #1b5e91; box-shadow: inset 0 0 0 1px #3aa7e0; }
     .ch .c-abs { background: #ffe9ec; color: #be123c; font-weight: 700; }
+    .ch .c-check { background: #fff8e6; color: #92400e; box-shadow: inset 0 0 0 1px #f5b544; font-weight: 600; }
+    .ch .c-noout { box-shadow: inset 0 0 0 1px #f19aa9; }
+    .ch .cell .noout { color: #be123c; font-weight: 700; }
+    .ch .grid th.nodata { background: #fff3d6; color: #92400e; }
     .ch .c-gone { background: #f7f8fa; color: #c3c8d3; cursor: not-allowed; }
     .ch .c-none { color: #c3c8d3; }
     .ch .c-closed { background: repeating-linear-gradient(135deg, #f5f6f9 0 5px, #eceef3 5px 10px); color: #b5bac6; cursor: default; }

@@ -99,9 +99,9 @@ class FloorPlanQaSpecTest extends TestCase
     public function test_A1_cards_match_the_baseline(): void
     {
         $c = $this->plan()['counters'];
-        $this->assertSame(['in' => 43, 'returning' => 6, 'out' => 0, 'expected' => 14, 'staff' => 9, 'short' => 1], $c);
+        $this->assertSame(['in' => 43, 'returning' => 6, 'out' => 0, 'expected' => 14, 'staff' => 9, 'short' => 1], array_diff_key($c, array_flip(['late', 'scheduleShort'])));
 
-        $this->page()->assertSeeInOrder(['Checked in', '43', 'Checked out · returning', '6', 'Checked out', '0', 'Expected', '14', 'Staff on the floor', '9', 'Rooms below ratio', '1']);
+        $this->page()->assertSeeInOrder(['Checked in', '43', 'Checked out · returning', '6', 'Checked out', '0', 'Still to come', '14', 'Staff on the floor', '9', 'Rooms below ratio', '1']);
     }
 
     public function test_A2_checked_in_is_the_sum_of_the_rooms(): void

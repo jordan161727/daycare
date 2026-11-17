@@ -59,6 +59,29 @@ class StaffRoleLabelTest extends TestCase
             ->assertSessionHasErrors('employment');
     }
 
+    /**
+     * QA, 17 Nov 2026: the header said "Teacher · FT · Infant" while the Role
+     * select said "Not set" — the header fell back to the account role, the
+     * form reads job_role. Both read job_role now.
+     */
+    public function test_the_profile_header_and_the_role_select_read_the_same_field(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'job_role' => 'Director']);
+        $infant = User::factory()->create(['role' => 'teacher', 'job_role' => null, 'employment' => 'FT', 'classroom' => 'Infant', 'name' => 'Infant Teacher']);
+
+        $html = $this->actingAs($admin)->get(route('staff.show', $infant))->assertOk()->getContent();
+        $this->assertStringContainsString('Role not set · FT · Infant', $html);
+        $this->assertStringNotContainsString('>Teacher · FT', $html);
+        // …and the Role select has nothing chosen, so it says "Not set" too.
+        $this->assertMatchesRegularExpression('/name="job_role">\s*<option value="">Not set<\/option>/', $html);
+        $this->assertDoesNotMatchRegularExpression('/name="job_role">(?:(?!<\/select>).)*selected/s', $html);
+
+        $infant->update(['job_role' => 'Assistant']);
+        $html = $this->actingAs($admin)->get(route('staff.show', $infant))->assertOk()->getContent();
+        $this->assertStringContainsString('Assistant · FT · Infant', $html);
+        $this->assertMatchesRegularExpression('/<option value="Assistant" selected/', $html);
+    }
+
     public function test_staff_attendance_leads_with_the_same_job_role_as_the_staff_page(): void
     {
         $admin = User::factory()->create(['role' => 'admin', 'job_role' => 'Director']);

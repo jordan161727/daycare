@@ -170,11 +170,47 @@ class HolidayTest extends TestCase
     {
         $lastWednesday = '2026-07-22';
 
+        // Refused under the field now, not a warning that nothing happened
+        // (QA, 17 Nov 2026).
         $this->actingAs($this->admin)
             ->post(route('holidays.store'), ['closed_on' => $lastWednesday, 'reason' => 'Too late'])
-            ->assertSessionHas('warning');
+            ->assertSessionHasErrors(['closed_on' => 'That week has already ended and can no longer be closed.']);
 
         $this->assertDatabaseCount('closure_days', 0);
+    }
+
+    public function test_a_weekend_date_is_refused_with_a_message(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('holidays.store'), ['closed_on' => '2026-08-01', 'reason' => 'Saturday'])
+            ->assertSessionHasErrors(['closed_on' => 'The center is not open on weekends — pick a weekday.']);
+
+        $this->actingAs($this->admin)
+            ->post(route('holidays.store'), ['closed_on' => '2026-07-30', 'ends_on' => '2026-08-02', 'reason' => 'Ends Sunday'])
+            ->assertSessionHasErrors('ends_on');
+
+        $this->assertDatabaseCount('closure_days', 0);
+    }
+
+    public function test_the_date_pickers_start_at_the_first_open_week_and_grey_out_weekends(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('holidays.index'))->assertOk()->getContent();
+
+        // Monday 27 July: this week is still open.
+        $this->assertSame(3, substr_count($html, 'min="2026-07-27" data-date-weekdays'));
+
+        // Saturday: this week has ended, so the first day is next Monday.
+        $this->travelTo(Carbon::parse('2026-08-01 09:00:00'));
+        $html = $this->actingAs($this->admin)->get(route('holidays.index'))->assertOk()->getContent();
+        $this->assertStringContainsString('min="2026-08-03" data-date-weekdays', $html);
+    }
+
+    public function test_the_moving_holidays_note_only_points_at_a_list_that_is_there(): void
+    {
+        $html = $this->actingAs($this->admin)->get(route('holidays.index'))->assertOk()->getContent();
+        $this->assertStringNotContainsString('set up separately', $html);
+        $this->assertStringNotContainsString('list above', $html);
+        $this->assertStringContainsString('cannot be added here yet', $html);
     }
 
 

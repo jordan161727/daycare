@@ -28,7 +28,7 @@
 
     $facts = [
         ['label' => 'Email', 'value' => $user->email, 'icon' => 'M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'],
-        ['label' => 'Phone #', 'value' => $user->phone, 'icon' => 'M3 5a2 2 0 012-2h2.6a1 1 0 01.97.757l.9 3.6a1 1 0 01-.28.96l-1.6 1.6a14 14 0 006.5 6.5l1.6-1.6a1 1 0 01.96-.28l3.6.9a1 1 0 01.75.97V19a2 2 0 01-2 2h-1C9.7 21 3 14.3 3 6V5z'],
+        ['label' => 'Phone #', 'value' => \App\Models\Person::displayPhone($user->phone),'icon' => 'M3 5a2 2 0 012-2h2.6a1 1 0 01.97.757l.9 3.6a1 1 0 01-.28.96l-1.6 1.6a14 14 0 006.5 6.5l1.6-1.6a1 1 0 01.96-.28l3.6.9a1 1 0 01.75.97V19a2 2 0 01-2 2h-1C9.7 21 3 14.3 3 6V5z'],
         ['label' => 'Birthday', 'value' => $user->dob?->format('M j, Y'), 'icon' => 'M12 8a2 2 0 100-4 2 2 0 000 4zm0 0v3m-7 3a3 3 0 003-3h8a3 3 0 003 3m-14 0v5a1 1 0 001 1h12a1 1 0 001-1v-5m-14 0a3 3 0 013-3h8a3 3 0 013 3'],
         ['label' => 'Started', 'value' => $user->start_date?->format('M j, Y'), 'icon' => 'M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'],
     ];
@@ -39,10 +39,10 @@
 @endphp
 
 @section('content')
-<x-page-header title="My Profile" subtitle="Update your photo, contact details, and password." />
+<x-page-title eyebrow="Your account" title="My Profile" subtitle="Update your photo, contact details, and password." />
 
 @if(session('success'))
-    <div x-data="{ shown: true }" x-show="shown" x-transition.opacity class="mt-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+    <div x-data="{ shown: true }" x-show="shown" x-transition.opacity class="mt-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
         <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         <span class="flex-1">{{ session('success') }}</span>
         <button type="button" @click="shown = false" class="text-lg leading-none opacity-60 hover:opacity-100" aria-label="Dismiss">&times;</button>
@@ -53,7 +53,7 @@
 
     {{-- The photo lives up here with the name, where a profile page puts it, and
          reaches the details form below by id. --}}
-    <section class="glass-card mt-6 overflow-hidden rounded-2xl">
+    <section class="glass-card mt-5 overflow-hidden rounded-2xl">
         <div class="h-24 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400 sm:h-28"></div>
 
         <div class="px-6 pb-6 sm:px-8 sm:pb-8">
@@ -116,7 +116,7 @@
         </div>
     </section>
 
-    <div class="mt-6 grid gap-6 xl:grid-cols-3">
+    <div class="mt-5 grid gap-5 xl:grid-cols-3">
 
         {{-- What the user owns. --}}
         <form id="profile-form" method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data" class="space-y-6 xl:col-span-2">
@@ -193,7 +193,14 @@
                     <span class="card-icon"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0v4m-9 0h10a1 1 0 011 1v7a1 1 0 01-1 1H7a1 1 0 01-1-1v-7a1 1 0 011-1z"/></svg></span>
                     Employment
                 </h2>
-                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Set by an administrator. Ask the director if something here is wrong.</p>
+                {{-- An administrator is the one who sets these, so "ask the
+                     director" sent them to themselves (QA, 17 Nov 2026): they
+                     get the place to change it instead. --}}
+                @if($user->isAdmin())
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400" data-employment-note>Change these on your <a href="{{ route('staff.show', $user) }}" class="font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Staff record</a>.</p>
+                @else
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400" data-employment-note>Set by an administrator. Ask the director if something here is wrong.</p>
+                @endif
 
                 <dl class="mt-5 space-y-3">
                     @foreach($employment as $label => $value)

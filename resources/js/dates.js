@@ -80,6 +80,10 @@ export function upgradeDateInput(input) {
         disableMobile: true,
         minDate: input.min || undefined,
         maxDate: input.max || undefined,
+        // data-date-weekdays: Saturdays and Sundays greyed out and not
+        // pickable — the Holidays page, where the center is shut anyway
+        // (QA, 17 Nov 2026). The server refuses a typed one too.
+        disable: input.dataset.dateWeekdays !== undefined ? [(date) => date.getDay() === 0 || date.getDay() === 6] : [],
         // Monday first, as the register's week runs.
         locale: { firstDayOfWeek: 1 },
         // Where the calendar opens. 'auto' flips it above a field low on the

@@ -16,7 +16,7 @@
 
 </head>
 
-<body class="bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100" x-data="appShell" :class="{ 'overflow-hidden': mobileOpen }">
+<body class="bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100" x-data="appShell" @keydown.escape.window="closeMenu()" @keydown.tab.window="trapMenuFocus($event)" :class="{ 'overflow-hidden': mobileOpen }">
 
 <div class="min-h-screen desktop:flex">
 

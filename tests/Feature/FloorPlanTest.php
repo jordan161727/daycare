@@ -71,7 +71,7 @@ class FloorPlanTest extends TestCase
 
         // PreK: one spare. The counters add up.
         $this->assertSame(['1 spare', 'spare'], [$rooms['PreK']['status'], $rooms['PreK']['tone']]);
-        $this->assertSame(['in' => 17, 'returning' => 0, 'out' => 0, 'expected' => 0, 'staff' => 3, 'short' => 1], $plan['counters']);
+        $this->assertSame(['in' => 17, 'returning' => 0, 'out' => 0, 'expected' => 0, 'staff' => 3, 'short' => 1], array_diff_key($plan['counters'], array_flip(['late', 'scheduleShort'])));
 
         // And the page: the counters, the map, the flag, the panel's data.
         $this->actingAs($this->admin)->get(route('floor-plan.index'))->assertOk()

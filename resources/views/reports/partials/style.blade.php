@@ -38,6 +38,9 @@
     .ch .cc.ab { color: #be123c; font-weight: 700; font-size: 12.5px; background: #fff5f6; }
     .ch .cc.ck { color: #15803d; font-weight: 700; font-size: 13px; }
     .ch .closedc { background: repeating-linear-gradient(135deg, #f3f4f8 0 5px, #fff 5px 10px); }
+    .ch .cc.nd { color: #92400e; font-weight: 700; font-size: 12.5px; background: #fff8e6; }
+    .ch .cc.noout span:last-child { color: #be123c; font-weight: 700; }
+    .ch .dh.nodata { background: #fff3d6; }
     .ch .lg { display: inline-block; width: 12px; height: 12px; border: 1px solid #e1e4ec; border-radius: 3px; vertical-align: -2px; }
     .ch tr.grp td { background: #f7f9fd; padding-top: 8px; padding-bottom: 6px; }
     .ch .tt { text-align: center; white-space: nowrap; padding: 4px 10px !important; font-variant-numeric: tabular-nums; border-left: 1px solid #f0f2f7; }

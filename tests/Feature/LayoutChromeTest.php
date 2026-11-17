@@ -23,7 +23,7 @@ class LayoutChromeTest extends TestCase
         $this->assertStringContainsString('desktop:h-screen', $html);
 
         // The hamburger is the only way in below that breakpoint.
-        $this->assertStringContainsString('@click="mobileOpen = true"', $html);
+        $this->assertStringContainsString('@click="openMenu()"', $html);
         $this->assertStringContainsString('desktop:hidden', $html);
 
         // The old width-only breakpoint is gone, so tablets never pin the sidebar.

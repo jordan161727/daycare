@@ -127,6 +127,51 @@ class DssAttendance
     }
 
     /* ---------------------------------------------------------------
+     * Days with nothing on them
+     * --------------------------------------------------------------- */
+
+    /**
+     * Weekdays already gone, not closures, on which nobody in the whole
+     * centre was signed in (QA #3, 17 Nov 2026).
+     *
+     * A day like that is not a hundred absences: it is a day the register
+     * never got — a closure nobody entered, or sign-ins that never reached
+     * the app. Until a person says which (a closure, or Absent on the DSS
+     * page), its booked children are "no sign-ins — check", never an A, and
+     * the day is kept out of the KinderConnect file. Centre-wide on purpose,
+     * whatever room or filter is on screen: one quiet room on a busy day is
+     * an ordinary day of absences.
+     *
+     * @return array<string, true> date => true
+     */
+    public static function unrecordedDays(Carbon $from, Carbon $to): array
+    {
+        $first = $from->toDateString();
+        $last = min($to->toDateString(), today()->subDay()->toDateString());
+        if ($first > $last) {
+            return [];
+        }
+
+        $closed = ClosureDay::betweenDates($from, Carbon::parse($last))->get()
+            ->mapWithKeys(fn ($d) => [$d->closed_on->toDateString() => true])->all();
+        $signed = Attendance::query()->toBase()
+            ->whereBetween('attendance_date', [$first, $last])
+            ->whereNotNull('signed_in_at')
+            ->distinct()->pluck('attendance_date')
+            ->mapWithKeys(fn ($d) => [Carbon::parse($d)->toDateString() => true])->all();
+
+        $out = [];
+        for ($d = Carbon::parse($first); $d->toDateString() <= $last; $d->addDay()) {
+            $iso = $d->toDateString();
+            if ($d->dayOfWeekIso <= 5 && ! isset($closed[$iso]) && ! isset($signed[$iso])) {
+                $out[$iso] = true;
+            }
+        }
+
+        return $out;
+    }
+
+    /* ---------------------------------------------------------------
      * The month
      * --------------------------------------------------------------- */
 
@@ -176,6 +221,7 @@ class DssAttendance
             ->values();
 
         $closed = ClosureDay::betweenDates($start, $end)->get()->mapWithKeys(fn ($d) => [$d->closed_on->toDateString() => $d->label()])->all();
+        $unrecorded = self::unrecordedDays($start, $end);
 
         $days = [];
         $weeks = [];
@@ -186,7 +232,7 @@ class DssAttendance
             }
             $iso = $d->toDateString();
             $weekKey ??= $iso;
-            $days[] = ['date' => $iso, 'd' => $d->day, 'dow' => substr($d->format('D'), 0, 2), 'closed' => $closed[$iso] ?? null, 'today' => $iso === $today, 'future' => $iso > $today, 'week' => $weekKey];
+            $days[] = ['date' => $iso, 'd' => $d->day, 'dow' => substr($d->format('D'), 0, 2), 'closed' => $closed[$iso] ?? null, 'today' => $iso === $today, 'future' => $iso > $today, 'week' => $weekKey, 'nodata' => isset($unrecorded[$iso])];
             $weeks[$weekKey] = ['key' => $weekKey, 'from' => Carbon::parse($weekKey)->day, 'to' => $d->day, 'done' => $d->lt(today())];
             if ($d->dayOfWeekIso === 5) {
                 $weekKey = null;
@@ -217,6 +263,10 @@ class DssAttendance
             'total' => $all->filter(fn (Child $c) => ! $subsidyOnly || $c->isDss())->count(),
             'subsidyCount' => $subsidyCount,
             'rows' => $rows,
+            // The two things the page asks a person to look at (QA #3 and #5):
+            // days nobody was signed in, and sign-ins never signed out.
+            'unrecorded' => array_map(fn ($iso) => Carbon::parse($iso)->format('D M j'), array_keys($unrecorded)),
+            'noOut' => array_sum(array_column($rows, 'noOut')),
         ];
     }
 
@@ -239,6 +289,7 @@ class DssAttendance
         $pastBooked = 0;
         $allBooked = 0;
         $over = 0;
+        $noOut = 0;
 
         foreach ($days as $day) {
             $iso = $day['date'];
@@ -274,6 +325,9 @@ class DssAttendance
                 // Marked not scheduled by hand: the default look, on purpose.
             } elseif ($segs !== []) {
                 $cell = $this->timedCell($segs, $scheduled, $split, $isToday, $agreed);
+                if ($cell['noOut']) {
+                    $noOut++;
+                }
                 foreach ($segs as $g) {
                     if ($g[0] !== null && $g[1] !== null) {
                         $w['act'] += $g[1] - $g[0];
@@ -291,6 +345,9 @@ class DssAttendance
                 }
                 $cell = ['st' => 'plan', 'cls' => 'c-plan', 'lines' => $lines ?: [['t' => '·', 'cls' => '']], 'tip' => 'Planned · '.$this->segText($agreed), 'segs' => $this->segStrings($agreed), 'editable' => true, 'future' => true];
                 $w['plan'] += $agreedDay;
+            } elseif ($scheduled && $day['nodata']) {
+                // Nobody in the centre was signed in: a day to check, not an absence (QA #3).
+                $cell = ['st' => 'open', 'cls' => 'c-open c-check', 'lines' => [['t' => 'check', 'cls' => '']], 'tip' => 'No sign-ins for anyone this day — enter a closure, or mark Absent or put the times in. Left out of the KinderConnect file until then', 'segs' => $this->segStrings($agreed), 'editable' => true, 'future' => false, 'nodata' => true];
             } elseif ($scheduled) {
                 $cell = ['st' => 'open', 'cls' => 'c-open', 'lines' => [['t' => 'no time', 'cls' => '']], 'tip' => 'Expected — no times yet', 'segs' => $this->segStrings($agreed), 'editable' => true, 'future' => false];
                 if ($isToday) {
@@ -360,6 +417,8 @@ class DssAttendance
             'cinMissing' => $child->isDss() && blank($child->dss_cin),
             'wd' => $child->withdrawn_on ? 'Withdrawn · last day '.$child->withdrawn_on->format('M j').(filled($child->withdrawal_reason) ? ' · '.$child->withdrawal_reason : '').(filled($child->withdrawal_note) ? ' — '.$child->withdrawal_note : '') : '',
             'note' => (string) ($child->enrollment_note ?? ''),
+            'noOut' => $noOut,
+            'noOutTxt' => $noOut ? $noOut.' '.($noOut === 1 ? 'day' : 'days').' with no sign-out — 0 h counted until a time out is put in' : '',
             'cells' => $cells,
             'weeks' => $weekCells,
             'over' => $over,
@@ -411,6 +470,13 @@ class DssAttendance
     private function timedCell(array $segs, bool $scheduled, bool $split, bool $isToday, array $agreed): array
     {
         $t = fn ($m) => $m === null ? '—' : self::clock($m);
+        // Signed in on a day already gone and never signed out (QA #5): said
+        // so on the cell, not a dash that reads like an ordinary blank. The
+        // visit counts 0 h and stays out of the KinderConnect file until a
+        // time out is put in — no time is made up for it.
+        $open = fn ($g) => ! $isToday && $g[0] !== null && $g[1] === null;
+        $out = fn ($g) => $open($g) ? ['t' => 'no out', 'cls' => 'noout'] : ['t' => $t($g[1]), 'cls' => ''];
+        $noOut = count(array_filter($segs, $open)) > 0;
         $lines = [];
 
         if ($split) {
@@ -418,25 +484,26 @@ class DssAttendance
             $pm = count($segs) > 1 ? $segs[1] : ($am ? null : $segs[0]);
             if (count($agreed) > 1 || $am) {
                 $lines[] = ['t' => $am ? $t($am[0]) : '—', 'cls' => ''];
-                $lines[] = ['t' => $am ? $t($am[1]) : '—', 'cls' => ''];
+                $lines[] = $am ? $out($am) : ['t' => '—', 'cls' => ''];
             }
             $lines[] = ['t' => $pm ? $t($pm[0]) : '—', 'cls' => $lines ? 'pm' : ''];
-            $lines[] = ['t' => $pm ? $t($pm[1]) : '—', 'cls' => ''];
+            $lines[] = $pm ? $out($pm) : ['t' => '—', 'cls' => ''];
         } else {
             $lines[] = ['t' => $t($segs[0][0]), 'cls' => ''];
-            $lines[] = ['t' => $t($segs[0][1]), 'cls' => ''];
+            $lines[] = $out($segs[0]);
         }
 
         $text = implode(', ', array_map(fn ($g) => $t($g[0]).'–'.$t($g[1]), $segs));
 
         return [
             'st' => 'pres',
-            'cls' => $scheduled ? 'c-in' : 'c-bill',
+            'cls' => ($scheduled ? 'c-in' : 'c-bill').($noOut ? ' c-noout' : ''),
             'lines' => $lines,
-            'tip' => $text.($scheduled ? '' : ' · not one of their days').($isToday && end($segs)[1] === null ? ' · still in' : ''),
+            'tip' => $text.($scheduled ? '' : ' · not one of their days').($isToday && end($segs)[1] === null ? ' · still in' : '').($noOut ? ' · No sign-out — counts 0 h and is left out of the KinderConnect file until a time out is put in' : ''),
             'segs' => array_map(fn ($g) => ['in' => self::clock($g[0]), 'out' => self::clock($g[1])], $segs),
             'editable' => true,
             'future' => false,
+            'noOut' => $noOut,
         ];
     }
 
@@ -573,6 +640,8 @@ class DssAttendance
         $missingCin = 0;
         $long = 0;
         $overCap = [];
+        $noOut = [];
+        $unrecorded = [];
 
         $children = Child::whereIn('id', array_column($data['rows'], 'id'))->get()->keyBy('id');
 
@@ -596,6 +665,11 @@ class DssAttendance
                 $date = Carbon::parse($iso)->format('m/d/Y');
                 $base = [$row['last'], $row['first'], $dob, (string) $child->dss_cin, (string) $child->dss_case_no, (string) $row['room'], $date];
 
+                if (! empty($cell['nodata'])) {
+                    $unrecorded[$iso] = true;
+
+                    continue;
+                }
                 if ($cell['st'] === 'abs') {
                     if ($withAbsences) {
                         $rows[] = [...$base, '', '', '', 'Y'];
@@ -611,6 +685,13 @@ class DssAttendance
                     $in = self::minutes($g['in']);
                     $out = self::minutes($g['out']);
                     if ($in === null) {
+                        continue;
+                    }
+                    // Never signed out (QA #5): no time out is made up for the
+                    // county. The visit waits, named in the checks, until one is put in.
+                    if ($out === null) {
+                        $noOut[] = $row['first'].' '.$row['last'].' '.Carbon::parse($iso)->format('M j');
+
                         continue;
                     }
                     if ($out !== null && $out - $in > 10 * 60) {
@@ -631,6 +712,14 @@ class DssAttendance
         }
         if ($overCap) {
             $checks[] = ['tag' => 'Over cap', 'cls' => 'bad', 'text' => implode(', ', $overCap).' went over their authorized weekly hours — the extra time may not be paid.'];
+        }
+        if ($unrecorded) {
+            ksort($unrecorded);
+            $checks[] = ['tag' => 'Fix first', 'cls' => 'bad', 'text' => 'Nobody was signed in on '.implode(', ', array_map(fn ($iso) => Carbon::parse($iso)->format('D M j'), array_keys($unrecorded))).' — enter a closure, or mark the children Absent or put their times in. Those days are left out of the file until then, not sent as absences.'];
+        }
+        if ($noOut) {
+            $n = count($noOut);
+            $checks[] = ['tag' => 'Fix first', 'cls' => 'bad', 'text' => $n.' '.($n === 1 ? 'visit has' : 'visits have').' no sign-out ('.implode(', ', array_slice($noOut, 0, 5)).($n > 5 ? ' and '.($n - 5).' more' : '').') — '.($n === 1 ? 'it is' : 'they are').' left out of the file until a time out is put in on the grid.'];
         }
         if ($long) {
             $checks[] = ['tag' => 'Check', 'cls' => 'warn', 'text' => $long.' '.($long === 1 ? 'visit is' : 'visits are').' longer than 10 hours.'];

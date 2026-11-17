@@ -51,6 +51,8 @@ class Reports
         $today = today()->toDateString();
         $closed = $this->closed($start, $end);
         $days = $this->weekdays($start, $end);
+        // Days nobody in the centre was signed in: "?" to check, not an A (QA #3).
+        $unrecorded = DssAttendance::unrecordedDays($start, $end);
 
         $children = Child::visibleTo($viewer)
             ->where(fn ($q) => $q->where('status', 'Active')->orWhere(fn ($w) => $w->whereNotNull('withdrawn_on')->whereDate('withdrawn_on', '>=', $start->toDateString())))
@@ -74,6 +76,8 @@ class Reports
         $csv = [['Room', 'Last name', 'First name', 'Date', 'Status', 'In', 'Out', 'Hours']];
         $totP = 0;
         $totA = 0;
+        $totCheck = 0;
+        $totNoOut = 0;
 
         foreach ($rooms as $r) {
             $kids = $byRoom[$r];
@@ -99,10 +103,25 @@ class Reports
                         [$in, $out, $m] = $this->firstLast($onDay);
                         $p++;
                         $mins += $m;
-                        $csv[] = [$r, $child->last_name, $child->first_name, $date, 'Present', $in, $out ?? '', $m ? number_format($m / 60, 2) : ''];
+                        // A day gone by with a sign-in never signed out (QA #5):
+                        // flagged, and that visit counts 0 h — no time is made up.
+                        $noOut = $iso < $today && $onDay->contains(fn ($x) => $x->signed_in_at && ! $x->signed_out_at);
+                        if ($noOut) {
+                            $totNoOut++;
+                        }
+                        $csv[] = [$r, $child->last_name, $child->first_name, $date, $noOut ? 'Present - no sign-out' : 'Present', $in, $noOut ? '' : ($out ?? ''), $m ? number_format($m / 60, 2) : ''];
                         // Signed in today and not out yet reads as here, not as
                         // a dash that looks like a missing time (QA #12).
-                        $cells[] = $mode === 'marks' ? ['cls' => 'pr ck', 'a' => '✓', 'b' => ''] : ['cls' => 'pr', 'a' => $in, 'b' => $out ?? ($iso === $today ? 'here' : '—')];
+                        $cells[] = $mode === 'marks'
+                            ? ['cls' => 'pr ck'.($noOut ? ' noout' : ''), 'a' => '✓', 'b' => $noOut ? 'no out' : '']
+                            : ['cls' => 'pr'.($noOut ? ' noout' : ''), 'a' => $in, 'b' => $noOut ? 'no out' : ($out ?? ($iso === $today ? 'here' : '—'))];
+                    } elseif (isset($unrecorded[$iso]) && $scheduled && $mark === null) {
+                        // Nobody in the centre was signed in that day: a day to
+                        // check — a closure not entered, or sign-ins never saved
+                        // — not an absence for every child booked (QA #3).
+                        $totCheck++;
+                        $csv[] = [$r, $child->last_name, $child->first_name, $date, 'No sign-ins - check', '', '', ''];
+                        $cells[] = ['cls' => 'nd', 'a' => '?', 'b' => ''];
                     } elseif ($iso <= $today && ($mark?->mark === DssDayMark::ABSENT || ($scheduled && $iso < $today && $mark?->mark !== DssDayMark::NONE))) {
                         $a++;
                         $csv[] = [$r, $child->last_name, $child->first_name, $date, 'Absent', '', '', ''];
@@ -120,7 +139,12 @@ class Reports
         return [
             'title' => $start->format('F Y').($room ? ' · '.$room : ' · all rooms'),
             'sub' => $totP.' days present · '.$totA.' absences'.($start->isSameMonth(today()) ? ' · up to today, '.today()->format('D M j') : ''),
-            'days' => array_map(fn ($d) => ['dow' => $d['label'], 'n' => $d['n'], 'cls' => isset($closed[$d['date']]) ? 'closed' : ($d['date'] > $today ? 'fut' : '')], $days),
+            // What a person still has to look at, said once above the sheet.
+            'review' => array_values(array_filter([
+                $totCheck ? 'No sign-ins for anyone on '.implode(', ', array_map(fn ($iso) => Carbon::parse($iso)->format('D M j'), array_keys($unrecorded))).' — '.$totCheck.' booked '.($totCheck === 1 ? 'day is' : 'days are').' marked ? and not counted as absences. Enter a closure, or put the day right on the DSS page.' : null,
+                $totNoOut ? $totNoOut.' '.($totNoOut === 1 ? 'day has' : 'days have').' a sign-in with no sign-out — that visit counts 0 h until a time out is put in.' : null,
+            ])),
+            'days' => array_map(fn ($d) => ['dow' => $d['label'], 'n' => $d['n'], 'cls' => isset($closed[$d['date']]) ? 'closed' : ($d['date'] > $today ? 'fut' : (isset($unrecorded[$d['date']]) ? 'nodata' : ''))], $days),
             'rows' => $rows,
             'csv' => $csv,
             'file' => 'child-attendance-'.strtolower($start->format('F-Y')).($room ? '-'.str_replace(' ', '-', strtolower($room)) : '').'.csv',

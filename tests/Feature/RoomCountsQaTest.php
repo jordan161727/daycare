@@ -91,7 +91,7 @@ class RoomCountsQaTest extends TestCase
             RoomCounts::child(booked: false, arrived: false),
         ]);
 
-        $this->assertSame(['enrolled' => 5, 'expected' => 4, 'in' => 2, 'absent' => 1, 'still_to_come' => 1, 'not_in' => 3], $counts);
+        $this->assertSame(['enrolled' => 5, 'expected' => 4, 'in' => 2, 'absent' => 1, 'still_to_come' => 1, 'late' => 0, 'not_in' => 3], $counts);
         $this->assertSame($counts['expected'], $counts['in'] + $counts['absent'] + $counts['still_to_come']);
 
         // Once the day is over the one still to come is an absence.
@@ -108,11 +108,11 @@ class RoomCountsQaTest extends TestCase
     {
         $response = $this->actingAs($this->admin)->get(route('attendance.index', ['date' => self::DAY]))->assertOk();
 
-        $this->assertSame(['enrolled' => 5, 'expected' => 4, 'in' => 2, 'absent' => 1, 'still_to_come' => 1, 'not_in' => 3], $response->viewData('dayCounts'));
+        $this->assertSame(['enrolled' => 5, 'expected' => 4, 'in' => 2, 'absent' => 1, 'still_to_come' => 1, 'late' => 0, 'not_in' => 3], $response->viewData('dayCounts'));
         $this->assertFalse($response->viewData('dayIsOver'));
 
         $html = $response->getContent();
-        $this->assertMatchesRegularExpression('/x-text="expectedCount">4<\/b> expected/', $html);
+        $this->assertMatchesRegularExpression('/x-text="expectedCount">4<\/b> booked today/', $html);
         $this->assertMatchesRegularExpression('/x-text="awaitedCount">1<\/b> still to come/', $html);
         $this->assertStringContainsString("if (! booked && ! arrived && ! marked) continue;", $html);
     }
@@ -192,7 +192,7 @@ class RoomCountsQaTest extends TestCase
             ->assertSee('data-counters-view="afternoon"', false)
             ->assertSeeInOrder(['In at 3:00 PM', '3', 'Back from school', 'Checked out', 'Still to come', 'Staff on the schedule', 'Rooms below ratio']);
         $this->actingAs($this->admin)->get(route('floor-plan.index'))->assertOk()
-            ->assertSeeInOrder(['Checked in', '2', 'Checked out · returning', 'Checked out', 'Expected', '1', 'Staff on the floor']);
+            ->assertSeeInOrder(['Checked in', '2', 'Checked out · returning', 'Checked out', 'Still to come', '1', 'Staff on the floor']);
     }
 
     /** #9 — the floor plan carries dark-mode rules for its own light styles. */

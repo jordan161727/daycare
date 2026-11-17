@@ -3,6 +3,7 @@ import Alpine from 'alpinejs';
 import 'flatpickr/dist/flatpickr.min.css';
 import { watchDateInputs } from './dates';
 import attendanceComments from './attendance-comments';
+import appShell from './app-shell';
 
 window.Alpine = Alpine;
 
@@ -151,18 +152,7 @@ Alpine.data('documentImport', () => ({
 }));
 
 
-Alpine.data('appShell', () => ({
-    mobileOpen: false,
-    collapsed: false,
-    dark: localStorage.getItem('daycare-dark') === 'true',
-    init() {
-        this.$watch('dark', value => {
-            document.documentElement.classList.toggle('dark', value);
-            localStorage.setItem('daycare-dark', value);
-        });
-        document.documentElement.classList.toggle('dark', this.dark);
-    },
-}));
+Alpine.data('appShell', appShell);
 
 
 // Shows the picked photo straight away, so the profile page confirms the choice

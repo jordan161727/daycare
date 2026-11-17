@@ -282,7 +282,11 @@ class CheckInController extends Controller implements \Illuminate\Routing\Contro
             return [
                 'id' => $child->id,
                 'booked' => $booked,
-                'name' => $child->last_name.', '.$child->first_name,
+                // Written the centre's way (Settings → Children → Names) and
+                // ordered by surname whichever way it reads — the shared
+                // helpers, so this page cannot disagree with the roster.
+                'name' => $child->displayName(),
+                'sort' => $child->sortName(),
                 'lan' => $child->lan,
                 // The day of the child's latest comment before this one, or null.
                 'last_comment_on' => $lastCommentOn[$child->id] ?? null,
@@ -301,7 +305,7 @@ class CheckInController extends Controller implements \Illuminate\Routing\Contro
                 // the rest of the app gives them — rendered once here so the
                 // cards are markup the browser only has to place.
                 'first_name' => $child->first_name,
-                'display' => trim($child->first_name.' '.$child->last_name),
+                'display' => $child->displayName(),
                 // The alerts on the child's record — allergy, medical, court
                 // order — shown when the child is selected (Phase 0's approved
                 // behaviour, drawn from the Phase 2 record). Read-only here.

@@ -1287,7 +1287,7 @@ function checkInGrid() { return {
             .filter(row => this.room === '' || row.room === this.room)
             .filter(row => ! this.withComments || this.commentCount(row) > 0)
             .filter(row => term === '' || (row.display + ' ' + row.lan).toLowerCase().includes(term))
-            .sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.display.localeCompare(b.display));
+            .sort((a, b) => this.dayRank(a) - this.dayRank(b) || a.sort.localeCompare(b.sort));
     },
 
     /** Where a child's day puts them: in 0, gone home 1, not yet here 2. */

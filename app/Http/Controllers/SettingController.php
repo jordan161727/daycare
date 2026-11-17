@@ -132,6 +132,7 @@ class SettingController extends Controller implements \Illuminate\Routing\Contro
             'rooms' => $centre->rooms(),
             'centre' => collect(\App\Services\CentreSettings::KEYS)->map(fn ($meta, $key) => $centre->get($key))->all(),
             'warnings' => $centre->warnings(),
+            'outsideHours' => $centre->childrenOutsideHours(),
         ]);
     }
 

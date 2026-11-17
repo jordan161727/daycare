@@ -966,7 +966,7 @@
            otherwise an imported form shows a room that is one edit out of date. */
         (() => {
             const bands = @js(\App\Services\ClassroomAssignment::BANDS);
-            const agesOutAt = @js(\App\Services\ClassroomAssignment::AGES_OUT_AT_YEARS);
+            const ageLabels = @js(collect(\App\Services\ClassroomAssignment::rooms())->mapWithKeys(fn ($room) => [$room => \App\Services\ClassroomAssignment::ageLabel($room)]));
             const birth = document.getElementById('birth_date');
             const picked = document.querySelector('[name="classroom_override"]');
             const effective = document.getElementById('classroom-effective');
@@ -983,9 +983,12 @@
                 result.setDate(Math.min(day, new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate()));
                 return result;
             };
-            const startOf = (dob, band) => band.weeks
-                ? new Date(dob.getTime() + band.weeks * 7 * 86400000)
-                : addMonths(dob, band.months);
+            const startOf = (dob, band) => band.min_weeks
+                ? new Date(dob.getTime() + band.min_weeks * 7 * 86400000)
+                : addMonths(dob, band.min_months);
+            // ClassroomAssignment::ageFits: from the minimum, up to (not
+            // including) the maximum.
+            const fits = (band, dob, today) => today >= startOf(dob, band) && today < addMonths(dob, band.max_months);
 
             const automaticRoom = () => {
                 if (!birth.value) return undefined;
@@ -993,21 +996,19 @@
                 if (isNaN(dob)) return undefined;
                 const now = new Date();
                 const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                if (today < startOf(dob, bands[0]) || today >= addMonths(dob, agesOutAt * 12)) return null;
 
-                let room = null;
-                for (const band of bands) {
-                    if (today < startOf(dob, band)) break;
-                    room = band.room;
-                }
-                return room;
+                return bands.find((band) => fits(band, dob, today))?.room ?? null;
             };
 
             const refresh = () => {
                 const automatic = automaticRoom();
                 const chosen = picked?.value || '';
                 effective.textContent = chosen || automatic || 'Add a date of birth';
-                note.textContent = automatic
+                // A room picked by hand that the age is outside of is said
+                // here as it is on the register (second QA brief, Nov 2026).
+                note.textContent = automatic && chosen && chosen !== automatic
+                    ? `⚠ ${chosen} is for ${ageLabels[chosen] ?? 'other ages'}. Automatic: ${automatic}`
+                    : automatic
                     ? `Automatic: ${automatic}`
                     : automatic === null
                         ? 'No band covers this date of birth — set the room by hand.'

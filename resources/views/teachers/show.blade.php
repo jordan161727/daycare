@@ -25,10 +25,10 @@
         'Employment' => $teacher->employment ? $teacher->employmentLabel() : null,
         'Room' => $teacher->title,
         'Legal name (payroll)' => $teacher->legal_name,
-        'Phone' => $teacher->phone,
+        'Phone' => \App\Models\Person::displayPhone($teacher->phone),
         'Email' => $teacher->email,
         'Emergency contact' => $teacher->emergency_contact,
-        'Emergency phone' => $teacher->emergency_phone,
+        'Emergency phone' => \App\Models\Person::displayPhone($teacher->emergency_phone),
         'Started' => $teacher->start_date?->format('M j, Y'),
         'Date of birth' => $teacher->dob?->format('M j, Y'),
         'Transport' => $teacher->transport,
@@ -125,7 +125,7 @@
                     <p class="text-xs text-slate-500">
                         {{-- The room once, not twice: a title that is the room
                              name already said it. --}}
-                        {{ collect([$teacher->jobRole(), $teacher->classroom])->filter()->unique()->implode(' · ') ?: 'No room' }}
+                        {{ collect([$teacher->jobRoleOrLegacy() ?? 'Role not set', $teacher->classroom])->filter()->unique()->implode(' · ') ?: 'No room' }}
                     </p>
                     <p class="text-xs tabular-nums text-slate-400">{{ $teacher->staffId() }}</p>
 

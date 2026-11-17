@@ -7,12 +7,12 @@
 <div x-data="holidayDialog(@js($restores))" @keydown.escape.window="close()">
     {{-- A plain "&": the header escapes its title itself, so "&amp;" here
          came out on the page as the literal text (QA #11, 12 Nov 2026). --}}
-    <x-page-header title="Holidays & Closures" subtitle="The days the center is shut. Set one here and every room's attendance schedule closes for that day."/>
+    <x-page-title eyebrow="Office" title="Holidays & Closures" subtitle="The days the center is shut. Set one here and every room's attendance schedule closes for that day."/>
 
-    @if(session('success'))<div class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('success') }}</div>@endif
-    @if(session('warning'))<div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{{ session('warning') }}</div>@endif
+    @if(session('success'))<div class="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('success') }}</div>@endif
+    @if(session('warning'))<div class="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{{ session('warning') }}</div>@endif
 
-    <div class="mt-7 grid gap-5 xl:grid-cols-3">
+    <div class="mt-5 grid gap-5 xl:grid-cols-3">
 
         <div class="space-y-5 xl:col-span-1">
 
@@ -34,13 +34,13 @@
 
                     <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">
                         Date
-                        <input type="date" name="closed_on" required x-model.lazy="from" value="{{ old('closed_on') }}" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
+                        <input type="date" name="closed_on" required x-model.lazy="from" value="{{ old('closed_on') }}" min="{{ $firstOpenDay }}" data-date-weekdays class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         <x-input-error :messages="$errors->get('closed_on')" />
                     </label>
 
                     <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">
                         Last day <span class="font-normal">(optional — for a break)</span>
-                        <input type="date" name="ends_on" x-model.lazy="to" value="{{ old('ends_on') }}" class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
+                        <input type="date" name="ends_on" x-model.lazy="to" value="{{ old('ends_on') }}" min="{{ $firstOpenDay }}" data-date-weekdays class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         <x-input-error :messages="$errors->get('ends_on')" />
                     </label>
 
@@ -132,8 +132,17 @@
                      separately, by rules that know how to find them. Saying so
                      beats leaving a director hunting for a control that is not
                      there. US holidays as the examples, and no talk of seeders —
-                     that is our word, not the director's (QA #42, 12 Nov 2026). --}}
-                <p class="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">This form sets a fixed date, such as July 4. Holidays that move each year — Memorial Day, Labor Day, Thanksgiving — are set up separately, and appear in the list above with the date they next fall on.</p>
+                     that is our word, not the director's (QA #42, 12 Nov 2026).
+                     The page has no control for adding a moving one, so the
+                     copy only points at the list when there is one in it, and
+                     otherwise says what to do instead (QA, 17 Nov 2026). --}}
+                <p class="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400" data-moving-holidays-note>
+                    @if($rules->contains(fn ($rule) => $rule->moves()))
+                        This form sets a fixed date, such as July 4. Holidays that move each year — Memorial Day, Labor Day, Thanksgiving — show in the list above with the date they next fall on. They can be renamed or removed there, but not added from this page.
+                    @else
+                        This form sets a fixed date, such as July 4. Holidays that move each year — Memorial Day, Labor Day, Thanksgiving — cannot be added here yet. Close each one as a single date with Close a day.
+                    @endif
+                </p>
             </section>
         </div>
 
@@ -251,7 +260,7 @@
                     <div class="space-y-4">
                         <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">
                             Date
-                            <input type="date" name="closed_on" x-model="form.closed_on" required
+                            <input type="date" name="closed_on" x-model="form.closed_on" required min="{{ $firstOpenDay }}" data-date-weekdays
                                    class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         </label>
                         <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">

@@ -29,6 +29,17 @@
             </div>
         @endif
 
+        @if(($outsideHours ?? collect())->isNotEmpty())
+            {{-- Children whose agreed hours run past when their room or the center is open
+                 (CentreSettings::childrenOutsideHours). Listed so they get fixed; nothing is changed here. --}}
+            <div class="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100" role="alert" data-outside-hours>
+                <p class="font-semibold">{{ $outsideHours->count() }} {{ $outsideHours->count() === 1 ? 'child has' : 'children have' }} hours outside when the center is open</p>
+                <ul class="mt-1 list-inside list-disc space-y-0.5">
+                    @foreach($outsideHours as $row)<li data-outside-hours-child="{{ $row['child']->lan }}"><a href="{{ route('children.show', $row['child']) }}" class="font-medium underline">LAN {{ $row['child']->lan }} · {{ $row['child']->displayName() }}</a> ({{ $row['child']->classroom ?: 'no room' }}) — {{ $row['text'] }}</li>@endforeach
+                </ul>
+            </div>
+        @endif
+
         @if($errors->any())
             <div class="mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">{{ $errors->first() }}</div>
         @endif

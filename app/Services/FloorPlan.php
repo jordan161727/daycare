@@ -48,10 +48,15 @@ class FloorPlan
 
         $staff = $this->staff($today, $at, $timezone, $afternoon);
         $rooms = [];
+        // The dashboard's own room figures — booked today, still to come,
+        // late, the roster's cover — so the two screens cannot disagree
+        // (QA, 17 Nov 2026: Infant "9 expected" on one, "Expected 1" on the other).
+        $dayRooms = collect($day['ratios'])->keyBy('room');
 
         foreach (ClassroomAssignment::rooms() as $room) {
             $children = $roll->filter(fn (Child $child) => $child->classroom === $room);
             $state = fn (Child $child) => $day['states'][$child->id] ?? 'none';
+            $dayRoom = $dayRooms[$room] ?? [];
 
             // The afternoon counts the children booked to be here then: the
             // ones in now who are not picked up by then (nothing says they
@@ -66,16 +71,8 @@ class FloorPlan
             // The afternoon already counts them in, so it seats them once:
             // counting them again here put them on two seats and took two
             // places off "free".
-            $booked = $afternoon ? 0 : RoomCounts::tally($children->map(fn (Child $c) => RoomCounts::child(
-                booked: $state($c) !== 'none',
-                arrived: in_array($state($c), ['in', 'returning', 'out'], true),
-                absent: $state($c) === 'absent',
-            )))['still_to_come'];
-            $expectedHere = RoomCounts::tally($children->map(fn (Child $c) => RoomCounts::child(
-                booked: $state($c) !== 'none',
-                arrived: in_array($state($c), ['in', 'returning', 'out'], true),
-                absent: $state($c) === 'absent',
-            )))['expected'];
+            $booked = $afternoon ? 0 : (int) ($dayRoom['stillToCome'] ?? 0);
+            $expectedHere = (int) ($dayRoom['expected'] ?? 0);
             $returning = $children->filter(fn (Child $c) => $state($c) === 'returning');
             $out =$children->filter(fn (Child $c) => $state($c) === 'out')->count();
 
@@ -117,8 +114,16 @@ class FloorPlan
                 // empty Infant room read "Places free 0 of 8" because eleven
                 // were booked). The panel's "Places free" line reads this.
                 'placesFree' => max(0, $capacity - $in),
-                // Expected today, by the one rule (RoomCounts).
+                // Booked today (the whole day), by the one rule (RoomCounts).
                 'expected' => $expectedHere,
+                // Still to come now, and how many of them are late — the
+                // morning's figures, whichever view is drawn.
+                'stillToCome' => (int) ($dayRoom['stillToCome'] ?? 0),
+                'late' => (int) ($dayRoom['late'] ?? 0),
+                // Ahead of the day: staff on today's roster for this room,
+                // and the warning when that cannot cover the bookings.
+                'rostered' => (int) ($dayRoom['rostered'] ?? 0),
+                'scheduleWarning' => $dayRoom['scheduleWarning'] ?? null,
                 // More enrolled, or more expected, than the room has places:
                 // warned, never blocked (QA, 16 Nov 2026).
                 'capacityWarning' => RoomCounts::capacityWarning($capacity, $children->count(), $expectedHere),
@@ -246,6 +251,9 @@ class FloorPlan
                 'returning' => $day['returning'],
                 'out' => $day['out'],
                 'expected' => $day['expected'],
+                'late' => $day['late'],
+                // Rooms whose roster cannot cover today's bookings (QA, 17 Nov 2026).
+                'scheduleShort' => $day['scheduleShort'],
                 // Clocked in and in a room (QA A3): someone clocked in with no
                 // room is not on the floor, so the card is the rooms added up.
                 'staff' => collect($rooms)->sum('staffIn'),

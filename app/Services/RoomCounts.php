@@ -15,8 +15,8 @@ use Illuminate\Support\Carbon;
  *
  *   booked   ticked for the day (any session) and not marked "not coming"
  *   arrived  an arrival on the register that day — in now, or been and gone
- *   absent   marked Absent, or, where the screen has a lateness rule (the
- *            dashboard's hour past due), past it
+ *   absent   marked Absent on the register — never read off the clock
+ *            (see LATE below: an hour past an agreed time is late, not absent)
  *
  * and the numbers are:
  *
@@ -126,15 +126,56 @@ final class RoomCounts
             return null;
         }
 
-        $over = [];
-        if ($enrolled > $capacity) {
-            $over[] = $enrolled.' enrolled';
-        }
-        if ($expected !== null && $expected > $capacity) {
-            $over[] = $expected.' expected today';
+        if ($enrolled <= $capacity && ($expected === null || $expected <= $capacity)) {
+            return null;
         }
 
-        return $over === [] ? null : 'Over capacity: '.implode(' and ', $over).' for '.$capacity.' places';
+        // One sentence for every room (QA, 17 Nov 2026: Toddler read "12
+        // enrolled for 10 places" while the others carried the day's figure
+        // too): both numbers whenever the day's is known, whichever is over.
+        // "Booked today" is the whole day's bookings — never "still to come".
+        return 'Over capacity: '.$enrolled.' enrolled'
+            .($expected !== null ? ' and '.$expected.' booked today' : '')
+            .' for '.$capacity.' places';
+    }
+
+    /*
+     * LATE — the one lateness rule (QA, 17 Nov 2026). The dashboard used to
+     * call a booked child "absent" an hour past their due time, and took the
+     * room's opening hour as the due time of a child with no agreed hours —
+     * so at nine it read "Absent 70" while the register said 0 absent.
+     *
+     * Now nobody is absent off the clock. A child is LATE when they are still
+     * to come and more than LATE_AFTER_MINUTES past a time somebody agreed:
+     * the hour planned for that day on the register, else the child's agreed
+     * drop-off (Child::hoursAgreed). A child with no agreed hours is never
+     * late — they are still to come until the day ends. Late is a part of
+     * "still to come", shown beside it; it never moves a child to absent.
+     * Absent is the register's mark, or a day that has ended.
+     */
+    public const LATE_AFTER_MINUTES = 60;
+
+    /**
+     * The agreed time a booked child is due on a date, or null when nothing
+     * agreed says (no planned hour that day and no agreed hours).
+     *
+     * @param  iterable<\App\Models\ScheduleSlot>  $slots  the child's ticked slots that day
+     */
+    public static function dueAt(\App\Models\Child $child, iterable $slots, string $date): ?Carbon
+    {
+        $time = collect($slots)->pluck('planned_time')->filter()->sort()->first()
+            ?: ($child->hoursAgreed() ? $child->drop_off_time : null);
+
+        return blank($time) ? null : Carbon::parse($date.' '.substr((string) $time, 0, 5), config('app.timezone'));
+    }
+
+    /** LATE above: due by an agreed time, and more than an hour past it at $now. */
+    public static function isLate(\App\Models\Child $child, iterable $slots, Carbon $now): bool
+    {
+        $now = $now->copy()->timezone(config('app.timezone'));
+        $due = self::dueAt($child, $slots, $now->toDateString());
+
+        return $due !== null && $now->greaterThan($due->copy()->addMinutes(self::LATE_AFTER_MINUTES));
     }
 
     /**
@@ -178,6 +219,12 @@ final class RoomCounts
         $absent = \App\Models\DssDayMark::whereDate('marked_on', $date)->whereIn('child_id', $roll->pluck('id'))
             ->where('mark', \App\Models\DssDayMark::ABSENT)->pluck('child_id')->flip();
         $dayIsOver = self::dayIsOver($date);
+        // Late is only ever today's: a day to come has nobody late yet.
+        $now = Carbon::now(config('app.timezone'));
+        $slots = $date === $now->toDateString()
+            ? \App\Models\ScheduleSlot::whereDate('slot_date', $date)->where('is_scheduled', true)
+                ->whereIn('child_id', $roll->pluck('id'))->get()->groupBy('child_id')
+            : collect();
 
         $out = [];
         foreach (ClassroomAssignment::rooms() as $room) {
@@ -185,6 +232,7 @@ final class RoomCounts
                 booked: $booked[$child->id] ?? false,
                 arrived: $arrived->has($child->id),
                 absent: $absent->has($child->id),
+                late: $date === $now->toDateString() && self::isLate($child, $slots[$child->id] ?? [], $now),
             )), $dayIsOver);
         }
 
@@ -192,18 +240,22 @@ final class RoomCounts
     }
 
     /** One child's day, as tally() reads it. */
-    public static function child(bool $booked, bool $arrived, bool $absent = false): array
+    public static function child(bool $booked, bool $arrived, bool $absent = false, bool $late = false): array
     {
-        return ['booked' => $booked, 'arrived' => $arrived, 'absent' => $absent];
+        return ['booked' => $booked, 'arrived' => $arrived, 'absent' => $absent, 'late' => $late];
     }
 
     /**
-     * @param  iterable<array{booked: bool, arrived: bool, absent?: bool}>  $children
-     * @return array{enrolled: int, expected: int, in: int, absent: int, still_to_come: int, not_in: int}
+     * On screen, "expected" reads "booked today" and "still_to_come" reads
+     * "still to come"; "late" is the part of still to come that is over an
+     * hour past an agreed time (LATE above).
+     *
+     * @param  iterable<array{booked: bool, arrived: bool, absent?: bool, late?: bool}>  $children
+     * @return array{enrolled: int, expected: int, in: int, absent: int, still_to_come: int, late: int, not_in: int}
      */
     public static function tally(iterable $children, bool $dayIsOver = false): array
     {
-        $enrolled = $expected = $in = $absent = 0;
+        $enrolled = $expected = $in = $absent = $late = 0;
 
         foreach ($children as $child) {
             $enrolled++;
@@ -220,6 +272,8 @@ final class RoomCounts
                 $in++;
             } elseif ($marked || $dayIsOver) {
                 $absent++;
+            } elseif ($child['late'] ?? false) {
+                $late++;
             }
         }
 
@@ -229,6 +283,7 @@ final class RoomCounts
             'in' => $in,
             'absent' => $absent,
             'still_to_come' => max(0, $expected - $in - $absent),
+            'late' => $late,
             'not_in' => $enrolled - $in,
         ];
     }

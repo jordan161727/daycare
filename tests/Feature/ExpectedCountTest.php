@@ -64,7 +64,7 @@ class ExpectedCountTest extends TestCase
             $html
         );
 
-        $this->assertStringContainsString('</b> expected</span>', $html);
+        $this->assertStringContainsString('</b> booked today</span>', $html);
         $this->assertStringContainsString('</b> still to come</span>', $html);
     }
 

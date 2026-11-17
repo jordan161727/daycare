@@ -70,7 +70,10 @@ class ReportsPageTest extends TestCase
         $this->sign($ava, '2026-10-13', '07:50', '17:20');
         $this->sign($ava, '2026-10-14', '08:00', '16:00');
         $this->sign($mia, '2026-10-13', '07:30', '17:00');
-        // Ava was expected on Oct 5 and never came: absent.
+        // Ava was expected on Oct 5 and never came while Mia did: absent.
+        // (A day nobody came at all is a day to check, not an absence — see
+        // test_a_day_nobody_was_signed_in_is_flagged_not_counted_absent.)
+        $this->sign($mia, '2026-10-05', '07:30', '17:00');
 
         $html = $this->actingAs($this->admin)->get(route('reports.index', ['report' => 'child', 'month' => '2026-10']))->assertOk()->getContent();
 
@@ -79,7 +82,7 @@ class ReportsPageTest extends TestCase
         $this->assertStringContainsString('7:50a', $html);
         $this->assertStringContainsString('5:20p', $html);
         $this->assertStringContainsString('17h 30m', $html);
-        $this->assertStringContainsString('3 days present', $html);
+        $this->assertStringContainsString('4 days present', $html);
 
         $csv = $this->actingAs($this->admin)->get(route('reports.export', ['report' => 'child', 'month' => '2026-10']))->assertOk()->getContent();
         $this->assertStringContainsString('Toddler,Cruz,Ava,10/13/2026,Present,7:50a,5:20p,9.50', $csv);

@@ -223,7 +223,7 @@
                                 <td style="font-size: 13px;">
                                     <div style="display: flex; flex-direction: column;">
                                         <span style="font-weight: 600;">{{ $guardian?->person?->name ?? '—' }}</span>
-                                        <span style="font-size: 12px;" class="muted">{{ $guardian?->person?->cell ?? ($guardian ? '' : 'Add a guardian') }}</span>
+                                        <span style="font-size: 12px;" class="muted">{{ \App\Models\Person::displayPhone($guardian?->person?->cell) ?? ($guardian ? '' : 'Add a guardian') }}</span>
                                     </div>
                                 </td>
                                 <td>

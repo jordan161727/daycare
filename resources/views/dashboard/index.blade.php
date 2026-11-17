@@ -30,12 +30,14 @@
          adults are with them. --}}
     <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7" data-dashboard-cards>
         @foreach([
-            ['Scheduled today', $snapshot['scheduled'], 'of '.$snapshot['enrolled'].' enrolled', 'scheduled'],
+            ['Booked today', $snapshot['scheduled'], 'of '.$snapshot['enrolled'].' enrolled', 'scheduled'],
             ['Checked in', $snapshot['in'], 'In the building now', 'in'],
             ['Checked out · returning', $snapshot['returning'], 'At school, back later today', 'returning'],
             ['Checked out', $snapshot['out'], 'Picked up for the day', 'out'],
-            ['Expected', $snapshot['expected'], 'Not arrived yet', 'expected'],
-            ['Absent', $snapshot['absent'], 'Not arrived · an hour past their time', 'absent'],
+            {{-- Still to come is never turned into Absent by the clock (QA, 17
+                 Nov 2026); an hour past an agreed time is "late" beside it. --}}
+            ['Still to come', $snapshot['expected'], $snapshot['late'] ? 'Booked, not arrived yet · '.$snapshot['late'].' over an hour late' : 'Booked, not arrived yet', 'expected'],
+            ['Absent', $snapshot['absent'], 'Marked absent on the register', 'absent'],
             ['Staff on the floor', $snapshot['staffOnFloor'], 'Clocked in, in a room', 'staff'],
         ] as [$title, $value, $note, $key])
             <div class="glass-card flex min-h-[9.75rem] flex-col rounded-2xl p-5" data-card="{{ $key }}">
@@ -50,7 +52,12 @@
          the ratio asks for, and a word on where that leaves it. --}}
     <section class="glass-card mt-5 rounded-2xl p-6" data-ratios>
         <div class="flex items-center justify-between gap-4">
-            <h2 class="text-xl font-bold">Ratios right now</h2>
+            <div>
+                <h2 class="text-xl font-bold">Ratios right now</h2>
+                @if($snapshot['scheduleShort'] > 0)
+                    <p class="mt-1 text-sm font-semibold text-rose-700 dark:text-rose-300" data-schedule-short>⚠ {{ $snapshot['scheduleShort'] }} {{ Str::plural('room', $snapshot['scheduleShort']) }} short on today's staff schedule for the children booked</p>
+                @endif
+            </div>
             @if(Route::has('floor-plan.index'))
                 <a href="{{ route('floor-plan.index') }}" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Open the floor plan →</a>
             @else
@@ -74,7 +81,12 @@
                     @if($room['note'] !== '')
                         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ $room['note'] }}</p>
                     @endif
-                    {{-- More enrolled or expected than places: warned, never blocked. --}}
+                    {{-- Ahead of the day: the roster cannot take today's bookings
+                         (QA, 17 Nov 2026) — "Covered" above only reads who is in now. --}}
+                    @if($room['scheduleWarning'] ?? null)
+                        <p class="mt-1 text-xs font-semibold text-rose-700 dark:text-rose-300" data-schedule-warning>⚠ {{ $room['scheduleWarning'] }}</p>
+                    @endif
+                    {{-- More enrolled or booked than places: warned, never blocked. --}}
                     @if($room['capacityWarning'] ?? null)
                         <p class="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300" data-capacity-warning>⚠ {{ $room['capacityWarning'] }}</p>
                     @endif
@@ -94,8 +106,8 @@
             </div>
             <div class="mt-6 h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-indigo-500 transition-all duration-1000" style="width: {{ $percentage }}%"></div></div>
             <div class="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
-                <span><b class="font-semibold">Arrived: {{ $snapshot['arrived'] }} of {{ $snapshot['scheduled'] }} scheduled</b> <span class="text-slate-500 dark:text-slate-400">· {{ $snapshot['in'] }} checked in, {{ $snapshot['returning'] }} checked out · returning</span></span>
-                <span class="text-slate-500 dark:text-slate-400">{{ $snapshot['expected'] }} expected · {{ $snapshot['absent'] }} absent</span>
+                <span><b class="font-semibold">Arrived: {{ $snapshot['arrived'] }} of {{ $snapshot['scheduled'] }} booked today</b> <span class="text-slate-500 dark:text-slate-400">· {{ $snapshot['in'] }} checked in, {{ $snapshot['returning'] }} checked out · returning</span></span>
+                <span class="text-slate-500 dark:text-slate-400">{{ $snapshot['expected'] }} still to come · {{ $snapshot['absent'] }} absent</span>
             </div>
             <a href="{{ route('attendance.index') }}" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:-translate-y-0.5 hover:bg-indigo-700">Take attendance <span>→</span></a>
         </section>
@@ -136,7 +148,7 @@
     </div>
 
     <section class="glass-card mt-5 rounded-2xl p-6">
-        <div class="flex items-center justify-between"><h2 class="text-lg font-bold">Recent attendance</h2><a href="{{ route('attendance.index') }}" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">View all</a></div>
+        <div class="flex items-center justify-between"><h2 class="text-lg font-bold">Recent attendance</h2><a href="{{ route('check-in.index') }}" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400" data-recent-view-all>All of today's sign-ins</a></div>
         <div class="mt-3 divide-y divide-slate-100 dark:divide-white/10">
             @forelse($recentAttendance as $attendance)
                 <div class="flex items-center gap-3 py-3"><x-child-avatar :child="$attendance->child" /><div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">{{ $attendance->child->first_name }} {{ $attendance->child->last_name }}</p><p class="text-xs text-slate-500">{{ $attendance->child->classroom }}</p></div><span class="text-xs font-semibold text-emerald-600">{{ $attendance->signed_in_at->timezone(config('app.timezone'))->format('g:i A') }}</span></div>
@@ -146,5 +158,5 @@
         </div>
     </section>
 
-    <section class="mt-6"><h2 class="text-lg font-bold">Quick actions</h2><div class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">@if(auth()->user()->isAdmin())<x-quick-action href="{{ route('children.import.form') }}" title="Import Children" text="Upload a class roster" icon="upload" />@endif <x-quick-action href="{{ route('attendance.index') }}" title="Attendance" text="Mark today's attendance" icon="check" />@if(auth()->user()->isAdmin())<x-quick-action href="{{ route('reports.index') }}" title="Reports" text="View attendance trends" icon="chart" />@endif <x-quick-action href="{{ route('attendance.index') }}" title="History" text="Review sign-in records" icon="clock" /></div></section>
+    <section class="mt-6"><h2 class="text-lg font-bold">Quick actions</h2><div class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">@if(auth()->user()->isAdmin())<x-quick-action href="{{ route('children.import.form') }}" title="Import Children" text="Upload a class roster" icon="upload" />@endif <x-quick-action href="{{ route('attendance.index') }}" title="Attendance" text="Mark today's attendance" icon="check" />@if(auth()->user()->isAdmin())<x-quick-action href="{{ route('reports.index') }}" title="Reports" text="View attendance trends" icon="chart" />@endif <x-quick-action href="{{ route('attendance.month-sheet') }}" title="History" text="Every sign-in and out, month by month" icon="clock" /></div></section>
 @endsection

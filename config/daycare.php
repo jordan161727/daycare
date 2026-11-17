@@ -223,14 +223,9 @@ return [
         'School Age' => 'UPK-4',
     ],
 
-    'room_ages' => [
-        'Infant' => '6 wk–18 mo',
-        'Transition' => '19–24 mo',
-        'Toddler' => '24–36 mo',
-        'PreK' => '3–4 yrs',
-        'UPK-4' => '4–5 yrs',
-        'School Age' => '6–12 yrs',
-    ],
+    // Each room's ages are App\Services\ClassroomAssignment::BANDS — the
+    // numbers the automatic room and the ⚠ are checked by, and the labels
+    // are worked out from them, so there is no separate wording to drift.
 
     /* Who sees the private DSS page: emails, comma-separated; blank = any director. */
     'dss' => ['users' => env('DAYCARE_DSS_USERS', '')],

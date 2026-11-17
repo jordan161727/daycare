@@ -41,7 +41,7 @@
         rows: @js($links->map(fn ($link) => [
             'id' => $link->person_id,
             'name' => $link->person?->name,
-            'cell' => $link->person?->cell,
+            'cell' => \App\Models\Person::displayPhone($link->person?->cell),
             'relationship' => $link->relationship,
             'is_guardian' => $link->is_guardian,
             'can_pickup' => $link->can_pickup,

@@ -53,6 +53,13 @@
             </template>
             <span style="margin-left: auto; font-size: 12.5px;" class="muted">Pick one or more classes · the grid, totals and the export all follow this filter</span>
         </div>
+        {{-- What needs a person before the month can be claimed (QA #3 and #5, 17 Nov 2026):
+             a day nobody was signed in is not a day of absences, and a sign-in
+             never signed out is not a full day. Neither goes in the file as it stands. --}}
+        <div x-show="d.unrecorded.length || d.noOut" x-cloak style="display: flex; flex-direction: column; gap: 4px; font-size: 13px;" data-review>
+            <span x-show="d.unrecorded.length"><span class="pill bad">Check</span> No sign-ins for anyone on <b x-text="d.unrecorded.join(', ')"></b> — enter a closure, or mark the children Absent or put their times in. Until then those days are not counted as absences and stay out of the KinderConnect file.</span>
+            <span x-show="d.noOut"><span class="pill bad">No sign-out</span> <b x-text="d.noOut"></b> <span x-text="d.noOut === 1 ? 'day has' : 'days have'"></span> a sign-in and no sign-out — they count 0 h and stay out of the KinderConnect file until a time out is put in.</span>
+        </div>
     </section>
 
     {{-- ---- Export for KinderConnect ---- --}}
@@ -114,7 +121,7 @@
                 <thead><tr>
                     <th class="stk" style="text-align: left; padding-left: 10px; min-width: 250px;" @click="selectAll()">CHILD · AGREED HOURS · ENROLLMENT NOTE</th>
                     <template x-for="(col, c) in cols()" :key="col.key">
-                        <th :class="col.wk ? 'wk' : (col.today ? 'today' : (col.closed ? 'closed' : ''))" :title="col.tip" @click="col.wk || col.closed ? null : selectCol(col.c)"><span x-text="col.dow"></span><br><span style="font-size: 12px; color: #1c2130;" x-text="col.n"></span></th>
+                        <th :class="col.wk ? 'wk' : (col.today ? 'today' : (col.closed ? 'closed' : (col.nodata ? 'nodata' : '')))" :title="col.tip" @click="col.wk || col.closed ? null : selectCol(col.c)"><span x-text="col.dow"></span><br><span style="font-size: 12px; color: #1c2130;" x-text="col.n"></span></th>
                     </template>
                     <th style="padding: 6px 10px; text-align: right; cursor: default;">DAYS</th>
                     <th style="padding: 6px 10px; text-align: right; cursor: default;">HOURS</th>
@@ -130,7 +137,8 @@
                                         <span style="font-weight: 700; font-size: 13px;"><span x-text="r.name"></span> <span style="font-weight: 500; font-size: 11.5px;" class="faint" x-text="r.lan"></span></span>
                                         <span style="font-size: 11.5px;" class="muted"><span x-text="r.agreed"></span> · <span x-text="r.daysTxt"></span> <span :style="'color:' + r.cinColor">· <span x-text="r.cin"></span></span></span>
                                         <span x-show="r.wd" style="font-size: 11.5px; font-weight: 600; color: #be123c; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="r.wd">⏏ <span x-text="r.wd"></span></span>
-                                        <span x-show="r.note" style="font-size: 11.5px; font-weight: 600; color: #6d28d9; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="'Enrollment note: ' + r.note">✎ <span x-text="r.note"></span></span>
+                                        <span x-show="r.noOutTxt" style="font-size: 11.5px; font-weight: 600; color: #be123c; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="r.noOutTxt">⚠ <span x-text="r.noOutTxt"></span></span>
+                                        <span x-show="r.note"style="font-size: 11.5px; font-weight: 600; color: #6d28d9; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="'Enrollment note: ' + r.note">✎ <span x-text="r.note"></span></span>
                                     </div>
                                 </div>
                             </td>
@@ -189,7 +197,7 @@ function dssPage(opts) { return {
         const out = [];
         let c = 0;
         this.d.days.forEach((day, i) => {
-            out.push({key: day.date, date: day.date, c: c++, dow: day.dow, n: day.d, today: day.today, closed: !! day.closed, wk: false, tip: day.closed ? day.closed : 'Select the whole day', week: day.week});
+            out.push({key: day.date, date: day.date, c: c++, dow: day.dow, n: day.d, today: day.today, closed: !! day.closed, nodata: !! day.nodata, wk: false, tip: day.closed ? day.closed : (day.nodata ? 'No sign-ins for anyone this day — check it · click to select the whole day' : 'Select the whole day'), week: day.week});
             const next = this.d.days[i + 1];
             if (! next || next.week !== day.week) {
                 const w = this.d.weeks.find(x => x.key === day.week);

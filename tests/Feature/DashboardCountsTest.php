@@ -54,8 +54,12 @@ class DashboardCountsTest extends TestCase
         Attendance::create(['child_id' => $returning->id, 'attendance_date' => $day, 'session' => 'AM', 'signed_in_at' => Carbon::parse("$day 07:30", $tz), 'signed_out_at' => Carbon::parse("$day 08:30", $tz)]);
         // Expected: booked for 11:00, not here yet, and it is only 10:30.
         $expected = $make('4', 'Di', 'Expected', 'Toddler'); $tick($expected, 'FULL', '11:00');
-        // Absent: booked for 8:00 and nothing by 10:30 — an hour past.
-        $absent = $make('5', 'Ed', 'Absent', 'Toddler', ['drop_off_time' => '08:00']); $tick($absent);
+        // Late, not absent: booked for 8:00 that day and nothing by 10:30 —
+        // over an hour past an agreed time is "late", still to come (QA, 17 Nov 2026).
+        $late = $make('5', 'Ed', 'Late', 'Toddler'); $tick($late, 'FULL', '08:00');
+        // Absent: marked Absent on the register — the only way to be absent before the day ends.
+        $absent = $make('8', 'Flo', 'Absent', 'Toddler'); $tick($absent);
+        \App\Models\DssDayMark::create(['child_id' => $absent->id, 'marked_on' => $day, 'mark' => \App\Models\DssDayMark::ABSENT]);
         // Not booked today: on the roll, in no card.
         $make('6', 'Fay', 'Off', 'PreK');
         // Not on today's floor at all.
@@ -76,9 +80,9 @@ class DashboardCountsTest extends TestCase
 
         $snapshot = app(DashboardSnapshot::class)->for($this->admin);
 
-        $this->assertSame(6, $snapshot['enrolled'], 'Gus starts Monday');
-        $this->assertSame(5, $snapshot['scheduled']);
-        $this->assertSame(['in' => 1, 'returning' => 1, 'out' => 1, 'expected' => 1, 'absent' => 1], array_intersect_key($snapshot, array_flip(['in', 'returning', 'out', 'expected', 'absent'])));
+        $this->assertSame(7, $snapshot['enrolled'], 'Gus starts Monday');
+        $this->assertSame(6, $snapshot['scheduled']);
+        $this->assertSame(['in' => 1, 'returning' => 1, 'out' => 1, 'expected' => 2, 'late' => 1, 'absent' => 1], array_intersect_key($snapshot, array_flip(['in', 'returning', 'out', 'expected', 'late', 'absent'])));
         $this->assertSame(3, $snapshot['arrived'], 'in + returning + out');
         $this->assertSame(2, $snapshot['staffOnFloor']);
 
@@ -93,12 +97,12 @@ class DashboardCountsTest extends TestCase
 
         // And the page says it, card by card.
         $this->actingAs($this->admin)->get(route('dashboard'))->assertOk()
-            ->assertSeeInOrder(['Scheduled today', '5', 'of 6 enrolled', 'Checked in', '1', 'Checked out · returning', '1', 'Checked out', '1', 'Expected', '1', 'Absent', '1', 'Staff on the floor', '2'])
+            ->assertSeeInOrder(['Booked today', '6', 'of 7 enrolled', 'Checked in', '1', 'Checked out · returning', '1', 'Checked out', '1', 'Still to come', '2', 'Booked, not arrived yet · 1 over an hour late', 'Absent', '1', 'Marked absent on the register', 'Staff on the floor', '2'])
             ->assertSee('Ratios right now')
-            ->assertSee('Arrived: 3 of 5 scheduled')
+            ->assertSee('Arrived: 3 of 6 booked today')
             ->assertSee('1 checked in, 1 checked out · returning')
-            ->assertSee('1 expected · 1 absent')
-            ->assertSee('60%')
+            ->assertSee('2 still to come · 1 absent')
+            ->assertSee('50%')
             ->assertSee('Thursday, Oct 15, 10:30 AM');
     }
 

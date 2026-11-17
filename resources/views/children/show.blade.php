@@ -257,14 +257,20 @@
                 <div class="sech"><h2>Overview</h2><span style="font-size: 12.5px;" class="faint">Schedule and enrollment</span><button type="button" class="btn sm" style="margin-left: auto;" @click="overviewEdit = ! overviewEdit" x-text="overviewEdit ? 'Close' : 'Edit'">Edit</button></div>
 
                 <div x-show="! overviewEdit">
+                    {{-- Hours outside when the room or center is open, said for as long as it is true,
+                         not only on the save that made it (second QA brief, Nov 2026). --}}
+                    @php($hoursOutside = \App\Models\Child::hoursOutsideOpening($child->drop_off_time, $child->pick_up_time, $child->classroom))
                     <div class="kv">
                         <span>Days</span><span>@php($days = $child->scheduleDays() ?? [])@foreach(\App\Models\Child::WEEKDAYS as $n => $name)<span class="d lg {{ in_array($n, $days, true) ? 'y' : 'n' }}">{{ $name[0] }}</span>@endforeach</span>
-                        <span>Drop-off · pick-up</span><span>{{ $child->scheduleLabel() ?? 'Not agreed' }}@if($hours !== null) <span class="faint">· {{ rtrim(rtrim(number_format($hours, 1), '0'), '.') }} h a week</span>@endif</span>
+                        <span>Drop-off · pick-up</span><span>{{ $child->scheduleLabel() ?? 'Not agreed' }}@if($hours !== null) <span class="faint">· {{ rtrim(rtrim(number_format($hours, 1), '0'), '.') }} h a week</span>@endif @if($hoursOutside)<span style="display: block; font-size: 12.5px; font-weight: 500; color: #8a5a00;" data-hours-outside>⚠ {{ $hoursOutside }}</span>@endif</span>
                         <span>Room</span>
                         <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                             <b style="font-weight: 600;">{{ $child->classroom ?: 'No room yet' }}</b>
                             @php($override = $child->hasClassroomOverrideOn())
                             <span class="pill {{ $override ? 'warn' : 'info' }}">{{ $override ? 'Set by hand' : 'Automatic by age' }}</span>
+                            {{-- The age against the room, by the one check (ClassroomAssignment::fit) — set by hand or not. --}}
+                            @php($roomFit = $child->roomFit())
+                            @if($roomFit['state'] === 'mismatch')<span style="order: 9; flex-basis: 100%; font-size: 12.5px; font-weight: 500; color: #8a5a00;" data-age-warning>⚠ {{ $roomFit['text'] }}</span>@endif
                             <span style="font-size: 13px;" class="faint">
                                 @if($override)
                                     from {{ $child->classroom_override_from?->format('M j, Y') ?? 'the start' }} · by age {{ $child->first_name }} would be in {{ $child->automaticClassroom() ?? 'no room' }}

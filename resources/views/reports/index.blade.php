@@ -113,6 +113,9 @@
                 <span style="font-size: 18px; font-weight: 700;">Child attendance · {{ $ca['title'] }}</span>
                 <span style="font-size: 13px;" class="muted">{{ $ca['sub'] }}</span>
             </div>
+            @foreach($ca['review'] as $line)
+                <div style="font-size: 13px; color: #92400e;" data-review>⚠ {{ $line }}</div>
+            @endforeach
             <div style="overflow-x: auto; border: 1px solid #e7e9f0; border-radius: 10px;">
                 <table class="ct">
                     <thead><tr><th class="stick" style="min-width: 150px;">Child</th>@foreach($ca['days'] as $d)<th class="dh {{ $d['cls'] }}"><span>{{ $d['dow'] }}</span><b>{{ $d['n'] }}</b></th>@endforeach<th class="tt">Present</th><th class="tt">Absent</th><th class="tt">Hours</th></tr></thead>
@@ -131,7 +134,7 @@
                     </tbody>
                 </table>
             </div>
-            <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;" class="muted"><span><b style="color: #be123c;">A</b> absent</span><span><span class="lg closedc"></span> closed</span><span>Blank = not scheduled / not yet</span><span>Times are first sign-in and last sign-out (from Teacher Attendance).</span></div>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;" class="muted"><span><b style="color: #be123c;">A</b> absent</span><span><b style="color: #92400e;">?</b> nobody signed in that day — check</span><span><b style="color: #be123c;">no out</b> never signed out · 0 h</span><span><span class="lg closedc"></span> closed</span><span>Blank = not scheduled / not yet</span><span>Times are first sign-in and last sign-out (from Teacher Attendance).</span></div>
         </section>
     @endif
 

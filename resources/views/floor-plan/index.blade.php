@@ -83,8 +83,9 @@
             {{-- Morning is this minute; afternoon is the day as booked at the
                  hour School Age is back, so three o'clock is seen before it comes. --}}
             <span class="toggle" data-view-toggle>
-                <a href="{{ route('floor-plan.index') }}" class="tab {{ $plan['view'] === 'morning' ? 'on' : '' }}" @if($plan['view'] === 'morning') aria-current="page" @endif>Morning</a>
-                <a href="{{ route('floor-plan.index', ['view' => 'afternoon']) }}" class="tab {{ $plan['view'] === 'afternoon' ? 'on' : '' }}" @if($plan['view'] === 'afternoon') aria-current="page" @endif>Afternoon</a>
+                {{-- The room open on the right goes with the switch (QA, 17 Nov 2026: it fell back to Infant). --}}
+                <a href="{{ route('floor-plan.index') }}" :href="viewUrl('morning')" class="tab {{ $plan['view'] === 'morning' ? 'on' : '' }}" @if($plan['view'] === 'morning') aria-current="page" @endif data-view-link="morning">Morning</a>
+                <a href="{{ route('floor-plan.index', ['view' => 'afternoon']) }}" :href="viewUrl('afternoon')" class="tab {{ $plan['view'] === 'afternoon' ? 'on' : '' }}" @if($plan['view'] === 'afternoon') aria-current="page" @endif data-view-link="afternoon">Afternoon</a>
             </span>
             {{-- Says so when the screen has lost the connection or has not
                  redrawn for a while (QA I5), rather than "Live" over old numbers. --}}
@@ -108,9 +109,11 @@
             ['Checked in', $plan['counters']['in'], 'In the building now', '', 'in'],
             ['Checked out · returning', $plan['counters']['returning'], 'At school, back later today', '', 'returning'],
             ['Checked out', $plan['counters']['out'], 'Picked up for the day', '', 'out'],
-            ['Expected', $plan['counters']['expected'], 'Scheduled, not arrived yet', '', 'expected'],
+            ['Still to come', $plan['counters']['expected'], $plan['counters']['late'] ? 'Booked, not arrived yet · '.$plan['counters']['late'].' over an hour late' : 'Booked, not arrived yet', '', 'expected'],
             ['Staff on the floor', $plan['counters']['staff'], 'Clocked in, in a room', '', 'staff'],
-            ['Rooms below ratio', $short, 'Need another adult', $short ? 'bad' : 'ok', 'short'],
+            {{-- Below ratio now, and — before anyone is in — short on today's
+                 roster for the children booked (QA, 17 Nov 2026). --}}
+            ['Rooms below ratio', $short, $plan['counters']['scheduleShort'] ? $plan['counters']['scheduleShort'].' short on today\'s staff schedule' : 'Need another adult', ($short || $plan['counters']['scheduleShort']) ? 'bad' : 'ok', 'short'],
         ] as [$title, $value, $note, $tone, $key])
             <div class="fp-card" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 2px;" data-counter="{{ $key }}">
                 <span style="font-size: 13px; font-weight: 600;">{{ $title }}</span>
@@ -167,8 +170,9 @@
                         <span class="pill" :class="pillClass(room.tone)" x-text="room.status"></span>
                     </div>
                     <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
-                        <div class="stat lead"><div class="muted" style="font-size: 12px;">Checked in</div><div style="font-size: 24px; font-weight: 700;" x-text="room.in"></div></div>
-                        <div class="stat"><div class="muted" style="font-size: 12px;">Expected</div><div style="font-size: 24px; font-weight: 700;" x-text="room.booked"></div></div>
+                        {{-- The afternoon is a forecast: nobody is "checked in" at three yet (QA, 17 Nov 2026). --}}
+                        <div class="stat lead"><div class="muted" style="font-size: 12px;" data-panel-in-label>{{ $plan['view'] === 'afternoon' ? 'Booked at '.$hour : 'Checked in' }}</div><div style="font-size: 24px; font-weight: 700;" x-text="room.in"></div></div>
+                        <div class="stat"><div class="muted" style="font-size: 12px;">Still to come</div><div style="font-size: 24px; font-weight: 700;" x-text="room.stillToCome"></div><div class="bad-text" style="font-size: 12px; font-weight: 600;" x-show="room.late" x-text="room.late + ' over an hour late'"></div></div>
                         <div class="stat"><div class="muted" style="font-size: 12px;">Checked out · returning</div><div style="font-size: 24px; font-weight: 700;" x-text="room.returning"></div></div>
                         <div class="stat"><div class="muted" style="font-size: 12px;">Checked out</div><div style="font-size: 24px; font-weight: 700;" x-text="room.out"></div></div>
                     </div>
@@ -178,7 +182,12 @@
                         {{-- Free now: capacity less the children in, never the bookings (QA, 16 Nov 2026). --}}
                         <div class="kv"><span>Places free</span><span style="font-weight: 700;" x-text="room.placesFree + ' of ' + room.capacity + (room.sharedWith ? ' · shared with ' + room.sharedWith.join(', ') : '')"></span></div>
                         <div class="kv"><span>Enrolled in this room</span><span style="font-weight: 700;" x-text="room.enrolled"></span></div>
+                        <div class="kv"><span>Booked today</span><span style="font-weight: 700;" x-text="room.expected"></span></div>
+                        <div class="kv"><span>Staff on today's schedule</span><span style="font-weight: 700;" x-text="room.rostered"></span></div>
                     </div>
+                    <template x-if="room.scheduleWarning">
+                        <div class="tipbox short" data-room-schedule-warning><span style="font-size: 13px; line-height: 1.5;" x-text="'⚠ ' + room.scheduleWarning + '. Build the week on the staff schedule.'"></span></div>
+                    </template>
                     {{-- More enrolled or expected than places: warned, never blocked. --}}
                     <template x-if="room.capacityWarning">
                         <div class="tipbox short" data-room-capacity-warning><span style="font-size: 13px; line-height: 1.5;" x-text="'⚠ ' + room.capacityWarning + '. Sign-in is not blocked.'"></span></div>
@@ -231,6 +240,13 @@ function floorPlan(rooms, open, updated) { return {
     loadedAt: Date.now(),
     room: rooms.find(r => r.room === open) ?? rooms.find(r => r.tone === 'short') ?? rooms[0] ?? null,
     pick(name) { this.room = this.rooms.find(r => r.room === name) ?? this.room; },
+    viewUrl(view) {
+        const query = new URLSearchParams();
+        if (view === 'afternoon') query.set('view', 'afternoon');
+        if (this.room) query.set('room', this.room.room);
+        const qs = query.toString();
+        return @js(route('floor-plan.index')) + (qs ? '?' + qs : '');
+    },
     pillClass(tone) { return { covered: 'ok', short: 'bad', spare: 'spare', away: 'mut', empty: 'mut' }[tone] ?? 'mut'; },
     dotClass(s) { return s.status === 'late' ? 'd-late' : (s.status === 'due' ? 'd-due' : (s.moved ? 'd-moved' : 'd-in')); },
     staffLine(s) {

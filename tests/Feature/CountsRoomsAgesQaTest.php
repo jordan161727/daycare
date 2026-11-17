@@ -171,7 +171,7 @@ class CountsRoomsAgesQaTest extends TestCase
         $this->assertSame(0, $infant['in']);
         $this->assertSame(8, $infant['placesFree'], 'Places free is capacity less the children in');
         $this->assertSame(10, $infant['expected']);
-        $this->assertSame('Over capacity: 10 enrolled and 10 expected today for 8 places', $infant['capacityWarning']);
+        $this->assertSame('Over capacity: 10 enrolled and 10 booked today for 8 places', $infant['capacityWarning']);
 
         // Every other room: free = capacity − in, no warning.
         foreach (app(FloorPlan::class)->for($this->admin)['rooms'] as $room) {
@@ -242,8 +242,8 @@ class CountsRoomsAgesQaTest extends TestCase
         $this->assertSame('ok', $sa->fresh()->roomFit()['state']);
         Child::whereKey($sa->id)->update(['classroom' => 'School Age']);
         $this->assertSame('mismatch', $sa->fresh()->roomFit()['state']);
-        $this->assertSame('6–12 yrs', ClassroomAssignment::ageLabel('School Age'));
-        $this->assertSame('6–12 yrs', app(CentreSettings::class)->ages('School Age'));
+        $this->assertSame('6–under 12 yrs', ClassroomAssignment::ageLabel('School Age'));
+        $this->assertSame('6–under 12 yrs', app(CentreSettings::class)->ages('School Age'));
 
         // Twelve and three months, kept in School Age by hand: past every band, ⚠.
         $old = $this->child('Kai', 'School Age', '2014-08-01', [1]);
@@ -252,10 +252,15 @@ class CountsRoomsAgesQaTest extends TestCase
         $this->assertSame('mismatch', $fit['state']);
         $this->assertStringContainsString('over the School Age limit', $fit['text']);
 
-        // Moved up one room early by the director: a soft note, not a warning.
+        // Moved up one room early by the director: still a warning — the room
+        // was set by hand, and the age is outside it (second QA brief, Nov 2026;
+        // this used to be a soft 'placed' with no ⚠).
         $early = $this->child('Eve', 'Infant', '2025-06-01', [1]);
         $early->forceFill(['classroom_override' => 'Transition'])->save();
-        $this->assertSame('placed', $early->fresh()->roomFit()['state']);
+        $fit = $early->fresh()->roomFit();
+        $this->assertSame('mismatch', $fit['state']);
+        $this->assertTrue($fit['by_hand']);
+        $this->assertStringEndsWith('(room set by hand).', $fit['text']);
 
         // The register hands the state to the marks and draws them from it.
         $html = $this->actingAs($this->admin)->get(route('attendance.index'))->assertOk()->getContent();
@@ -267,7 +272,7 @@ class CountsRoomsAgesQaTest extends TestCase
     public function test_the_age_labels_are_the_bands(): void
     {
         $this->assertSame(
-            ['6 wk–18 mo', '19–24 mo', '24–36 mo', '3–4 yrs', '4–5 yrs', '6–12 yrs'],
+            ['6 wk–under 19 mo', '19–under 24 mo', '24–under 36 mo', '3–under 4 yrs', '4–under 6 yrs', '6–under 12 yrs'],
             array_map(fn ($room) => ClassroomAssignment::ageLabel($room), ClassroomAssignment::rooms()),
         );
     }

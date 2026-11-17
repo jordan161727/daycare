@@ -135,7 +135,7 @@ class CountsRetestQaTest extends TestCase
             $this->child('Up'.$i, 'UPK-4', '2022-01-01');
             $this->child('Sa'.$i, 'School Age', '2019-01-01');
         }
-        $expected = 'UPK-4 + School Age (shared room): Over capacity: 24 enrolled and 24 expected today for 20 places';
+        $expected = 'UPK-4 + School Age (shared room): Over capacity: 24 enrolled and 24 booked today for 20 places';
 
         $warnings = RoomCounts::capacityWarnings(RoomCounts::byRoom(self::MONDAY), app(CentreSettings::class));
         $this->assertSame($expected, $warnings['UPK-4']);
