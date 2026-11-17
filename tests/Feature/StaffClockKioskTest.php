@@ -203,11 +203,11 @@ class StaffClockKioskTest extends TestCase
     {
         [, $token] = $this->device();
         $staff = User::factory()->create(['role' => 'teacher']);
-        $staff->setKioskPin('4821');
+        $staff->setKioskPin('482121');
 
         $this->pair($token);
 
-        $ticket = $this->postJson(route('clock.kiosk.identify'), ['pin' => '4821'])
+        $ticket = $this->postJson(route('clock.kiosk.identify'), ['pin' => '482121'])
             ->assertOk()
             ->json('ticket');
 
@@ -313,7 +313,7 @@ class StaffClockKioskTest extends TestCase
         // in the masthead; a greeting, the instruction, four dots and the pad.
         $this->assertStringNotContainsString('x-text="today"', $html);
         $this->assertStringContainsString('x-text="greeting"', $html);
-        $this->assertStringContainsString('Scan your card or key your 4-digit PIN', $html);
+        $this->assertStringContainsString('Scan your card or key your 6-digit PIN', $html);
         $this->assertStringContainsString('data-pin-dots', $html);
         $this->assertStringContainsString('data-key-back', $html);
     }
@@ -322,23 +322,23 @@ class StaffClockKioskTest extends TestCase
     {
         [, $token] = $this->device();
         $staff = User::factory()->create(['role' => 'teacher']);
-        $staff->setKioskPin('4821');
+        $staff->setKioskPin('482121');
 
         $this->pair($token);
 
         // Wrong before the first try: the index still points at this row, so
         // the clock finds them and then fails to prove it is them.
-        $staff->forceFill(['kiosk_pin_hash' => bcrypt('0000')])->save();
+        $staff->forceFill(['kiosk_pin_hash' => bcrypt('000000')])->save();
 
         for ($try = 0; $try < 4; $try++) {
-            $this->postJson(route('clock.kiosk.identify'), ['pin' => '4821'])
+            $this->postJson(route('clock.kiosk.identify'), ['pin' => '482121'])
                 ->assertOk()
                 ->assertJson(['status' => 'not_found']);
 
             $this->assertFalse($staff->fresh()->kioskIsLocked(), "locked after only {$try} tries");
         }
 
-        $this->postJson(route('clock.kiosk.identify'), ['pin' => '4821'])->assertOk();
+        $this->postJson(route('clock.kiosk.identify'), ['pin' => '482121'])->assertOk();
 
         $this->assertTrue($staff->fresh()->kioskIsLocked(), 'five wrong tries did not lock it');
         $this->assertSame(0, TimePunch::count());
@@ -351,37 +351,50 @@ class StaffClockKioskTest extends TestCase
         [, $token] = $this->device();
         $this->pair($token);
 
-        $unknown = $this->postJson(route('clock.kiosk.identify'), ['pin' => '0000'])->json('status');
+        $unknown = $this->postJson(route('clock.kiosk.identify'), ['pin' => '000000'])->json('status');
 
         $staff = User::factory()->create(['role' => 'teacher']);
-        $staff->setKioskPin('4821');
+        $staff->setKioskPin('482121');
         $staff->forceFill(['kiosk_locked_until' => now()->addMinutes(5)])->save();
 
-        $locked = $this->postJson(route('clock.kiosk.identify'), ['pin' => '4821'])->json('status');
+        $locked = $this->postJson(route('clock.kiosk.identify'), ['pin' => '482121'])->json('status');
 
         $this->assertSame('not_found', $unknown);
         $this->assertSame('locked', $locked);
 
-        // Both render as "Not recognised" — asserted on the page, since that is
+        // Both render as "Not recognized" (US spelling, QA K6, 16 Nov 2026) —
+        // asserted on the page, since that is
         // where the indistinguishability has to hold.
         $page = $this->get(route('clock.kiosk'))->getContent();
-        $this->assertSame(2, substr_count($page, "title: 'Not recognised'"));
+        $this->assertSame(2, substr_count($page, "title: 'Not recognized'"));
     }
 
-    public function test_two_people_sharing_a_pin_are_asked_rather_than_guessed_at(): void
+    /**
+     * QA K2, 16 Nov 2026: two people cannot share a PIN any more, so there
+     * is no "ambiguous" answer to give. The database refuses the second one,
+     * and the clock answers the one person who holds it.
+     */
+    public function test_two_people_cannot_share_a_pin_so_the_clock_never_has_to_ask(): void
     {
         [, $token] = $this->device();
         $this->pair($token);
 
-        foreach (['Grace', 'Marcus'] as $name) {
-            User::factory()->create(['role' => 'teacher', 'name' => $name])->setKioskPin('4821');
+        $grace = User::factory()->create(['role' => 'teacher', 'name' => 'Grace']);
+        $grace->setKioskPin('482121');
+
+        try {
+            User::factory()->create(['role' => 'teacher', 'name' => 'Marcus'])->setKioskPin('482121');
+            $this->fail('A second person was given a PIN somebody already holds.');
+        } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+            // The unique index on kiosk_pin_index said no.
         }
 
-        // The wrong guess here is somebody else's day on somebody's timesheet.
-        $this->postJson(route('clock.kiosk.identify'), ['pin' => '4821'])
+        $this->postJson(route('clock.kiosk.identify'), ['pin' => '482121'])
             ->assertOk()
-            ->assertJson(['status' => 'ambiguous']);
+            ->assertJson(['status' => 'ok'])
+            ->assertJsonPath('staff.name', 'Grace');
 
+        $this->assertStringNotContainsString('ambiguous', $this->get(route('clock.kiosk'))->getContent());
         $this->assertSame(0, TimePunch::count());
     }
 
@@ -424,7 +437,7 @@ class StaffClockKioskTest extends TestCase
         config(['daycare.kiosk.enabled' => false]);
 
         $this->get(route('clock.kiosk'))->assertNotFound();
-        $this->postJson(route('clock.kiosk.identify'), ['pin' => '4821'])->assertNotFound();
+        $this->postJson(route('clock.kiosk.identify'), ['pin' => '482121'])->assertNotFound();
         $this->postJson(route('clock.kiosk.punch'), ['ticket' => 'x', 'action' => 'clock_in'])->assertNotFound();
     }
 

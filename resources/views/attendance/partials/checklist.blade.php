@@ -34,7 +34,7 @@
         </span>
         <span class="inline-flex items-center gap-1.5">
             <span class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400 dark:border-white/10 dark:bg-slate-800">Closed</span>
-            <b class="font-semibold text-slate-600 dark:text-slate-300">Centre closed</b> — nothing can be ticked
+            <b class="font-semibold text-slate-600 dark:text-slate-300">Center closed</b> — nothing can be ticked
         </span>
         <span class="inline-flex items-center gap-1.5">
             <span class="inline-flex items-center rounded-lg border border-dashed border-slate-300 px-2 py-0.5 text-[0.6667rem] text-slate-400 dark:border-white/20 dark:text-slate-500">—</span>
@@ -79,7 +79,7 @@
                     <th scope="col" class="px-1 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">Days</th>
                     {{-- What the week is forecast to be, beside what has been
                          ticked for it, so the two can be read against each other. --}}
-                    <th scope="col" class="px-1 py-2 text-center text-xs font-semibold uppercase tracking-wide text-sky-500" title="Projected from last week's attendance, the enrolment dates and the expected hours">Projected</th>
+                    <th scope="col" class="px-1 py-2 text-center text-xs font-semibold uppercase tracking-wide text-sky-500" title="Projected from last week's attendance, the enrollment dates and the expected hours">Projected</th>
                     {{-- Pinned to the right edge. This column ends the row, so it
                          is the first thing to fall off a sheet with eleven of
                          them, and a control nobody can see is a control nobody
@@ -95,7 +95,7 @@
                             <div class="flex items-center gap-2.5">
                                 <span class="h-8 w-8 shrink-0 overflow-hidden rounded-full" x-html="child.avatar"></span>
                                 <div class="min-w-0">
-                                    {{-- Straight to the enrolment dates, which are the reason a
+                                    {{-- Straight to the enrollment dates, which are the reason a
                                          row has fewer boxes than the rest. --}}
                                     <a x-show="canOpenProfile" :href="profileUrl(child.lan)" class="block truncate text-sm font-semibold underline-offset-2 hover:text-indigo-600 hover:underline" x-text="child.name"></a>
                                     <p x-show="! canOpenProfile" class="truncate text-sm font-semibold" x-text="child.name"></p>
@@ -110,7 +110,7 @@
                                         class="flex max-w-full items-center gap-1 truncate text-xs enabled:hover:underline"
                                     >
                                         <span class="truncate" x-text="roomLabel(child)"></span>
-                                        <span x-show="child.classroom_override" x-cloak class="shrink-0" x-text="child.override_stale ? '⚠' : '✎'"></span>
+                                        <span x-show="roomMark(child)" x-cloak class="shrink-0" x-text="roomMark(child)" :title="roomTitle(child)" :aria-label="roomTitle(child)" role="img"></span>
                                     </button>
                                 </div>
                             </div>

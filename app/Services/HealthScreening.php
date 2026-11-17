@@ -55,7 +55,7 @@ class HealthScreening
 
         if (! $symptom || ! $symptom->active) {
             throw ValidationException::withMessages([
-                'health_code' => 'That is not a symptom code the centre uses.',
+                'health_code' => 'That is not a symptom code the center uses.',
             ]);
         }
 
@@ -109,6 +109,11 @@ class HealthScreening
                 'user_id' => $by?->id,
             ]);
         });
+
+        // A symptom found at drop-off or pick-up reaches the parents' app (17 Nov 2026).
+        if ($code !== $old) {
+            app(ParentAlerts::class)->health($attendance, $direction, $code, $note);
+        }
 
         return $attendance->refresh();
     }

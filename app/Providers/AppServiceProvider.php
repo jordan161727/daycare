@@ -42,12 +42,27 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('parent-api', fn (Request $request) => Limit::perMinute(120)->by('parent:'.($request->user()?->id ?? $request->ip())));
 
         // Who sees the DSS page (Phase 8.1, "Only you"): the users named in
-        // DAYCARE_DSS_USERS, or any director when nobody is named.
+        // DAYCARE_DSS_USERS, or any director when nobody is named — the
+        // owner (User::isOwner: the director, or an untitled admin account),
+        // not every admin: an office admin is not who "only you" meant.
         \Illuminate\Support\Facades\Gate::define('see-dss', function (\App\Models\User $user) {
             $allowed = array_filter(array_map('trim', explode(',', (string) config('daycare.dss.users', ''))));
 
-            return $allowed === [] ? $user->isAdmin() : in_array($user->email, $allowed, true);
+            return $allowed === [] ? $user->isOwner() : in_array($user->email, $allowed, true);
         });
+
+        // Pay rates and direct deposit: a permission (users.can_view_pay), not
+        // a named person. Granting it is the owner's (User::canGrantPay).
+        \Illuminate\Support\Facades\Gate::define('view-pay', fn (\App\Models\User $user) => $user->canSeePay());
+        \Illuminate\Support\Facades\Gate::define('grant-pay', fn (\App\Models\User $user) => $user->canGrantPay());
+
+        // One password rule for every form that sets one (QA, 16 Nov 2026):
+        // at least twelve characters, letters and numbers. Not
+        // uncompromised(): that asks a web service on every save, tests
+        // included.
+        \Illuminate\Validation\Rules\Password::defaults(
+            fn () => \Illuminate\Validation\Rules\Password::min(12)->letters()->numbers()
+        );
 
 /*
          * Every sign-in, sign-out and failed attempt, written down.
@@ -106,5 +121,26 @@ class AppServiceProvider extends ServiceProvider
         // sit on the endpoint, but capped well above what a room full of
         // tablets does at shift change.
         RateLimiter::for('kiosk', fn (Request $request) => Limit::perMinute(240)->by($request->ip()));
+
+        // The room tablet's gear (QA K4, 16 Nov 2026): the administrator's
+        // PIN, then the room code. Five tries per ten minutes for each, per
+        // address and tablet — the tablet by its pairing cookie, so one
+        // fumbling director at one tablet does not lock the gear on every
+        // tablet in the building. A browser that sends no cookie shares the
+        // address's one empty-cookie bucket, and the address as a whole gets
+        // a looser cap on top, so throwing cookies away buys a few more
+        // tries, not a keyspace. Answered with a status the tablet words as
+        // "Too many tries — wait 10 minutes" rather than a bare 429 page.
+        RateLimiter::for('room-setup', function (Request $request) {
+            $minutes = (int) config('kiosk.setup_decay_minutes');
+            $tries = (int) config('kiosk.setup_max_attempts');
+            $tablet = sha1((string) $request->cookie(\App\Models\StaffDevice::cookieFor(\App\Models\StaffDevice::KIND_ROOM)));
+            $tooMany = fn () => response()->json(['status' => 'too_many', 'minutes' => $minutes], 429);
+
+            return [
+                Limit::perMinutes($minutes, $tries)->by($request->ip().'|'.$tablet.'|'.$request->path())->response($tooMany),
+                Limit::perMinutes($minutes, $tries * 4)->by($request->ip().'|'.$request->path())->response($tooMany),
+            ];
+        });
     }
 }

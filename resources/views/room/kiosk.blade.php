@@ -4,24 +4,31 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Room tablet &middot; {{ config('app.name') }}</title>
+    {{-- The center's name, as /kiosk does it, not config('app.name') —
+         which is "Laravel" wherever APP_NAME was never set (QA K5, 16 Nov 2026). --}}
+    <title>Room tablet — {{ $companyName }}</title>
     @include('layouts.favicon')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 {{--
     The tablet that hangs in a classroom (HANDOFF §5.3).
 
-    Same PIN as the front door, a different question: "Coming into PreK?". It
-    makes room check-ins — the thing the ratios are counted from — and it never
-    clocks anybody out. The room it is in is said in the header on every
-    screen, so a tablet carried into the wrong room is obvious from the door.
+    Same PIN as the staff time clock, a different question: "Coming into
+    PreK?". It makes room check-ins — the thing the ratios are counted from —
+    and it never clocks anybody out. The room it is in is said in the header
+    on every screen, so a tablet carried into the wrong room is obvious from
+    the door.
 
-    Four screens: the keypad; the person's room screen (the big button for this
-    room, the other rooms, a break); the done screen; and, behind the gear, the
-    set-up screen where a four-digit room code from Settings → Rooms & hours
-    tells the tablet which room it now is.
+    Five screens: the keypad; the person's room screen (the big button for
+    this room, the other rooms, a break); the done screen; and, behind the
+    gear, an administrator's PIN (QA K4, 16 Nov 2026) and then the set-up
+    screen where the room code from Settings → Rooms & hours tells the tablet
+    which room it now is.
 
-    Softer than the clock — a wash of the room's own colour behind a white
+    Lengths and the idle clear come from config/kiosk.php (QA K1 and K3,
+    16 Nov 2026): pin_length, room_code_length, idle_clear_seconds.
+
+    Softer than the clock — a wash of the room's own color behind a white
     card — because it is read by somebody already in a room with children,
     not by somebody at the door with a coat on. Still no balloons.
 --}}
@@ -69,29 +76,66 @@
     @else
         {{-- The two keypads sit straight on the page near the top, as in the
              mock-up; the person's screen and the done screen keep the card. --}}
-        <main class="flex flex-1 justify-center p-[18px]" :class="step === 'pin' || step === 'setup' ? 'items-start' : 'items-center'" @click="focusEntry()">
+        <main class="flex flex-1 justify-center p-[18px]" :class="step === 'pin' || step === 'setup' || step === 'admin' ? 'items-start' : 'items-center'" @click="focusEntry()">
 
-            {{-- ---- set-up: which room is this? ---- --}}
+            {{-- ---- set-up, first: an administrator's PIN ----
+                 QA K4, 16 Nov 2026: the gear no longer opens the room-code
+                 pad for whoever taps it. A director keys their own staff PIN
+                 first; the server checks it, and checks the go-ahead again
+                 when the room code arrives. --}}
+            <template x-if="step === 'admin'">
+                <div class="flex w-full max-w-md flex-col items-center gap-3.5 pt-2.5 text-center" data-setup-admin>
+                    <h1 class="text-[22px] font-bold text-[#1c2130]">Set up this tablet</h1>
+                    <p class="text-sm leading-normal text-[#5f6676]">An administrator’s PIN first.<br>Right now this tablet is <b class="text-[#1c2130]" x-text="room ?? 'no room'"></b>.</p>
+
+                    <div class="flex gap-3" aria-hidden="true" data-admin-dots>
+                        <template x-for="i in pinLength" :key="i">
+                            <span class="h-[15px] w-[15px] rounded-full border-2" :class="adminPin.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
+                        </template>
+                    </div>
+
+                    <p x-show="problem" x-cloak class="rounded-[10px] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c]">
+                        <span class="block font-semibold" x-text="problem?.title"></span>
+                        <span class="text-[13px]" x-text="problem?.detail"></span>
+                    </p>
+
+                    <div class="grid w-full max-w-[300px] grid-cols-3 gap-2.5">
+                        <template x-for="k in ['1','2','3','4','5','6','7','8','9']" :key="k">
+                            <button type="button" @click="pressAdmin(k)" class="{{ $key }}" x-text="k"></button>
+                        </template>
+                        <button type="button" @click="adminPin = ''; armIdle()" class="{{ $keySm }}">Clear</button>
+                        <button type="button" @click="pressAdmin('0')" class="{{ $key }}">0</button>
+                        <button type="button" @click="adminPin = adminPin.slice(0, -1); armIdle()" aria-label="Delete one digit" class="{{ $keySm }}">⌫</button>
+                    </div>
+
+                    <button type="button" @click="reset()" class="rounded-xl border border-[#cfd3de] bg-white px-4 py-2.5 text-sm font-semibold text-[#1c2130] transition active:bg-slate-50">Cancel</button>
+                </div>
+            </template>
+
+            {{-- ---- set-up, then: which room is this? ---- --}}
             <template x-if="step === 'setup'">
                 <div class="flex w-full max-w-md flex-col items-center gap-3.5 pt-2.5 text-center" data-setup>
                     <h1 class="text-[22px] font-bold text-[#1c2130]">Set up this tablet</h1>
-                    <p class="text-sm leading-normal text-[#5f6676]">Key the 4-digit room code.<br>Right now this tablet is <b class="text-[#1c2130]" x-text="room ?? 'no room'"></b>.</p>
+                    <p class="text-sm leading-normal text-[#5f6676]">Key the {{ $codeLength }}-digit room code.<br>Right now this tablet is <b class="text-[#1c2130]" x-text="room ?? 'no room'"></b>.</p>
 
-                    <div class="flex gap-3" aria-hidden="true">
-                        <template x-for="i in 4" :key="i">
+                    <div class="flex gap-3" aria-hidden="true" data-code-dots>
+                        <template x-for="i in codeLength" :key="i">
                             <span class="h-[15px] w-[15px] rounded-full border-2" :class="code.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
                         </template>
                     </div>
 
-                    <p x-show="problem" x-cloak class="rounded-[10px] bg-[#fff1f2] px-3 py-2 text-sm font-semibold text-[#be123c]" x-text="problem?.title"></p>
+                    <p x-show="problem" x-cloak class="rounded-[10px] bg-[#fff1f2] px-3 py-2 text-sm text-[#be123c]">
+                        <span class="block font-semibold" x-text="problem?.title"></span>
+                        <span class="text-[13px]" x-text="problem?.detail"></span>
+                    </p>
 
                     <div class="grid w-full max-w-[300px] grid-cols-3 gap-2.5">
                         <template x-for="k in ['1','2','3','4','5','6','7','8','9']" :key="k">
                             <button type="button" @click="pressCode(k)" class="{{ $key }}" x-text="k"></button>
                         </template>
-                        <button type="button" @click="code = ''" class="{{ $keySm }}">Clear</button>
+                        <button type="button" @click="code = ''; armIdle()" class="{{ $keySm }}">Clear</button>
                         <button type="button" @click="pressCode('0')" class="{{ $key }}">0</button>
-                        <button type="button" @click="code = code.slice(0, -1)" aria-label="Delete one digit" class="{{ $keySm }}">⌫</button>
+                        <button type="button" @click="code = code.slice(0, -1); armIdle()" aria-label="Delete one digit" class="{{ $keySm }}">⌫</button>
                     </div>
 
                     <button type="button" @click="reset()" class="rounded-xl border border-[#cfd3de] bg-white px-4 py-2.5 text-sm font-semibold text-[#1c2130] transition active:bg-slate-50">Cancel</button>
@@ -102,7 +146,9 @@
             <template x-if="step === 'pin'">
                 <div class="flex w-full max-w-md flex-col items-center gap-3.5 pt-2.5 text-center">
                     <h1 class="text-[22px] font-bold text-[#1c2130]" data-keypad-title>Coming into <span x-text="room ?? 'this room'"></span>?</h1>
-                    <p class="text-sm text-[#5f6676]">Same PIN as the front door</p>
+                    {{-- The staff PIN, not the parents' (QA K1, 16 Nov 2026):
+                         "the front door" read as the parents' door kiosk. --}}
+                    <p class="text-sm text-[#5f6676]">Same PIN as the staff time clock</p>
 
                     <p x-show="! room" x-cloak class="w-full max-w-[300px] rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-900 ring-1 ring-amber-200" data-no-room>
                         This tablet has not been told which room it is in. Tap ⚙ and key the room code from Settings → Rooms &amp; hours.
@@ -110,16 +156,18 @@
 
                     <form @submit.prevent="identify()" autocomplete="off" class="flex w-full flex-col items-center gap-3.5">
                         {{-- Out of sight, for a card reader: it types fast and
-                             presses Enter. Keyed PINs submit at four digits.
-                             inputmode none keeps the iPad's keyboard away. --}}
-                        <input x-ref="entry" x-model="entry" type="text" inputmode="none"
+                             presses Enter. Keyed PINs submit at
+                             config('kiosk.pin_length') digits (QA K1,
+                             16 Nov 2026). inputmode none keeps the iPad's
+                             keyboard away. --}}
+                        <input x-ref="entry" x-model="entry" @input="armIdle()" type="text" inputmode="none"
                                name="kiosk-entry" autocomplete="off" autocorrect="off" spellcheck="false"
                                data-1p-ignore data-lpignore="true" data-form-type="other"
                                aria-label="Key your PIN"
                                class="pointer-events-none absolute h-px w-px opacity-0">
 
                         <div class="flex gap-3" aria-hidden="true" data-pin-dots>
-                            <template x-for="i in 4" :key="i">
+                            <template x-for="i in pinLength" :key="i">
                                 <span class="h-[15px] w-[15px] rounded-full border-2" :class="entry.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
                             </template>
                         </div>
@@ -128,10 +176,10 @@
                             <template x-for="k in ['1','2','3','4','5','6','7','8','9']" :key="k">
                                 <button type="button" @click="press(k)" class="{{ $key }}" x-text="k"></button>
                             </template>
-                            <button type="button" @click="entry = ''" class="{{ $keySm }}">Clear</button>
+                            <button type="button" @click="entry = ''; armIdle()" class="{{ $keySm }}">Clear</button>
                             <button type="button" @click="press('0')" class="{{ $key }}">0</button>
                             {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
-                            <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back class="{{ $keySm }}">⌫</button>
+                            <button type="button" @click="entry = entry.slice(0, -1); armIdle()" aria-label="Delete one digit" data-key-back class="{{ $keySm }}">⌫</button>
                         </div>
                     </form>
 
@@ -143,7 +191,7 @@
                 </div>
             </template>
 
-            <div x-show="step !== 'pin' && step !== 'setup'" x-cloak class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div x-show="step !== 'pin' && step !== 'setup' && step !== 'admin'" x-cloak class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div class="h-1.5" :style="`background: ${colour}`"></div>
 
                 {{-- ---- one person: this room, another room, or a break ---- --}}
@@ -221,20 +269,52 @@ function roomTablet() { return {
     room: @js($device?->classroom),
     entry: '',
     code: '',
+    adminPin: '',
+    setupToken: null,
     sending: false,
     staff: null,
     ticket: null,
     done: null,
     problem: null,
-    step: 'pin',   // 'pin' | 'rooms' | 'done' | 'setup'
+    step: 'pin',   // 'pin' | 'rooms' | 'done' | 'admin' | 'setup'
     now: '',
     today: '',
     timer: null,
+    idle: null,
+
+    // From config/kiosk.php, not written in (QA K1 and K3, 16 Nov 2026).
+    pinLength: @js($pinLength),
+    codeLength: @js($codeLength),
+    idleSeconds: @js($idleSeconds),
 
     init() {
         this.tick();
         setInterval(() => this.tick(), 10000);
         this.holdScreenAwake();
+
+        // Put to sleep or switched away from mid-PIN: back to empty dots.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') this.clearHalfTyped();
+        });
+    },
+
+    /*
+     * QA K3, 16 Nov 2026: whatever is half-typed — a PIN, an administrator's
+     * PIN at the gear, a room code — is wiped after idleSeconds with no key
+     * pressed. Every press restarts the count.
+     */
+    armIdle() {
+        clearTimeout(this.idle);
+        if (this.entry === '' && this.code === '' && this.adminPin === '') return;
+        this.idle = setTimeout(() => this.clearHalfTyped(), this.idleSeconds * 1000);
+    },
+
+    clearHalfTyped() {
+        clearTimeout(this.idle);
+        if (this.sending) return;
+        this.entry = '';
+        this.code = '';
+        this.adminPin = '';
     },
 
     get colour() {
@@ -250,7 +330,7 @@ function roomTablet() { return {
     },
 
     tick() {
-        // The centre's time, as on the front door clock.
+        // The center's time, as on the front door clock.
         const at = new Date();
         const zone = @js(config('app.timezone'));
         this.now = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: zone });
@@ -259,7 +339,8 @@ function roomTablet() { return {
 
     press(key) {
         this.entry += key;
-        if (this.entry.length === 4) this.identify();
+        this.armIdle();
+        if (this.entry.length === this.pinLength) this.identify();
     },
 
     focusEntry() {
@@ -269,29 +350,75 @@ function roomTablet() { return {
 
     /* ---- the gear ---- */
 
+    // QA K4, 16 Nov 2026: the gear opens on an administrator's PIN, and the
+    // room-code pad only once the server has said yes to it.
     openSetup() {
         clearTimeout(this.timer);
-        this.step = 'setup';
+        clearTimeout(this.idle);
+        this.step = 'admin';
+        this.adminPin = '';
         this.code = '';
+        this.setupToken = null;
         this.problem = null;
         this.hold(60000);
     },
 
-    pressCode(key) {
-        this.code = (this.code + key).slice(0, 4);
-        if (this.code.length === 4) this.setup();
+    pressAdmin(key) {
+        this.adminPin = (this.adminPin + key).slice(0, this.pinLength);
+        this.armIdle();
+        if (this.adminPin.length === this.pinLength) this.authorize();
     },
 
-    async setup() {
+    async authorize() {
         if (this.sending) return;
+        clearTimeout(this.idle);
         this.sending = true;
         this.problem = null;
 
         try {
-            const response = await window.postJson(@js(route('room.kiosk.setup')), { code: this.code });
+            const response = await window.postJson(@js(route('room.kiosk.setup.authorize')), { admin_pin: this.adminPin });
             const data = await response.json();
 
             if (data.status === 'ok') {
+                this.setupToken = data.setup_token;
+                this.step = 'setup';
+            } else {
+                this.problem = this.describe(data.status);
+            }
+        } catch {
+            this.problem = this.describe('error');
+        } finally {
+            this.sending = false;
+            this.adminPin = '';
+            this.hold(60000);
+        }
+    },
+
+    pressCode(key) {
+        this.code = (this.code + key).slice(0, this.codeLength);
+        this.armIdle();
+        if (this.code.length === this.codeLength) this.setup();
+    },
+
+    async setup() {
+        if (this.sending) return;
+        clearTimeout(this.idle);
+        this.sending = true;
+        this.problem = null;
+
+        try {
+            // The go-ahead from the administrator's PIN rides with the code;
+            // without it the server refuses the code, whatever the screen says.
+            const response = await window.postJson(@js(route('room.kiosk.setup')), { code: this.code, setup_token: this.setupToken });
+            const data = await response.json();
+
+            if (data.status === 'needs_admin') {
+                // Timed out, or the go-ahead was refused: back to the PIN.
+                this.setupToken = null;
+                this.step = 'admin';
+                this.problem = this.describe('needs_admin');
+                this.hold(60000);
+            } else if (data.status === 'ok') {
                 this.room = data.room;
                 this.done = {
                     tone: 'ok',
@@ -299,11 +426,12 @@ function roomTablet() { return {
                     sub: `Teachers who key their PIN here are checked into ${data.room}. The office sees it in Settings → Rooms & hours.`,
                     warning: null,
                 };
+                this.setupToken = null;
                 this.step = 'done';
                 this.hold(8000);
             } else {
                 this.problem = data.status === 'bad_code'
-                    ? { kind: 'bad', title: 'That’s not a room code' }
+                    ? { kind: 'bad', title: 'That’s not a room code', detail: '' }
                     : this.describe(data.status);
                 this.hold(60000);
             }
@@ -319,13 +447,16 @@ function roomTablet() { return {
 
     async identify() {
         const value = this.entry.trim();
-        if (value.length < 4 || this.sending) return;
+        if (value.length < this.pinLength || this.sending) return;
 
+        clearTimeout(this.idle);
         this.sending = true;
         this.problem = null;
 
         try {
-            const body = /^\d{4}$/.test(value) ? { pin: value } : { card: value };
+            // A whole PIN of digits is a PIN; anything longer came off a scanner.
+            const isPin = value.length === this.pinLength && /^[0-9]+$/.test(value);
+            const body = isPin ? { pin: value } : { card: value };
             const response = await window.postJson(@js(route('room.kiosk.identify')), body);
             const data = await response.json();
 
@@ -389,21 +520,28 @@ function roomTablet() { return {
 
     reset() {
         clearTimeout(this.timer);
+        clearTimeout(this.idle);
         this.staff = null;
         this.ticket = null;
         this.done = null;
         this.problem = null;
         this.entry = '';
         this.code = '';
+        this.adminPin = '';
+        this.setupToken = null;
         this.step = 'pin';
         this.focusEntry();
     },
 
     describe(status) {
+        // No "ambiguous" answer any more: staff PINs are unique
+        // (QA K2, 16 Nov 2026). US spelling on screen (QA K6).
         return {
-            not_found: { kind: 'soft', title: 'Not recognised', detail: 'Try again, or ask the office.' },
-            locked:    { kind: 'soft', title: 'Not recognised', detail: 'Try again shortly, or ask the office.' },
-            ambiguous: { kind: 'bad',  title: 'Ask the office',  detail: 'Two people share that PIN — use the front door scanner.' },
+            not_found: { kind: 'soft', title: 'Not recognized', detail: 'Try again, or ask the office.' },
+            locked:    { kind: 'soft', title: 'Not recognized', detail: 'Try again shortly, or ask the office.' },
+            not_admin: { kind: 'bad',  title: 'Ask a director', detail: 'Only an administrator’s PIN can set up this tablet.' },
+            needs_admin: { kind: 'bad', title: 'Key an administrator’s PIN again', detail: 'Setting up timed out — start again from the PIN.' },
+            too_many:  { kind: 'bad',  title: 'Too many tries — wait {{ (int) config('kiosk.setup_decay_minutes') }} minutes', detail: 'Then try again, or ask the office.' },
             expired:   { kind: 'soft', title: 'That took too long', detail: 'Key your PIN again to carry on.' },
             stale:     { kind: 'soft', title: 'Something changed', detail: 'Your day moved on — here it is again.' },
             already_here: { kind: 'soft', title: 'You’re already here', detail: 'Nothing to change.' },

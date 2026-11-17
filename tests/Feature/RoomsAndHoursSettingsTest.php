@@ -37,7 +37,7 @@ class RoomsAndHoursSettingsTest extends TestCase
             ->assertSeeInOrder(['Room', 'Ages', 'Staff : children', 'Capacity', 'NY max group', 'Room open hours', 'Check'])
             ->assertSeeInOrder(['data-room-row="Infant"', 'data-room-row="Transition"', 'data-room-row="Toddler"', 'data-room-row="PreK"', 'data-room-row="UPK-4"', 'data-room-row="School Age"'], false)
             ->assertSee('6 wk–18 mo')
-            ->assertSee('Centre opens')->assertSee('Centre closes')->assertSee('Earliest start for everyone else')->assertSee('Early drop-off room')
+            ->assertSee('Center opens')->assertSee('Center closes')->assertSee('Earliest start for everyone else')->assertSee('Early drop-off room')
             ->assertSee('School Age leaves for school')->assertSee('School Age back from school')->assertSee('Longest shift (hours)')->assertSee('Most hours in a week')
             ->assertSee('Only staff who may open the building can start before the earliest start')
             ->assertSee('>Save<', false);
@@ -86,9 +86,9 @@ class RoomsAndHoursSettingsTest extends TestCase
         ]))->assertRedirect(route('settings.rooms'));
 
         $warnings = app(CentreSettings::class)->warnings();
-        $this->assertContains('Infant: Closes after the centre does.', $warnings);
+        $this->assertContains('Infant: Closes after the center does.', $warnings);
         $this->assertContains('School Age comes back before it leaves — check the two times.', $warnings);
-        $this->assertContains('The earliest start for everyone else is before the centre opens — only staff who may open the building can start then.', $warnings);
+        $this->assertContains('The earliest start for everyone else is before the center opens — only staff who may open the building can start then.', $warnings);
 
         // A close before an open is refused outright, not warned about.
         $this->actingAs($this->admin)->from(route('settings.rooms'))->put(route('settings.rooms.update'), $this->payload([

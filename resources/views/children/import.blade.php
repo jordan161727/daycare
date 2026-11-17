@@ -32,6 +32,25 @@
                     </div>
                 @endif
 
+                @if(session('import_duplicates'))
+                    {{-- Rows that look like a child already on file: held back
+                         and named, for the importer to confirm (second QA
+                         brief, Nov 2026). Ticking the box and uploading the
+                         same file again adds them. --}}
+                    <div class="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900" role="alert" data-import-duplicates>
+                        <p class="font-semibold">Possible duplicates — not added:</p>
+                        <ul class="mt-2 list-inside list-disc space-y-1 text-sm">
+                            @foreach(session('import_duplicates') as $duplicate)
+                                <li>{{ $duplicate }}</li>
+                            @endforeach
+                        </ul>
+                        <label class="mt-3 flex items-center gap-2 text-sm font-medium">
+                            <input type="checkbox" name="confirm_duplicates" value="1" class="rounded border-amber-400">
+                            These are different children — add them anyway when I upload the file again
+                        </label>
+                    </div>
+                @endif
+
                 @if($errors->any())
                     <div class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
                         <p class="font-semibold">Please fix the following:</p>
@@ -59,7 +78,7 @@
                     <ul class="mt-3 space-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <li>&middot; <b>LAN</b> is the key. A row whose LAN is already here updates that child rather than adding a second one.</li>
                         <li>&middot; An empty cell leaves what is on record alone &mdash; it never clears it.</li>
-                        <li>&middot; Columns the importer does not recognise are ignored, so your own working columns can stay in the file.</li>
+                        <li>&middot; Columns the importer does not recognize are ignored, so your own working columns can stay in the file.</li>
                         <li>&middot; Days can be written <b>Mon,Wed,Fri</b>, <b>1,3,5</b>, <b>MWF</b> or <b>M-F</b>.</li>
                     </ul>
                 </div>

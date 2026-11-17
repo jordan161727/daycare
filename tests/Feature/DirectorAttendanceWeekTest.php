@@ -81,7 +81,7 @@ class DirectorAttendanceWeekTest extends TestCase
         $this->assertSame('7:15a – 8:30a · 3:00p – 6:00p', $ruby['hours']);
 
         // Today's numbers: two enrolled, two expected, Ava in, Ruby still to come.
-        $this->assertSame(['enr' => 2, 'exp' => 2, 'inN' => 1, 'come' => 1, 'notIn' => 1], $w['sum']);
+        $this->assertSame(['enr' => 2, 'exp' => 2, 'inN' => 1, 'abs' => 0, 'come' => 1, 'notIn' => 1], $w['sum']);
     }
 
     public function test_a_tap_moves_the_day_through_its_states_and_the_tick_with_it(): void

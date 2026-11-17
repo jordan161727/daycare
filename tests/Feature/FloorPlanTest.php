@@ -63,7 +63,7 @@ class FloorPlanTest extends TestCase
         // Toddler: short one, Sultana late, LaQuora free to cover.
         $toddler = $rooms['Toddler'];
         $this->assertSame(['Short 1', 'short', 10, 1, 2], [$toddler['status'], $toddler['tone'], $toddler['in'], $toddler['staffIn'], $toddler['needed']]);
-        $staff = collect($toddler['staff'])->keyBy('name');
+        $staff = collect($toddler['staff'])->keyBy('first');
         $this->assertSame(['in', '7:29 AM'], [$staff['Mary']['status'], $staff['Mary']['in']]);
         $this->assertSame(['late', '9:30', '9:30 AM'], [$staff['Sultana']['status'], $staff['Sultana']['due'], $staff['Sultana']['dueFull']]);
         $this->assertSame("10 toddlers need 2 staff at 1:6. Sultana was due 9:30 and hasn't clocked in. PreK has 7 children and 2 staff, so LaQuora is free to cover.", $toddler['tip']['text']);
@@ -103,7 +103,7 @@ class FloorPlanTest extends TestCase
         $morning = collect(app(FloorPlan::class)->for($this->admin)['rooms'])->keyBy('room');
         $this->assertSame(['Away', 'away', 0, 6, '3:00 PM'], [$morning['School Age']['status'], $morning['School Age']['tone'], $morning['School Age']['in'], $morning['School Age']['returning'], $morning['School Age']['returnLabel']]);
         $this->assertSame('School Age children are at school. 6 are booked back at 3:00 PM — that needs 1 staff at 1:15.', $morning['School Age']['tip']['text']);
-        $this->assertSame('due', collect($morning['School Age']['staff'])->firstWhere('name', 'Amanda')['status']);
+        $this->assertSame('due', collect($morning['School Age']['staff'])->firstWhere('first', 'Amanda')['status']);
 
         // The afternoon, as booked: the six are back, Amanda is on, Beverly is off.
         $afternoon = app(FloorPlan::class)->for($this->admin, 'afternoon');
@@ -155,7 +155,7 @@ class FloorPlanTest extends TestCase
         $rooms = collect(app(FloorPlan::class)->for($this->admin)['rooms'])->keyBy('room');
         $this->assertSame(['Covered', 2, null], [$rooms['Toddler']['status'], $rooms['Toddler']['staffIn'], $rooms['Toddler']['tip']]);
         $this->assertSame(['Covered', 1], [$rooms['PreK']['status'], $rooms['PreK']['staffIn']]);
-        $laLine = collect($rooms['Toddler']['staff'])->firstWhere('name', 'LaQuora');
+        $laLine = collect($rooms['Toddler']['staff'])->firstWhere('first', 'LaQuora');
         $this->assertSame([true, 'PreK', 'in'], [$laLine['moved'], $laLine['home'], $laLine['status']]);
         $this->actingAs($this->admin)->withSession(['floor' => 'LaQuora is in Toddler from 10:30 AM until Sultana clocks in.'])
             ->get(route('floor-plan.index', ['room' => 'Toddler']))->assertOk()
@@ -178,7 +178,7 @@ class FloorPlanTest extends TestCase
         $rooms = collect(app(FloorPlan::class)->for($this->admin)['rooms'])->keyBy('room');
         $this->assertSame(['Covered', 2], [$rooms['Toddler']['status'], $rooms['Toddler']['staffIn']]);
         $this->assertSame(['1 spare', 2], [$rooms['PreK']['status'], $rooms['PreK']['staffIn']]);
-        $this->assertSame(['Mary', 'Sultana'], collect($rooms['Toddler']['staff'])->pluck('name')->all());
+        $this->assertSame(['Mary', 'Sultana'], collect($rooms['Toddler']['staff'])->pluck('first')->all());
     }
 
     public function test_a_must_rule_keeps_a_person_out_of_a_room_and_the_page_says_so(): void

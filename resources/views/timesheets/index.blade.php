@@ -146,7 +146,7 @@
                     <tr class="hover:bg-slate-50/80 dark:hover:bg-white/5">
                         <td class="sticky left-0 z-10 bg-white px-4 py-2.5 dark:bg-slate-900">
                             <a href="{{ route('timesheets.edit', ['period' => $period, 'user' => $staff]) }}" class="font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300">{{ $staff->name }}</a>
-                            <span class="block text-[11px] text-slate-500">{{ $staff->employment ?? '—' }}</span>
+                            <span class="block text-[11px] text-slate-500">{{ $staff->employment ? $staff->employmentLabel() : '—' }}</span>
                         </td>
 
                         @foreach($dates as $date)
@@ -191,7 +191,7 @@
                         <td class="px-3 py-2.5 text-right font-bold tabular-nums">{{ number_format($line['paid_hours'], 2) }}</td>
                         <td class="px-4 py-2.5 text-right tabular-nums">
                             @if($line['pay_hidden'] ?? false)
-                                <span class="text-slate-400" title="Only the director can view pay">—</span>
+                                <span class="text-slate-400" title="Only people with pay access can view pay">—</span>
                             @elseif($line['estimated_gross'] === null)
                                 <span class="text-amber-600 dark:text-amber-300" title="No pay rate on this record">no rate</span>
                             @else

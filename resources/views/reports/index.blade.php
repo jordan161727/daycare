@@ -64,16 +64,16 @@
                 @php($at = \Illuminate\Support\Carbon::createFromFormat('Y-m', $month)->startOfMonth())
                 @php($thisMonth = $at->isSameMonth(today()))
                 <div class="fg"><span class="lblu">Month</span><div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;" data-month-stepper>
-                    <span style="display: inline-flex; align-items: stretch; border: 1px solid #cfd3de; border-radius: 999px; background: #fff; overflow: hidden;">
-                        <a href="{{ $link(['month' => $at->copy()->subMonth()->format('Y-m')]) }}" style="display: grid; place-items: center; width: 34px; color: #8a90a0; text-decoration: none;" aria-label="Previous month" data-month-prev>‹</a>
-                        <span style="display: flex; align-items: center; gap: 6px; border-left: 1px solid #e7e9f0; border-right: 1px solid #e7e9f0; padding: 0 12px; min-height: 32px; font-size: 12.5px; font-weight: 700; {{ $thisMonth ? '' : 'color: #1b5e91;' }}" data-month-label>
-                            <svg style="width: 13px; height: 13px; color: #8a90a0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    <span class="mstep">
+                        <a href="{{ $link(['month' => $at->copy()->subMonth()->format('Y-m')]) }}" class="mstep-arrow" aria-label="Previous month" data-month-prev>‹</a>
+                        <span class="mstep-label {{ $thisMonth ? '' : 'away' }}" data-month-label>
+                            <svg class="mstep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                             {{ $at->format('F Y') }}
                         </span>
                         @if($thisMonth)
-                            <span style="display: grid; place-items: center; width: 34px; color: #cfd3de;" aria-disabled="true" title="This month is the latest" data-month-next>›</span>
+                            <span class="mstep-arrow off" aria-disabled="true" title="This month is the latest" data-month-next>›</span>
                         @else
-                            <a href="{{ $link(['month' => $at->copy()->addMonth()->format('Y-m')]) }}" style="display: grid; place-items: center; width: 34px; color: #8a90a0; text-decoration: none;" aria-label="Next month" data-month-next>›</a>
+                            <a href="{{ $link(['month' => $at->copy()->addMonth()->format('Y-m')]) }}" class="mstep-arrow" aria-label="Next month" data-month-next>›</a>
                         @endif
                     </span>
                     @if($thisMonth)

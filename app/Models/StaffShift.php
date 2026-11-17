@@ -25,7 +25,7 @@ class StaffShift extends Model
 
     protected $fillable = [
         'week_start', 'user_id', 'shift_date', 'day',
-        'starts_at', 'ends_at', 'classroom', 'role', 'covers_user_id',
+        'starts_at', 'ends_at', 'classroom', 'role', 'covers_user_id', 'moved_by',
     ];
 
     protected $casts = [

@@ -33,11 +33,19 @@ class ChildStatusFilterTest extends TestCase
         $this->child('Inactive', 'Left');
         $this->child('Pending', 'Soon');
 
-        // Everybody, as before.
+        // Everybody, on the All tab.
+        $this->actingAs($this->admin)
+            ->get(route('children.index', ['status' => 'all']))
+            ->assertOk()
+            ->assertSee('Stays')->assertSee('Left')->assertSee('Soon');
+
+        // The page opens on Active (QA #5, 12 Nov 2026).
         $this->actingAs($this->admin)
             ->get(route('children.index'))
             ->assertOk()
-            ->assertSee('Stays')->assertSee('Left')->assertSee('Soon');
+            ->assertSee('Stays')
+            ->assertDontSee('Left')
+            ->assertDontSee('Soon');
 
         // And one at a time.
         $this->actingAs($this->admin)
@@ -101,11 +109,16 @@ class ChildStatusFilterTest extends TestCase
      * A page that says "no children" when the truth is "no such status" sends
      * somebody looking for a bug in their data.
      */
-    public function test_an_invented_status_is_refused(): void
+    public function test_an_invented_status_opens_the_default_list(): void
     {
+        // Changed (tester report, Nov 2026): an invented status in the
+        // address — an old bookmark, a hand-edited link — opens the default
+        // Active list rather than a 404 page. The export still refuses one
+        // (ChildrenExportTest).
         $this->actingAs($this->admin)
             ->get(route('children.index', ['status' => 'Departed']))
-            ->assertNotFound();
+            ->assertOk()
+            ->assertViewHas('status', 'Active');
     }
 
     /** And an empty result says which question came back empty. */

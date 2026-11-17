@@ -5,7 +5,9 @@
      dozens of days once a year of statutory holidays is seeded, and that many
      hidden modals is a lot of DOM for a control used once in a while. --}}
 <div x-data="holidayDialog(@js($restores))" @keydown.escape.window="close()">
-    <x-page-header title="Holidays &amp; Closures" subtitle="The days the centre is shut. Set one here and every room's attendance schedule closes for that day."/>
+    {{-- A plain "&": the header escapes its title itself, so "&amp;" here
+         came out on the page as the literal text (QA #11, 12 Nov 2026). --}}
+    <x-page-header title="Holidays & Closures" subtitle="The days the center is shut. Set one here and every room's attendance schedule closes for that day."/>
 
     @if(session('success'))<div class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{{ session('success') }}</div>@endif
     @if(session('warning'))<div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{{ session('warning') }}</div>@endif
@@ -126,16 +128,17 @@
                     @endforelse
                 </ul>
 
-                {{-- The form makes fixed dates; the moving ones come from the
-                     statutory seeder, which knows how to find them. Saying so
+                {{-- The form makes fixed dates; the moving ones are set up
+                     separately, by rules that know how to find them. Saying so
                      beats leaving a director hunting for a control that is not
-                     there. --}}
-                <p class="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">This form sets a fixed date. Holidays that move each year — Good Friday, Victoria Day, Labour Day, Thanksgiving — are set up by the statutory holiday seeder and appear in the list above with the date they next fall on.</p>
+                     there. US holidays as the examples, and no talk of seeders —
+                     that is our word, not the director's (QA #42, 12 Nov 2026). --}}
+                <p class="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">This form sets a fixed date, such as July 4. Holidays that move each year — Memorial Day, Labor Day, Thanksgiving — are set up separately, and appear in the list above with the date they next fall on.</p>
             </section>
         </div>
 
         <div class="space-y-5 xl:col-span-2">
-            @foreach([['title' => 'Upcoming', 'days' => $upcoming, 'empty' => 'No closures are set. The centre is open every weekday from here on.'], ['title' => 'Past', 'days' => $past, 'empty' => 'No past closures.']] as $group)
+            @foreach([['title' => 'Upcoming', 'days' => $upcoming, 'empty' => 'No closures are set. The center is open every weekday from here on.'], ['title' => 'Past', 'days' => $past, 'empty' => 'No past closures.']] as $group)
                 <section class="glass-card overflow-hidden rounded-2xl">
                     <header class="flex items-center justify-between gap-4 border-b border-slate-100 p-5 dark:border-white/10">
                         <h2 class="text-base font-semibold">{{ $group['title'] }}</h2>
@@ -253,7 +256,7 @@
                         </label>
                         <label class="block text-xs font-medium text-slate-500 dark:text-slate-400">
                             Reason
-                            <input type="text" name="reason" x-model="form.reason" maxlength="120" placeholder="Centre closed"
+                            <input type="text" name="reason" x-model="form.reason" maxlength="120" placeholder="Center closed"
                                    class="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100">
                         </label>
                         <p x-show="form.closed_on !== original.closed_on" x-cloak class="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">

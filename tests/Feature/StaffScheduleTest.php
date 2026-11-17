@@ -378,7 +378,7 @@ class StaffScheduleTest extends TestCase
             ->get(route('staff-schedule.index', ['week' => self::WEEK]))
             ->assertOk()
             ->assertSee('Emily Carter')
-            ->assertSee('Weekly schedule');
+            ->assertSee('Schedule');
     }
 
     public function test_nobody_is_ever_scheduled_in_two_rooms_at_once(): void

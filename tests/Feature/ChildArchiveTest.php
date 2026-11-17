@@ -19,6 +19,7 @@ use Tests\TestCase;
  */
 class ChildArchiveTest extends TestCase
 {
+    use \Tests\Concerns\MakesChildrenReadyForActive;
     use RefreshDatabase;
 
     private User $admin;
@@ -67,7 +68,9 @@ class ChildArchiveTest extends TestCase
         // The status filters: Active no longer lists them, and the Archived
         // tab is not an address while the setting is off.
         $this->actingAs($this->admin)->get(route('children.index', ['status' => 'Active']))->assertOk()->assertDontSee('Goes');
-        $this->actingAs($this->admin)->get(route('children.index', ['status' => 'Archived']))->assertNotFound();
+        // An address for a tab that is not there opens the default list
+        // (tester report, Nov 2026) rather than a 404 — still without the archived.
+        $this->actingAs($this->admin)->get(route('children.index', ['status' => 'Archived']))->assertOk()->assertSee('Stays')->assertDontSee('Goes');
 
         // The export is built from the same roll.
         Excel::fake();
@@ -167,7 +170,7 @@ class ChildArchiveTest extends TestCase
             ->assertSee('Archived children (<span x-text="count">1</span>)', false)
             ->assertSee('Goes')
             ->assertSee('Unarchive Ben Goes')
-            ->assertSee('Unarchived children go back to the Children page as Inactive.');
+            ->assertSee('Unarchived children go back to the Children page as Withdrawn.');
 
         $this->actingAs($this->admin)->postJson(route('children.unarchive', $this->goes))
             ->assertOk()
@@ -181,7 +184,7 @@ class ChildArchiveTest extends TestCase
             ->assertOk()
             ->assertSee('No archived children.');
 
-        $this->actingAs($this->admin)->get(route('children.index'))
+        $this->actingAs($this->admin)->get(route('children.index', ['status' => 'all']))
             ->assertOk()
             ->assertSee('Goes')
             ->assertSee('Withdrawn <span class="ml-0.5 opacity-60">1</span>', false);
@@ -222,7 +225,7 @@ class ChildArchiveTest extends TestCase
 
         $this->actingAs($this->admin)->put(route('children.update', $this->goes), [
             'first_name' => 'Ben', 'last_name' => 'Goes', 'status' => 'Archived',
-        ])->assertRedirect(route('children.index'));
+        ])->assertRedirect(route('children.index', ['status' => 'Archived']));
 
         $goes = $this->goes->fresh();
         $this->assertSame('Archived', $goes->status);
@@ -230,10 +233,12 @@ class ChildArchiveTest extends TestCase
         $this->assertNotNull($goes->archived_at);
         $this->assertSame($this->admin->id, $goes->archived_by);
 
-        // And back out again, by the same form, clears it.
+        // And back out again, by the same form, clears it. Back to Active
+        // needs what Active needs (Child::ACTIVE_REQUIRES).
+        $this->readyForActive($this->goes);
         $this->actingAs($this->admin)->put(route('children.update', $this->goes), [
             'first_name' => 'Ben', 'last_name' => 'Goes', 'status' => 'Active',
-        ])->assertRedirect(route('children.index'));
+        ])->assertRedirect(route('children.index', ['status' => 'Active']));
 
         $this->assertNull($this->goes->fresh()->archived_at);
     }

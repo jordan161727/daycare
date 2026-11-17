@@ -485,6 +485,6 @@ class Timesheet
     {
         $user = auth()->user();
 
-        return $user === null || $user->canSeePay();
+        return $user === null || $user->can('view-pay');
     }
 }

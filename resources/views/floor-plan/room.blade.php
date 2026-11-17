@@ -14,10 +14,16 @@
         style="{{ $place }} {{ $xs ?? '' }}" @click="pick(@js($r['room']))" :aria-pressed="room && room.room === @js($r['room']) ? 'true' : 'false'"
         data-room="{{ $r['room'] }}" data-room-tone="{{ $r['tone'] }}">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; width: 100%;">
-        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span style="font-size: 16px; font-weight: 700;">{{ $r['room'] }}</span><span class="muted" style="font-size: 12px;">{{ $r['ages'] }}@if($r['room'] === 'UPK-4') · shares with School Age @elseif($r['room'] === 'School Age') · same room as UPK-4 @endif · 1:{{ $r['ratio'] }}</span></div>
+        <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;"><span style="font-size: 16px; font-weight: 700;">{{ $r['room'] }}</span><span class="muted" style="font-size: 12px;">{{ $r['ages'] }}@if($r['sharedWith'] ?? null) · shares with {{ implode(', ', $r['sharedWith']) }}@endif · 1:{{ $r['ratio'] }}</span></div>
         <span class="pill {{ $pill }}">{{ $r['status'] }}</span>
     </div>
-    <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 26px; font-weight: 700;">{{ $r['in'] }}</span><span class="muted" style="font-size: 13px;">in · cap {{ $r['capacity'] }}</span><span class="muted" style="font-size: 13px; margin-left: auto;">{{ $staffLine }}</span></div>
+    <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 26px; font-weight: 700;">{{ $r['in'] }}</span>@if(! ($r['space'] ?? null))<span class="muted" style="font-size: 13px;">in · cap {{ $r['capacity'] }}</span>@endif
+    @if($r['space'] ?? null)
+        {{-- A shared room: one capacity line for the space, the combined
+             total against its places, on its first room's card; each class
+             keeps its own ratio above (QA retest, 16 Nov 2026). --}}
+        <span class="muted" style="font-size: 13px;" data-shared-space="{{ $r['space']['label'] }}">in · {{ $r['space']['first'] ? 'shared room '.$r['space']['in'].' of '.$r['space']['capacity'] : 'see '.$r['sharedWith'][0].' for the shared room' }}</span>@if($r['space']['first'] && ($r['overCapacity'] || $r['capacityWarning']))<span class="pill bad" style="font-size: 11px; padding: 1px 8px;" title="{{ $r['capacityWarning'] }}" data-room-overbooked>⚠ {{ $r['overCapacity'] ? 'Over capacity' : 'Over-booked' }}</span>@endif
+    @elseif($r['overCapacity'] ?? false)<span class="pill bad" style="font-size: 11px; padding: 1px 8px;" data-room-over>Over capacity</span>@elseif($r['capacityWarning'] ?? null)<span class="pill bad" style="font-size: 11px; padding: 1px 8px;" title="{{ $r['capacityWarning'] }}" data-room-overbooked>⚠ Over-booked</span>@endif<span class="muted" style="font-size: 13px; margin-left: auto;">{{ $staffLine }}</span></div>
     <div style="display: flex; flex-wrap: wrap; gap: 3px; max-width: {{ $perRow * 15 }}px;" aria-label="{{ $r['in'] }} in, {{ $r['booked'] }} booked and not in yet, {{ $r['free'] }} free" data-room-dots>
         @for($i = 0; $i < $seats; $i++)
             <span class="seat {{ $i < $r['in'] ? 's-in' : ($i < $r['in'] + $r['booked'] ? 's-come' : 's-free') }}"></span>

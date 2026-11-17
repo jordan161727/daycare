@@ -75,9 +75,14 @@ class StaffCardController extends Controller
             ->header('Content-Disposition', 'attachment; filename="'.$name.'"');
     }
 
-    /** Set or replace the four digits that stand in for a lost card. */
+    /** Set or replace the digits that stand in for a lost card. */
     public function pin(Request $request, User $staff)
     {
+        // The length is the clock's and the room tablets' (QA K1, 16 Nov
+        // 2026): a PIN set here at a length the keypads do not submit at is
+        // a PIN nobody can key.
+        $length = (int) config('kiosk.pin_length');
+
         $data = $request->validate([
             // Confirmed, because a mistyped PIN is not discovered until
             // somebody is standing at the clock unable to start their shift.
@@ -86,12 +91,14 @@ class StaffCardController extends Controller
             // they key in. Two people on one PIN is not a security hole — it
             // is a screen that has to stop and ask which of you this is, every
             // morning, to both of them. Refusing it here is a moment's
-            // inconvenience to the one director setting it.
+            // inconvenience to the one director setting it. Since QA K2 (16
+            // Nov 2026) the database refuses it as well, so this is what
+            // turns the unique index into a sentence on the form.
             'kiosk_pin' => [
-                'required', 'digits:4', 'confirmed',
+                'required', 'digits:'.$length, 'confirmed',
                 function (string $attribute, mixed $value, \Closure $fail) use ($staff) {
                     if (User::kioskPinTaken((string) $value, $staff)) {
-                        $fail('Somebody else already uses that PIN. Pick four different digits.');
+                        $fail('Somebody else already uses that PIN. Pick different digits.');
                     }
                 },
             ],

@@ -3,5 +3,5 @@
 @if($user->avatar_url)
     <img src="{{ $user->avatar_url }}" alt="{{ $user->name }}" {{ $attributes->merge(['class' => $size.' shrink-0 rounded-full object-cover']) }}>
 @else
-    <span {{ $attributes->merge(['class' => $size.' '.$text.' grid shrink-0 place-items-center rounded-full bg-white/55 font-semibold uppercase']) }} aria-hidden="true">{{ $user->initials }}</span>
+    <span {{ $attributes->merge(['class' => $size.' '.$text.' grid shrink-0 place-items-center rounded-full bg-white/55 font-semibold uppercase']) }} aria-hidden="true" title="{{ $user->name }}">{{ $user->initials }}</span>
 @endif

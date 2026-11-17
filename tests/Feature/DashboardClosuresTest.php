@@ -98,6 +98,6 @@ class DashboardClosuresTest extends TestCase
         $this->actingAs($this->teacher)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('the centre is open every weekday');
+            ->assertSee('the center is open every weekday');
     }
 }

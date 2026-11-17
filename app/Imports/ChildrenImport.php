@@ -44,6 +44,12 @@ class ChildrenImport implements ToCollection, WithHeadingRow
 
     public int $skipped = 0;
 
+    /** Rows held back as a child already on file — listed for the importer to confirm. */
+    public array $duplicates = [];
+
+    /** Set when the importer has confirmed: rows matching a child on file are added anyway. */
+    public bool $confirmDuplicates = false;
+
     /** @var array<int, string> */
     public array $errors = [];
 
@@ -187,7 +193,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
         if ($rows->isNotEmpty() && $known === []) {
             $found = collect($headings)->filter()->take(6)->implode(', ');
 
-            $this->errors[] = 'None of the columns in this sheet were recognised. '
+            $this->errors[] = 'None of the columns in this sheet were recognized. '
                 .($found === '' ? 'The first row appears to be blank.' : 'The first row reads: '.$found.'.')
                 .' The first row must be the column headings — delete any title or blank rows above it.';
 
@@ -253,6 +259,21 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             // none, because the name is already there.
             if (blank($data['first_name'] ?? null) && blank($data['last_name'] ?? null)) {
                 $this->errors[] = "Row {$rowNumber}: no name, so there is nothing to file this child under.";
+
+                continue;
+            }
+
+            /*
+             * A child already on file under another LAN, or written another
+             * way ("ADA  lovelace"), is held back and listed for the person
+             * importing to confirm (second QA brief, Nov 2026) — not added a
+             * second time, and not dropped without a word. Uploading the
+             * file again with "add them anyway" ticked adds them.
+             */
+            $born = $data['birth_date'] ?? $data['dob'] ?? null;
+            if (! $this->confirmDuplicates && ($same = Child::findDuplicate($data['first_name'] ?? null, $data['last_name'] ?? null, $born))) {
+                $this->duplicates[] = "Row {$rowNumber}: ".trim(($data['first_name'] ?? '').' '.($data['last_name'] ?? ''))
+                    .' was not added. '.$same->duplicateSummary($born);
 
                 continue;
             }
@@ -723,7 +744,7 @@ class ChildrenImport implements ToCollection, WithHeadingRow
             $labels = [
                 'dob' => 'date of birth',
                 'birth_date' => 'birth date',
-                'enrolled_on' => 'enrolment date',
+                'enrolled_on' => 'enrollment date',
                 'withdrawn_on' => 'withdrawal date',
             ];
 

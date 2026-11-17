@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
  *
  *     php artisan db:seed --class=KioskStaffDemoSeeder
  *
- * Lana Ortiz 3333 (PreK), Sultana Begum 4444 (Toddler), Evana Roy 5555
+ * Lana Ortiz 333333 (PreK), Sultana Begum 444444 (Toddler), Evana Roy 555555
  * (Infant). Made-up people on example.test addresses; run it as often as
  * you like — each run finds them by email and puts the PINs back.
  *
@@ -26,9 +26,9 @@ use Illuminate\Support\Str;
 class KioskStaffDemoSeeder extends Seeder
 {
     private const STAFF = [
-        ['Lana Ortiz', 'lana.ortiz@example.test', 'PreK', '3333'],
-        ['Sultana Begum', 'sultana.begum@example.test', 'Toddler', '4444'],
-        ['Evana Roy', 'evana.roy@example.test', 'Infant', '5555'],
+        ['Lana Ortiz', 'lana.ortiz@example.test', 'PreK', '333333'],
+        ['Sultana Begum', 'sultana.begum@example.test', 'Toddler', '444444'],
+        ['Evana Roy', 'evana.roy@example.test', 'Infant', '555555'],
     ];
 
     public function run(): void

@@ -49,7 +49,7 @@ class ListUiTest extends TestCase
 
         $tabs = ['' => 5 + 2 + 2, 'Active' => 5, 'Pending' => 2, 'Inactive' => 2];
         foreach ($tabs as $status => $expected) {
-            $html = $this->page(['status' => $status]);
+            $html = $this->page(['status' => $status === '' ? 'all' : $status]); // No status opens Active since QA #5.
             $rows = $this->rowCount($html);
             $label = $status === '' ? 'all' : $status;
             preg_match('/data-count="'.preg_quote($label, '/').'"[^>]*>[^<]*<span[^>]*>(\d+)</', $html, $m);
@@ -262,7 +262,7 @@ class ListUiTest extends TestCase
         // Born so the age rule moves them Toddler -> PreK on 2027-01-10.
         $kid = $this->kid('TEST-Drift', 'TEST-Room', ['birth_date' => '2024-01-10']);
         $this->assertSame('Toddler', $kid->fresh()->classroom);
-        $this->actingAs($this->admin)->post(route('children.withdraw', $kid), ['last_day' => '2026-10-28', 'reason' => 'Family choice']);
+        $this->actingAs($this->admin)->post(route('children.withdraw', $kid), ['last_day' => '2026-10-28', 'reason' => 'Family choice', 'could_return' => 'Yes', 'note' => 'TEST']);
         $this->assertSame('Inactive', $kid->fresh()->status);
 
         $this->travelTo(Carbon::parse('2027-02-01 09:00:00'));
@@ -387,10 +387,10 @@ class ListUiTest extends TestCase
         $kid = $this->kid('TEST-Badge', 'TEST-Kid');
         $this->actingAs($this->admin)->post(route('children.alerts.store', $kid), ['type' => 'allergy', 'text' => 'TEST Peanuts', 'severity' => 'severe'])->assertRedirect();
         $html = $this->record($kid);
-        $this->assertStringContainsString('! Allergy: TEST Peanuts · severe', $html, 'header badge');
+        $this->assertMatchesRegularExpression('/na-alert--allergy na-alert--severe.*?Allergy: TEST Peanuts.*?Severe/s', $html, 'header badge');
         $this->assertMatchesRegularExpression('/data-alert="0".*?TEST Peanuts/s', $html, 'Health card');
         // The roll shows it too.
-        $this->assertStringContainsString('! TEST Peanuts', $this->page([]));
+        $this->assertMatchesRegularExpression('/na-alert--allergy na-alert--severe.*?TEST Peanuts/s', $this->page([]));
 
         // Missing badge vs Documents card.
         $this->assertMatchesRegularExpression('/<span class="pill miss">Photo consent unsigned<\/span>/', $html);
@@ -443,7 +443,7 @@ class ListUiTest extends TestCase
         $this->assertSame(['Restore'], $menus['Archived']['status']);
 
         // Server refuses the invalid transitions.
-        $this->actingAs($this->admin)->post(route('children.withdraw', $pending), ['last_day' => '2026-10-29', 'reason' => 'Family choice'])->assertStatus(422);
+        $this->actingAs($this->admin)->post(route('children.withdraw', $pending), ['last_day' => '2026-10-29', 'reason' => 'Family choice', 'could_return' => 'Yes', 'note' => 'TEST'])->assertStatus(422);
         $this->actingAs($this->admin)->post(route('children.start', $active), ['first_day' => '2026-10-29'])->assertStatus(422);
         $this->actingAs($this->admin)->post(route('children.reenroll', $active))->assertStatus(422);
 
@@ -451,7 +451,7 @@ class ListUiTest extends TestCase
         $teacher = User::factory()->create(['role' => 'teacher', 'classroom' => 'Toddler', 'must_change_password' => false]);
         $html = $this->actingAs($teacher)->get(route('children.show', $active))->getContent();
         $this->assertStringNotContainsString('x-show="statusMenu"', $html);
-        $this->actingAs($teacher)->post(route('children.withdraw', $active), ['last_day' => '2026-10-29', 'reason' => 'Family choice'])->assertForbidden();
+        $this->actingAs($teacher)->post(route('children.withdraw', $active), ['last_day' => '2026-10-29', 'reason' => 'Family choice', 'could_return' => 'Yes', 'note' => 'TEST'])->assertForbidden();
         preg_match('/x-show="menu" x-cloak @click.outside="menu = false" class="menu">(.*?)<\/div>/s', $html, $o);
         $this->note('B4 teacher ⋯ menu: '.trim(strip_tags($o[1] ?? '')));
     }

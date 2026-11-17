@@ -1,6 +1,7 @@
 @extends('layouts.app')
-@section('title', 'Check in')
+@section('title', 'Teacher Attendance')
 @section('content')
+<x-alert-styles />
 {{--
     The door screen, as a grid.
 
@@ -23,7 +24,7 @@
 <div x-data="checkInGrid()" @click="onRootClick($event)" @comment-added.window="onCommentAdded($event.detail)">
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h1 class="text-xl font-bold tracking-tight">Check in</h1>
+        <h1 class="text-xl font-bold tracking-tight">Teacher Attendance</h1>
 
         @php($isPast = $date !== $today)
         @php($dayLabel = \Illuminate\Support\Carbon::parse($date)->format('l, M j'))
@@ -42,7 +43,7 @@
              whatever weight the tablet's font gives them. --}}
         <div class="flex items-center gap-2" role="group" aria-label="Day" data-day-stepper>
             <div class="flex items-center rounded-full border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800">
-                <a href="{{ route('check-in.index', ['date' => $prevDay]) }}" class="grid h-9 w-9 place-items-center rounded-l-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="{{ \Illuminate\Support\Carbon::parse($prevDay)->format('D, M j') }}" aria-label="Previous school day" data-day-prev>
+                <a href="{{ route('check-in.index', ['date' => $prevDay]) }}" :href="dayHref(@js($prevDay))" class="grid h-9 w-9 place-items-center rounded-l-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="{{ \Illuminate\Support\Carbon::parse($prevDay)->format('D, M j') }}" aria-label="Previous school day" data-day-prev>
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                 </a>
             <div x-data="dayPicker()" @keydown.escape.window="open = false" @scroll.window="open && place()" @resize.window="open && place()" class="contents" data-day-picker>
@@ -76,7 +77,7 @@
                                         :disabled="cell.future"
                                         @mouseenter="hover = cell.key"
                                         @focus="hover = cell.key"
-                                        @click="go(cell.key)"
+                                        @click="go(cell.key, dayHref(cell.key))"
                                         :class="[
                                             lit(cell) ? 'bg-sky-100 text-sky-800 dark:bg-sky-400/20 dark:text-sky-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10',
                                             cell.outside ? 'opacity-40' : '',
@@ -89,14 +90,14 @@
                         </div>
 
                         <div class="mt-2 flex items-center justify-between border-t border-slate-200/70 pt-2 text-xs dark:border-white/10">
-                            <button type="button" @click="go(today)" class="font-semibold text-sky-700 transition hover:underline dark:text-sky-300">Jump to today</button>
+                            <button type="button" @click="go(today, dayHref(today))" class="font-semibold text-sky-700 transition hover:underline dark:text-sky-300">Jump to today</button>
                             <span class="font-medium text-slate-500 dark:text-slate-400" x-text="label(hover || current)"></span>
                         </div>
                     </div>
                 </template>
             </div>
                 @if($nextDay)
-                    <a href="{{ route('check-in.index', ['date' => $nextDay]) }}" class="grid h-9 w-9 place-items-center rounded-r-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="{{ \Illuminate\Support\Carbon::parse($nextDay)->format('D, M j') }}" aria-label="Next school day" data-day-next>
+                    <a href="{{ route('check-in.index', ['date' => $nextDay]) }}" :href="dayHref(@js($nextDay))" class="grid h-9 w-9 place-items-center rounded-r-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="{{ \Illuminate\Support\Carbon::parse($nextDay)->format('D, M j') }}" aria-label="Next school day" data-day-next>
                         <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                     </a>
                 @else
@@ -110,7 +111,7 @@
                  today it is the label that says the day beside it is today rather
                  than one stepped to and forgotten. --}}
             @if($isPast)
-                <a href="{{ route('check-in.index') }}" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25" data-back-to-today>
+                <a href="{{ route('check-in.index') }}" :href="dayHref(today)" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-4 py-2 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25" data-back-to-today>
                     <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
                     Today
                 </a>
@@ -196,9 +197,10 @@
         </div>
     @endif
 
-    {{-- The sheet: four lines a child, a column a day. The other tab. It is
-         rendered whatever the tab, because the tests and the exports read it
-         and because switching to it should not cost a request. --}}
+    {{-- The sheet: four lines a child, a column a day. The other tab, reached
+         by address (?view=sheet). Its markup is in the page whatever the tab,
+         so switching to it costs no request, but its table is only built
+         into the document while it is the view — see the x-if below. --}}
     <div x-show="view === 'sheet'" x-cloak>
     <div class="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" @click="pickRoom('')"
@@ -229,6 +231,14 @@
         </p>
     </div>
 
+    {{-- Built only while the sheet is on screen (QA, page weight, 12 Nov
+         2026). It was a few thousand cells, each its own x-html, created and
+         evaluated on every load of a page that opens on the cards and has no
+         tab to the sheet — most of the page's 1.7 MB and of its seven
+         thousand elements. Now a child is four short lines, the day columns
+         are drawn from sheetDays in the script, and none of it is in the
+         document until ?view=sheet asks for it. --}}
+    <template x-if="view === 'sheet'">
     <div class="glass-card mt-3 overflow-x-auto rounded-2xl">
         <table class="att-grid-table w-max table-fixed border-collapse">
             <thead>
@@ -252,48 +262,18 @@
                 </tr>
             </thead>
 
+            {{-- Every cell is drawn by Alpine: today's because it always
+                 takes a press, and the rest because Edit lets them take one
+                 too. Either way a save has to change what is on screen
+                 without a reload. One line of markup a child, no
+                 indentation: it is repeated a hundred times. --}}
+            @php($lines = [['IN', 'in', 'false'], ['health', 'in_code', 'true'], ['OUT', 'out', 'false'], ['health', 'out_code', 'true']])
             @foreach($rows as $row)
-                <tbody x-show="shows(@js($row['room']), @js($row['name'].' '.$row['lan']))">
-                    @php($lines = [['IN', 'in', false], ['health', 'in_code', true], ['OUT', 'out', false], ['health', 'out_code', true]])
-
-                    @foreach($lines as $index => [$label, $key, $isCode])
-                        <tr>
-                            @if($index === 0)
-                                <th scope="rowgroup" rowspan="4" class="{{ $cell }} att-name-col sticky left-0 z-10 bg-white text-left align-middle dark:bg-night-900">
-                                    <span class="block text-[0.7333rem] font-bold leading-tight">{{ $row['name'] }}</span>
-                                    <span class="mt-0.5 block text-[0.6667rem] font-normal text-slate-500 dark:text-slate-400">
-                                        <span aria-hidden="true">{{ $row['animal'] }}</span>
-                                        {{ $row['room'] }} · {{ $row['lan'] }}
-                                    </span>
-                                </th>
-                            @endif
-
-                            <td class="{{ $cell }} att-line-col bg-slate-50 py-1 text-center text-[0.6rem] font-semibold tracking-wide text-slate-400 dark:bg-white/5">{{ $label }}</td>
-
-                            @foreach($days as $day)
-                                @php($iso = $day->toDateString())
-                                @php($isToday = $iso === $today)
-
-                                <td @class([
-                                    $cell,
-                                    'px-2 py-1.5 text-center tabular-nums',
-                                    'bg-sky-50/50 dark:bg-sky-500/5' => $isToday,
-                                    'bg-slate-100 dark:bg-slate-800' => ! $isToday && $day->isWeekend(),
-                                ])>
-                                    {{-- Every cell is drawn by Alpine: today's
-                                         because it always takes a press, and the
-                                         rest because Edit lets them take one too.
-                                         Either way a save has to change what is on
-                                         screen without a reload. --}}
-                                    <span x-html="cell({{ $row['id'] }}, @js($iso), @js($key), @js($isCode))"></span>
-                                </td>
-                            @endforeach
-                        </tr>
-                    @endforeach
-                </tbody>
+<tbody x-show="shows(@js($row['room']), @js($row['name'].' '.$row['lan']))">@foreach($lines as $index => [$label, $key, $isCode])<tr>@if($index === 0)<th scope="rowgroup" rowspan="4" class="{{ $cell }} att-name-col sticky left-0 z-10 bg-white text-left align-middle dark:bg-night-900"><span class="block text-[0.7333rem] font-bold leading-tight">{{ $row['name'] }}</span><span class="mt-0.5 block text-[0.6667rem] font-normal text-slate-500 dark:text-slate-400"><span aria-hidden="true">{{ $row['animal'] }}</span> {{ $row['room'] }} · {{ $row['lan'] }}</span></th>@endif<td class="{{ $cell }} att-line-col bg-slate-50 py-1 text-center text-[0.6rem] font-semibold tracking-wide text-slate-400 dark:bg-white/5">{{ $label }}</td><template x-for="d in sheetDays" :key="d"><td :class="sheetTd(d)"><span x-html="cell({{ $row['id'] }}, d, '{{ $key }}', {{ $isCode }})"></span></td></template></tr>@endforeach</tbody>
             @endforeach
         </table>
     </div>
+    </template>
 
     <p class="mt-3 text-xs text-slate-500 dark:text-slate-400">
         Today's column takes a press: an empty <b>IN</b> checks the child in, a time on <b>OUT</b> checks them out, and a chip sets or corrects the code.
@@ -359,7 +339,7 @@
                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/70 px-5 py-4 dark:border-white/10">
                     <h2 class="text-base font-bold">
                         <span x-text="room === '' ? 'All children' : room"></span>
-                        <span class="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400" x-text="cards.length + ' children'"></span>
+                        <span class="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400" x-text="childCount(cards.length)"></span>
                     </h2>
                     <p class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
                         <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true"></span> <span x-text="day === today ? 'On premises' : 'Attended'"></span></span>
@@ -395,7 +375,7 @@
                         <button type="button" @click="openChild(card.id)"
                                 class="group rounded-2xl border border-transparent px-2 py-4 text-center transition hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-indigo-50/40 focus-visible:ring-2 focus-visible:ring-indigo-500 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
                                 :data-presence="isIn(card) ? 'in' : (isOut(card) ? 'out' : 'absent')"
-                                :aria-label="card.display + ', ' + card.room + ', ' + (isIn(card) ? 'on premises' : 'currently out') + '. Open attendance.'">
+                                :aria-label="card.display + ', ' + card.room + ', ' + (isIn(card) ? 'on premises' : (missingOut(card) ? 'missing sign-out' : 'currently out')) + '. Open attendance.'">
                             {{-- Faded until the child is here, so the faces in colour
                                  are the ones in the building; a pill says so under
                                  the face, and a grey one once they have gone. --}}
@@ -405,7 +385,13 @@
                                       :class="isIn(card) ? 'outline outline-[3px] outline-emerald-500' : 'outline outline-2 outline-slate-200 dark:outline-white/10'"
                                       x-html="card.avatar"></span>
                                 <span x-show="isIn(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-500 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked in</span>
-                                <span x-show="isOut(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-400 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked out</span>
+                                <span x-show="isOut(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-500 dark:bg-slate-600 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Checked out</span>
+                                {{-- A day gone with an arrival and no clock-out: not
+                                     "Checked in" — nobody is still here on a day
+                                     already over — but a sign-out that was never
+                                     recorded, flagged so it gets put right (QA #7,
+                                     12 Nov 2026). The dialog says how. --}}
+                                <span x-show="missingOut(card)" x-cloak data-missing-sign-out class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-500 px-2.5 py-0.5 text-[0.6875rem] font-semibold text-white shadow-sm ring-2 ring-white dark:ring-night-900" aria-hidden="true">Missing sign-out</span>
                                 {{-- Notes on the day: a count at the shoulder, so a card
                                      with something written on it is told from one without. --}}
                                 <span x-show="commentCount(card) > 0" x-cloak data-comment-badge
@@ -415,9 +401,9 @@
                                     <span x-text="commentCount(card)"></span>
                                 </span>
                             </span>
-                            <span class="mt-3 block truncate text-[0.9333rem] font-semibold transition" :class="isIn(card) ? '' : 'text-slate-400 dark:text-slate-500'" x-text="card.display"></span>
+                            <span class="mt-3 block truncate text-[0.9333rem] font-semibold transition" :class="isIn(card) ? '' : 'text-slate-600 dark:text-slate-300'" x-text="card.display"></span>
                             <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400" x-text="card.room"></span>
-                            <span class="mt-2 block text-xs" :class="isIn(card) ? 'font-semibold text-emerald-700 dark:text-emerald-300' : (isOut(card) ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500')" x-text="stateOf(card)"></span>
+                            <span class="mt-2 block text-xs" :class="isIn(card) ? 'font-semibold text-emerald-700 dark:text-emerald-300' : (missingOut(card) ? 'font-semibold text-amber-700 dark:text-amber-300' : (isOut(card) ? 'text-slate-600 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400'))" x-text="stateOf(card)"></span>
                         </button>
                     </template>
                     <p x-show="cards.length === 0" x-cloak class="col-span-full py-12 text-center text-sm text-slate-500 dark:text-slate-400">No children match.</p>
@@ -449,7 +435,7 @@
                 <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10" aria-hidden="true">
                     <div class="h-full rounded-full bg-emerald-500 transition-all" :style="'width:' + (tally(room).total ? tally(room).in / tally(room).total * 100 : 0) + '%'"></div>
                 </div>
-                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"><span x-text="tally(room).in"></span> of <span x-text="tally(room).total"></span> children <span x-text="day === today ? 'on premises' : 'attended'"></span></p>
+                <p class="mt-2 text-xs text-slate-500 dark:text-slate-400"><span x-text="tally(room).in"></span> of <span x-text="childCount(tally(room).total)"></span> <span x-text="day === today ? 'on premises' : 'attended'"></span></p>
 
                 <div class="mt-5 border-t border-slate-200/70 pt-4 dark:border-white/10">
                     <h3 class="text-sm font-bold">Across all classrooms</h3>
@@ -545,7 +531,7 @@
                                           :class="slotAt(child, s)?.out
                                               ? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
                                               : (slotAt(child, s) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200')"
-                                          x-text="slotAt(child, s)?.out ? '✓ Done' : (slotAt(child, s) ? '● In' : 'To do')"></span>
+                                          x-text="slotAt(child, s)?.out ? '✓ Done' : (slotAt(child, s) ? (day === today ? '● In' : '! No sign-out') : 'To do')"></span>
                                 </span>
                                 {{-- First in and last out, and the block's count and
                                      total: the block is a selector, half the dialog
@@ -575,7 +561,7 @@
                     <span class="mt-3 block"><span class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold"
                           :class="isIn(child) ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'" data-status-chip>
                         <span class="h-2 w-2 rounded-full" :class="isIn(child) ? 'bg-emerald-500' : 'border border-slate-400'" aria-hidden="true"></span>
-                        <span x-text="isIn(child) ? 'In since ' + (dayOf(child)?.in_at_label || lastEntry(child)?.in) : (isOut(child) ? 'Left at ' + lastEntry(child)?.out : 'Currently out')"></span>
+                        <span x-text="isIn(child) ? 'In since ' + (dayOf(child)?.in_at_label || lastEntry(child)?.in) : (missingOut(child) ? 'In ' + (dayOf(child)?.in || lastEntry(child)?.in) + ' · no sign-out recorded' : (isOut(child) ? 'Left at ' + lastEntry(child)?.out : 'Currently out'))"></span>
                     </span></span>
                 </template>
 
@@ -585,8 +571,40 @@
                 <template x-if="(child.alerts || []).length">
                     <div class="mt-3 flex flex-col gap-1.5" data-child-alerts>
                         <template x-for="a in child.alerts" :key="a.label + a.text">
-                            <div class="rounded-xl px-3 py-2 text-left text-[13px] font-semibold" style="background: #fef3c7; color: #92400e;" x-text="a.label + ': ' + a.text + (a.severity ? ' · ' + a.severity : '')"></div>
+                            {{-- Same look as every other screen (<x-child-alert>): colour and icon by kind, solid when severe. --}}
+                            <div class="na-alert na-alert-block" :class="'na-alert--' + a.type + (a.severe ? ' na-alert--severe' : '')" :data-alert-chip="a.type">
+                                <span x-html="a.icon"></span>
+                                <span x-text="a.label + ': ' + a.text + (a.severity && ! a.severe ? ' · ' + a.severity : '')"></span>
+                                <span x-show="a.severe" class="na-alert-sev">Severe</span>
+                            </div>
                         </template>
+                    </div>
+                </template>
+
+                {{-- Who may take the child home, and who must not, before
+                     anybody clocks them out. A restriction beats the tick. --}}
+                <div class="mt-3 flex flex-col gap-1.5 text-left text-[13px]" data-child-pickup>
+                    <template x-if="(child.barred || []).length">
+                        <div class="rounded-xl px-3 py-2 font-semibold" style="background: #ffe4e6; color: #9f1239;" x-text="'Must not collect: ' + child.barred.join(' · ')"></div>
+                    </template>
+                    <div class="rounded-xl bg-slate-50 px-3 py-2 text-slate-700 dark:bg-white/5 dark:text-slate-200"
+                         x-text="(child.cleared || []).length ? 'Cleared to collect: ' + child.cleared.join(', ') : 'Nobody is cleared to collect this child. Please check with the office.'"></div>
+                </div>
+
+                {{-- A day gone with an arrival and no clock-out (QA #7, 12 Nov
+                     2026). Above the tabs, because a day gone opens on its
+                     comments. The director fixes it here: the button throws
+                     Edit and opens the day's own correcting form on the Out
+                     time — the same form, the same endpoints, as Edit mode.
+                     Anybody else is told who can. --}}
+                <template x-if="missingOut(child) && ! correcting(child)">
+                    <div class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-left text-[13px] text-amber-900 dark:bg-amber-500/15 dark:text-amber-100" role="note" data-missing-sign-out-note>
+                        <span><b>Missing sign-out.</b> <span x-text="'Clocked in at ' + (dayOf(child)?.in || lastEntry(child)?.in) + ' and never clocked out.'"></span></span>
+                        @if($canAmend)
+                            <button type="button" @click="fixSignOut()" class="min-h-10 rounded-full bg-amber-600 px-4 text-sm font-semibold text-white transition hover:bg-amber-700" data-fix-sign-out>Fix sign-out time</button>
+                        @else
+                            <span class="text-amber-800/80 dark:text-amber-200/80">A director can add the time.</span>
+                        @endif
                     </div>
                 </template>
 
@@ -689,8 +707,8 @@
                                 <li class="flex items-baseline gap-2">
                                     <span class="w-3 shrink-0 text-slate-400 dark:text-slate-500" x-text="i + 1"></span>
                                     <template x-if="sessionsOf(child).length > 1"><span class="w-6 shrink-0 text-[0.6rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400" x-text="entry.session" data-entry-session></span></template>
-                                    <span class="flex-1 whitespace-nowrap">In <b x-text="entry.in"></b><template x-if="entry.in_code !== null && entry.in_code !== undefined"><span class="att-chip att-chip-xs ml-1" :class="entry.in_code === 0 ? 'att-chip-ok' : 'att-chip-sick'" :title="codeLabel(entry.in_code) + (entry.in_note ? ' — ' + entry.in_note : '')" x-text="entry.in_code" data-entry-in-code></span></template> <span class="text-slate-400">→</span> <span x-text="entry.out ? 'Out ' : ''"></span><b x-text="entry.out || 'now'" :class="entry.out ? '' : 'text-emerald-700 dark:text-emerald-300'"></b><template x-if="entry.out && entry.out_code !== null && entry.out_code !== undefined"><span class="att-chip att-chip-xs ml-1" :class="entry.out_code === 0 ? 'att-chip-ok' : 'att-chip-sick'" :title="codeLabel(entry.out_code) + (entry.out_note ? ' — ' + entry.out_note : '')" x-text="entry.out_code" data-entry-out-code></span></template></span>
-                                    <span class="shrink-0 text-[0.6667rem]" :class="entry.out ? 'text-slate-500 dark:text-slate-400' : 'font-semibold text-emerald-700 dark:text-emerald-300'" x-text="entry.out ? spanText(spanOf(entry)) : 'open'"></span>
+                                    <span class="flex-1 whitespace-nowrap">In <b x-text="entry.in"></b><template x-if="entry.in_code !== null && entry.in_code !== undefined"><span class="att-chip att-chip-xs ml-1" :class="entry.in_code === 0 ? 'att-chip-ok' : 'att-chip-sick'" :title="codeLabel(entry.in_code) + (entry.in_note ? ' — ' + entry.in_note : '')" x-text="entry.in_code" data-entry-in-code></span></template> <span class="text-slate-400">→</span> <span x-text="entry.out ? 'Out ' : ''"></span><b x-text="entry.out || (day === today ? 'now' : 'no sign-out')" :class="entry.out ? '' : (day === today ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300')"></b><template x-if="entry.out && entry.out_code !== null && entry.out_code !== undefined"><span class="att-chip att-chip-xs ml-1" :class="entry.out_code === 0 ? 'att-chip-ok' : 'att-chip-sick'" :title="codeLabel(entry.out_code) + (entry.out_note ? ' — ' + entry.out_note : '')" x-text="entry.out_code" data-entry-out-code></span></template></span>
+                                    <span class="shrink-0 text-[0.6667rem]" :class="entry.out ? 'text-slate-500 dark:text-slate-400' : (day === today ? 'font-semibold text-emerald-700 dark:text-emerald-300' : 'font-semibold text-amber-700 dark:text-amber-300')" x-text="entry.out ? spanText(spanOf(entry)) : (day === today ? 'open' : 'missing')"></span>
                                 </li>
                             </template>
                         </ol>
@@ -951,9 +969,11 @@ function dayPicker() { return {
         this.open = true;
     },
 
-    go(day) {
+    // `href` is the roster's dayHref(day), which carries the room chosen on
+    // the chips (QA #16, 12 Nov 2026); the bare address is the fallback.
+    go(day, href = null) {
         if (! day || day > this.today) return;
-        window.location.assign(day === this.today ? @js(route('check-in.index')) : @js(route('check-in.index')) + '?date=' + day);
+        window.location.assign(href || (day === this.today ? @js(route('check-in.index')) : @js(route('check-in.index')) + '?date=' + day));
     },
 }; }
 </script>
@@ -965,6 +985,11 @@ function checkInGrid() { return {
     roomOrder: @js(\App\Services\ClassroomAssignment::rooms()),
     codes: @js($codes),
     today: @js($today),
+    // The sheet's columns, and which of them are a weekend: the sheet draws
+    // its day cells from these rather than the server writing a cell a child
+    // a day (QA, page weight, 12 Nov 2026).
+    sheetDays: [{!! $days->map(fn ($day) => "'".$day->toDateString()."'")->implode(', ') !!}],
+    sheetWeekend: [{!! $days->filter(fn ($day) => $day->isWeekend())->map(fn ($day) => "'".$day->toDateString()."'")->implode(', ') !!}],
     // The centre's clock, not the device's: the noon rule and the open
     // entries' "so far" read the same timezone the times on screen are in.
     timezone: @js(config('app.timezone')),
@@ -983,14 +1008,50 @@ function checkInGrid() { return {
     // the chips from then on — see pickRoom() — so the link can be copied.
     room: @js($defaultRoom),
 
-    /** A chip pressed: the room, and the address to match — /check-in?infant. */
+    // The room the page opened on, so the day stepper knows when "All" has
+    // to be said out loud — see dayHref().
+    openedRoom: @js($defaultRoom),
+
+    /**
+     * A chip pressed: the room, and the address to match — /check-in?infant.
+     * The day stays in the address, so a reload of a day gone stays on it.
+     */
     pickRoom(room) {
         this.room = room;
         try {
             const slug = room.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-            const url = window.location.pathname + (slug ? '?' + slug : '');
+            const rest = this.addressRest(this.day);
+            const query = [slug, ...rest].filter(Boolean).join('&');
+            const url = window.location.pathname + (query ? '?' + query : '');
             if (url !== window.location.pathname + window.location.search) history.replaceState(null, '', url);
         } catch { /* nothing to update outside a browser */ }
+    },
+
+    /** The address's parts other than the room, for a day: date, view, span. */
+    addressRest(date) {
+        const parts = [];
+        if (date && date !== this.today) parts.push('date=' + date);
+        if (this.view === 'sheet') parts.push('view=sheet');
+        try {
+            const span = new URLSearchParams(window.location.search).get('span');
+            if (span) parts.push('span=' + encodeURIComponent(span));
+        } catch { /* no address outside a browser */ }
+        return parts;
+    },
+
+    /**
+     * Another day's address, keeping the room the chips are on.
+     *
+     * The stepper, the calendar and "Today" used to go to ?date= alone, and
+     * the next day opened on the default room — every room for the
+     * director, their own for a teacher — whatever had been picked (QA #16,
+     * 12 Nov 2026). "All" is sent as room=all when the page would otherwise
+     * open on one room.
+     */
+    dayHref(date) {
+        const room = this.room ? 'room=' + encodeURIComponent(this.room) : (this.openedRoom !== '' ? 'room=all' : '');
+        const query = [...this.addressRest(date), room].filter(Boolean).join('&');
+        return @js(route('check-in.index')) + (query ? '?' + query : '');
     },
     picker: null,
     note: '',
@@ -1051,7 +1112,7 @@ function checkInGrid() { return {
     /** Another day: a new page, so the rows are the server's. */
     goTo(date) {
         if (! date) return;
-        window.location.assign('/check-in?date=' + date);
+        window.location.assign(this.dayHref(date));
     },
 
     /**
@@ -1213,6 +1274,14 @@ function checkInGrid() { return {
      * was a Sort button for a day; the centre asked for the order without it.
      */
     get cards() {
+        // On a day gone, a missing sign-out first — it is the one card on
+        // that day with something to put right (QA #7, 12 Nov 2026). The
+        // sort is stable, so the order below holds inside each group.
+        const cards = this.sortedCards();
+        return this.day === this.today ? cards : cards.sort((a, b) => this.missingOut(b) - this.missingOut(a));
+    },
+
+    sortedCards() {
         const term = this.search.trim().toLowerCase();
         return Object.values(this.rows)
             .filter(row => this.room === '' || row.room === this.room)
@@ -1325,7 +1394,9 @@ function checkInGrid() { return {
     spanOf(entry) {
         const from = this.minutesOf(entry?.in);
         if (from === null) return 0;
-        const to = entry?.out ? this.minutesOf(entry.out) : this.minutesNow();
+        // Open on a day gone is a missing sign-out, not a stay running to
+        // now: it counts nothing until somebody puts the time in (QA #7).
+        const to = entry?.out ? this.minutesOf(entry.out) : (this.day === this.today ? this.minutesNow() : null);
 
         return Math.max(0, (to ?? from) - from);
     },
@@ -1523,6 +1594,8 @@ function checkInGrid() { return {
     latestComments() {
         return this.dayComments.filter(c => this.room === '' || c.room === this.room);
     },
+    /** "1 child", "12 children" — never "1 children" (QA #13, 12 Nov 2026). */
+    childCount(n) { return n + (n === 1 ? ' child' : ' children'); },
     /** "Today", or "Friday" for a day gone — the word the panel uses. */
     dayWord() {
         if (this.day === this.today) return 'Today';
@@ -1539,14 +1612,42 @@ function checkInGrid() { return {
         if (! this.child) return;
         this.showPast(date, commentId);
     },
-    isIn(row) { const day = this.dayOf(row); return !! (day && day.in && ! day.out); },
+    /*
+     * In the building now — which only today can say. On a day gone an
+     * arrival with no clock-out is not a child still here: it is a sign-out
+     * nobody recorded, and it used to wear the green "Checked in" badge as
+     * if they had never left (QA #7, 12 Nov 2026). See missingOut().
+     */
+    isIn(row) { const day = this.dayOf(row); return !! (this.day === this.today && day && day.in && ! day.out); },
     isOut(row) { const day = this.dayOf(row); return !! (day && day.out); },
+    /** A day gone with an arrival and no departure: the sign-out was never recorded. */
+    missingOut(row) {
+        if (this.day === this.today) return false;
+        return this.sessionsOf(row).some(s => { const slot = this.slotAt(row, s); return !! (slot && slot.in && ! slot.out); })
+            || !! (this.dayOf(row)?.in && ! this.dayOf(row)?.out);
+    },
+    /**
+     * "Fix sign-out": the day's own correcting form, with the Out time to
+     * fill. The director's Edit switch is thrown for them — the same form
+     * the switch opens (CheckInEditDayFlowTest walks it) — on the session
+     * that is missing its clock-out, with the Out field focused.
+     */
+    fixSignOut() {
+        if (! this.child || ! this.canAmend) return;
+        const open = this.sessionsOf(this.child).find(s => { const slot = this.slotAt(this.child, s); return !! (slot && slot.in && ! slot.out); });
+        this.editing = true;
+        this.tab = 'today';
+        if (open) this.session = open;
+        this.presetCode();
+        this.loadForm();
+        this.$nextTick(() => document.getElementById('ci-out')?.focus());
+    },
     stateOf(row) {
         const day = this.dayOf(row);
         if (this.day !== this.today) {
             // A day gone is read, not lived: what happened. "In 7:50a · Out 2:05p".
             if (! day) return 'No arrival';
-            return 'In ' + day.in + (day.out ? ' · Out ' + day.out : ' · no clock-out');
+            return 'In ' + day.in + (day.out ? ' · Out ' + day.out : ' · Missing sign-out');
         }
         // The latest in or out, and how many times today when more than
         // once: a child back from an appointment reads "In · 1:05p · 2nd
@@ -1648,11 +1749,16 @@ function checkInGrid() { return {
         this.saving = true;
         this.error = '';
 
+        // Words typed in the comment box above and not yet saved with its
+        // own Save go in with the clock, the way the first clock-in's do —
+        // pressing Clock out used to drop them (QA #36, 12 Nov 2026).
+        const comment = leaving || returning ? this.pendingComment() : this.firstComment.trim();
+
         try {
             const response = await window.postJson(
                 leaving ? '/check-in/' + day.id + '/out' : (returning ? '/check-in/' + day.id + '/back' : '/check-in'),
                 leaving || returning
-                    ? { health_code: code, health_note: this.note.trim() || null }
+                    ? { health_code: code, health_note: this.note.trim() || null, comment_body: comment || null }
                     : { child_id: row.id, session: this.session, health_code: code, health_note: this.note.trim() || null, comment_body: this.firstComment.trim() || null },
             );
             const data = await response.json().catch(() => ({}));
@@ -1670,6 +1776,9 @@ function checkInGrid() { return {
                 trips: data.trips ?? [],
                 comments: data.comments ?? [], comments_count: data.comments_count ?? 0,
             });
+            // A note that went in with the clock is on the row now; the
+            // panel's list reads the rows.
+            if (comment) this.dayComments = this.collectDayComments();
 
             this.closeChild();
             const which = this.sessionsOf(row).length > 1 ? ' (' + this.sessionName(this.session) + ')' : '';
@@ -1681,6 +1790,23 @@ function checkInGrid() { return {
             this.error = 'That could not be saved. Check the connection and try again.';
         } finally {
             this.saving = false;
+        }
+    },
+
+    /**
+     * What is typed in the dialog's comment box and not yet saved, or ''.
+     *
+     * The box is its own component (attendanceComments); its words are
+     * read off it rather than kept twice. Only while it is open — a box
+     * closed with Cancel has nothing to send.
+     */
+    pendingComment() {
+        try {
+            const box = document.querySelector('[data-card-dialog] [data-attendance-comments]');
+            const data = box && window.Alpine ? window.Alpine.$data(box) : null;
+            return data && data.open === true ? String(data.body || '').trim() : '';
+        } catch {
+            return '';
         }
     },
 
@@ -1734,6 +1860,12 @@ function checkInGrid() { return {
      */
     open(date) {
         return date === this.today || (this.canAmend && this.editing);
+    },
+
+    /** A sheet cell's classes: today's column picked out, weekends greyed. */
+    sheetTd(date) {
+        return 'border border-slate-200 dark:border-white/10 px-2 py-1.5 text-center tabular-nums'
+            + (date === this.today ? ' bg-sky-50/50 dark:bg-sky-500/5' : (this.sheetWeekend.includes(date) ? ' bg-slate-100 dark:bg-slate-800' : ''));
     },
 
     cell(childId, date, key, isCode) {

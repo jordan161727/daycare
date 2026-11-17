@@ -50,11 +50,11 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_clock_in_offers_the_room_picker_with_the_scheduled_room_first(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'Toddler');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'Toddler');
         StaffShift::create(['week_start' => '2026-10-12', 'user_id' => $lana->id, 'shift_date' => '2026-10-15', 'day' => 4, 'starts_at' => 7 * 60, 'ends_at' => 15 * 60, 'classroom' => 'PreK', 'role' => 'STAFF']);
         $this->childrenIn('PreK', 8);
 
-        $card = $this->identify('3333');
+        $card = $this->identify('333333');
 
         $card->assertJsonPath('staff.presence', StaffPresence::OFF)
             ->assertJsonPath('staff.presence_label', 'Not on the clock')
@@ -71,9 +71,9 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_picking_a_room_makes_the_punch_and_the_check_in_together(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
 
-        $this->punch('3333', 'clock_in', 'PreK')
+        $this->punch('333333', 'clock_in', 'PreK')
             ->assertJson(['status' => 'ok', 'action' => 'clock_in', 'room' => 'PreK', 'placed' => true])
             ->assertJsonPath('staff.presence', StaffPresence::IN_ROOM)
             ->assertJsonPath('staff.line', 'On the clock since 10:30 AM · in PreK');
@@ -88,9 +88,9 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_the_office_tile_puts_them_on_the_clock_in_no_room(): void
     {
-        $denise = $this->teacher('Denise Park', '9999', 'UPK-4');
+        $denise = $this->teacher('Denise Park', '999999', 'UPK-4');
 
-        $this->punch('9999', 'clock_in', 'office')
+        $this->punch('999999', 'clock_in', 'office')
             ->assertJson(['status' => 'ok', 'room' => null, 'placed' => true])
             ->assertJsonPath('staff.presence', StaffPresence::NO_ROOM)
             ->assertJsonPath('staff.presence_label', 'Working')
@@ -102,9 +102,9 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_a_room_that_is_not_one_of_ours_is_refused_as_stale(): void
     {
-        $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $this->teacher('Lana Ortiz', '333333', 'PreK');
 
-        $this->punch('3333', 'clock_in', 'Broom cupboard')->assertJson(['status' => 'stale']);
+        $this->punch('333333', 'clock_in', 'Broom cupboard')->assertJson(['status' => 'stale']);
 
         $this->assertSame(0, TimePunch::count());
         $this->assertSame(0, StaffRoomCheckin::count());
@@ -112,17 +112,17 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_start_break_leaves_the_room_and_warns_when_it_is_short_but_never_blocks(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
         Setting::put('rooms.PreK.ratio', 7);
         $this->childrenIn('PreK', 8);
-        $this->punch('3333', 'clock_in', 'PreK');
+        $this->punch('333333', 'clock_in', 'PreK');
 
-        $this->identify('3333')
+        $this->identify('333333')
             ->assertJsonPath('staff.actions.0.action', 'break_start')
             ->assertJsonPath('staff.actions.0.hint', 'Checks you out of PreK')
             ->assertJsonPath('staff.actions.1.action', 'clock_out');
 
-        $response = $this->punch('3333', 'break_start');
+        $response = $this->punch('333333', 'break_start');
 
         // RULE: warned, never blocked. Eight PreK children at 1:7 need two;
         // the room now has none.
@@ -138,35 +138,35 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_leaving_a_room_that_is_still_covered_warns_nobody(): void
     {
-        $this->teacher('Lana Ortiz', '3333', 'PreK');
-        $this->teacher('Frenci Ahmed', '2222', 'PreK');
+        $this->teacher('Lana Ortiz', '333333', 'PreK');
+        $this->teacher('Frenci Ahmed', '222222', 'PreK');
         Setting::put('rooms.PreK.ratio', 7);
         $this->childrenIn('PreK', 6);
-        $this->punch('3333', 'clock_in', 'PreK');
-        $this->punch('2222', 'clock_in', 'PreK');
+        $this->punch('333333', 'clock_in', 'PreK');
+        $this->punch('222222', 'clock_in', 'PreK');
 
-        $this->punch('3333', 'break_start')->assertJson(['status' => 'ok'])->assertJsonPath('warning', null);
+        $this->punch('333333', 'break_start')->assertJson(['status' => 'ok'])->assertJsonPath('warning', null);
 
         $this->assertSame(0, KioskEvent::flags()->count());
     }
 
     public function test_on_a_break_the_only_button_is_end_break_and_it_goes_back_to_the_last_room(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
-        $this->punch('3333', 'clock_in', 'PreK');
-        $this->punch('3333', 'break_start');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
+        $this->punch('333333', 'clock_in', 'PreK');
+        $this->punch('333333', 'break_start');
         $this->travel(15)->minutes();
 
-        $this->identify('3333')
+        $this->identify('333333')
             ->assertJsonCount(1, 'staff.actions')
             ->assertJsonPath('staff.actions.0.action', 'break_end')
             ->assertJsonPath('staff.actions.0.hint', 'Back to PreK')
             ->assertJsonPath('staff.line', 'On break since 10:30 AM (15 min) · was in PreK');
 
         // RULE: no clock-out from a break.
-        $this->punch('3333', 'clock_out')->assertJson(['status' => 'stale']);
+        $this->punch('333333', 'clock_out')->assertJson(['status' => 'stale']);
 
-        $this->punch('3333', 'break_end')
+        $this->punch('333333', 'break_end')
             ->assertJson(['status' => 'ok', 'room' => 'PreK', 'placed' => true])
             ->assertJsonPath('staff.presence', StaffPresence::IN_ROOM);
 
@@ -176,11 +176,11 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_going_somewhere_else_after_a_break_takes_the_room_from_the_picker(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
-        $this->punch('3333', 'clock_in', 'PreK');
-        $this->punch('3333', 'break_start');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
+        $this->punch('333333', 'clock_in', 'PreK');
+        $this->punch('333333', 'break_start');
 
-        $this->punch('3333', 'break_end', 'Toddler')
+        $this->punch('333333', 'break_end', 'Toddler')
             ->assertJson(['status' => 'ok', 'room' => 'Toddler']);
 
         $this->assertDatabaseHas('staff_room_checkins', ['user_id' => $lana->id, 'classroom' => 'Toddler', 'ended_at' => null, 'started_via' => StaffRoomCheckin::VIA_DOOR]);
@@ -189,26 +189,26 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_a_break_taken_from_the_office_ends_back_in_the_office(): void
     {
-        $denise = $this->teacher('Denise Park', '9999', 'UPK-4');
-        $this->punch('9999', 'clock_in', 'office');
+        $denise = $this->teacher('Denise Park', '999999', 'UPK-4');
+        $this->punch('999999', 'clock_in', 'office');
 
-        $this->identify('9999')->assertJsonPath('staff.actions.0.hint', 'Keeps your place in the office');
-        $this->punch('9999', 'break_start')->assertJsonPath('warning', null);
-        $this->identify('9999')->assertJsonPath('staff.actions.0.hint', 'Back to the office');
-        $this->punch('9999', 'break_end')->assertJson(['status' => 'ok', 'room' => null, 'placed' => true]);
+        $this->identify('999999')->assertJsonPath('staff.actions.0.hint', 'Keeps your place in the office');
+        $this->punch('999999', 'break_start')->assertJsonPath('warning', null);
+        $this->identify('999999')->assertJsonPath('staff.actions.0.hint', 'Back to the office');
+        $this->punch('999999', 'break_end')->assertJson(['status' => 'ok', 'room' => null, 'placed' => true]);
 
         $this->assertDatabaseHas('staff_room_checkins', ['user_id' => $denise->id, 'classroom' => null, 'ended_at' => null, 'started_via' => StaffRoomCheckin::VIA_RETURN]);
     }
 
     public function test_clock_out_leaves_the_room_and_the_card_no_longer_says_since_when(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
         Setting::put('rooms.PreK.ratio', 7);
         $this->childrenIn('PreK', 3);
-        $this->punch('3333', 'clock_in', 'PreK');
+        $this->punch('333333', 'clock_in', 'PreK');
         $this->travel(2)->hours();
 
-        $this->punch('3333', 'clock_out')
+        $this->punch('333333', 'clock_out')
             ->assertJson(['status' => 'ok', 'action' => 'clock_out'])
             ->assertJsonPath('warning', 'PreK now has 0 teachers for 3 children (needs 1). The office has been told.')
             ->assertJsonPath('staff.presence', StaffPresence::OFF)
@@ -222,14 +222,14 @@ class DoorClockRoomsTest extends TestCase
 
     public function test_the_card_reflects_the_current_shift_after_clocking_in_again(): void
     {
-        $this->teacher('Lana Ortiz', '3333', 'PreK');
-        $this->punch('3333', 'clock_in', 'PreK');
+        $this->teacher('Lana Ortiz', '333333', 'PreK');
+        $this->punch('333333', 'clock_in', 'PreK');
         $this->travel(1)->hours();
-        $this->punch('3333', 'clock_out');
+        $this->punch('333333', 'clock_out');
         $this->travel(1)->hours();
 
         // Since the second clock-in, not the first: the card is about now.
-        $this->punch('3333', 'clock_in', 'Toddler')
+        $this->punch('333333', 'clock_in', 'Toddler')
             ->assertJsonPath('staff.line', 'On the clock since 12:30 PM · in Toddler')
             ->assertJsonPath('staff.room', 'Toddler');
     }
@@ -238,9 +238,9 @@ class DoorClockRoomsTest extends TestCase
     {
         // An older screen, or a scanner that posts without the picker: the
         // punch is the payroll fact and is never held hostage to the room.
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
 
-        $this->punch('3333', 'clock_in')
+        $this->punch('333333', 'clock_in')
             ->assertJson(['status' => 'ok', 'placed' => false])
             ->assertJsonPath('staff.presence', StaffPresence::NO_ROOM);
 

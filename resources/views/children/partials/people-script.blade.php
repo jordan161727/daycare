@@ -371,7 +371,7 @@ function peopleStep(config) { return {
         const yes = await this.ask({
             name: this.drawer.person.name,
             title: `Delete ${this.drawer.person.name}?`,
-            body: 'This removes the person from the centre entirely — their details, their number and everything on file about them.',
+            body: 'This removes the person from the center entirely — their details, their number and everything on file about them.',
             detail: 'This cannot be undone. To take them off one child only, close this and use Unlink on their row instead.',
             action: 'Delete person',
             tone: 'rose',

@@ -30,7 +30,7 @@ class PeopleDirectory
      *
      * @return Collection<int, Person>
      */
-    public function search(string $query, int $limit = 10): Collection
+    public function search(string $query, int $limit = 10, ?\App\Models\User $reader = null): Collection
     {
         $query = trim($query);
 
@@ -40,8 +40,15 @@ class PeopleDirectory
 
         $digits = Person::digits($query);
 
+        // A teacher finds the adults of the children they may see, and no
+        // others: the search is not a way to read another room's families.
+        $scoped = $reader !== null && ! $reader->isAdmin();
+
         return Person::query()
-            ->with(['links.child:id,first_name,last_name,lan'])
+            ->with(['links' => fn ($links) => $scoped
+                ? $links->whereHas('child', fn ($child) => $child->visibleTo($reader))->with('child:id,first_name,last_name,lan')
+                : $links->with('child:id,first_name,last_name,lan')])
+            ->when($scoped, fn ($builder) => $builder->whereHas('links.child', fn ($child) => $child->visibleTo($reader)))
             ->where(function ($builder) use ($query, $digits) {
                 $builder->where('name', 'like', '%'.$query.'%');
 
@@ -139,9 +146,16 @@ class PeopleDirectory
             ]);
 
             $link->relationship = $flags['relationship'] ?? $link->relationship;
-            $link->is_guardian = (bool) ($flags['is_guardian'] ?? false);
-            $link->can_pickup = (bool) ($flags['can_pickup'] ?? false);
-            $link->is_emergency = (bool) ($flags['is_emergency'] ?? false);
+
+            // A new link starts from nothing; an existing one changes only the
+            // ticks the request carried. Re-typing a person who is already on
+            // this child (the "create a new person" box finding them by their
+            // mobile) must not quietly untick them as guardian.
+            foreach (['is_guardian', 'can_pickup', 'is_emergency'] as $tick) {
+                if (! $link->exists || array_key_exists($tick, $flags)) {
+                    $link->{$tick} = (bool) ($flags[$tick] ?? false);
+                }
+            }
 
             // Who pays the fees and who gets the texts (Phase 2): only set
             // when the form carried them, so the People step on the edit
@@ -152,14 +166,23 @@ class PeopleDirectory
                 }
             }
 
+            // Blank is no restriction at all, not an empty one — the pick-up
+            // list tests for null. Only a request that carried the field may
+            // change it: a save that never mentioned the court order (an older
+            // form, a JSON call with one tick) must not lift it.
+            if (array_key_exists('restriction', $flags)) {
+                $restriction = trim((string) ($flags['restriction'] ?? ''));
+                $link->restriction = $restriction === '' ? null : $restriction;
+            }
+
+            if (array_key_exists('pickup_days', $flags)) {
+                $days = preg_replace('/\s+/', '', (string) ($flags['pickup_days'] ?? ''));
+                $link->pickup_days = $days === '' ? null : $days;
+            }
+
             // Rule 3: a call order only means anything on an emergency contact,
             // and is cleared the moment that tick comes off.
             $link->priority = $link->is_emergency ? ($flags['priority'] ?? null) : null;
-
-            // Blank is no restriction at all, not an empty one — the pick-up
-            // list tests for null.
-            $restriction = trim((string) ($flags['restriction'] ?? ''));
-            $link->restriction = $restriction === '' ? null : $restriction;
 
             if (! $link->exists) {
                 $link->source = $source;
@@ -435,7 +458,7 @@ class PeopleDirectory
      */
     public function lacksGuardian(Child $child): bool
     {
-        return ! ChildPerson::where('child_id', $child->id)->where('is_guardian', true)->exists();
+        return ! ChildPerson::where('child_id', $child->id)->where('is_guardian', true)->whereNull('restriction')->exists();
     }
 
     /** Trim, and read "same as household" as nothing at all. */

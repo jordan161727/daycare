@@ -14,6 +14,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Message extends Model
 {
+    /*
+     * Archived, not deleted: an archived message is off every thread and
+     * count but kept, and data_cleanup_log can restore it (Nov 2026).
+     */
+    use \Illuminate\Database\Eloquent\SoftDeletes;
+
+    public const DELETED_AT = 'archived_at';
+
     public const OUT = 'out';
 
     public const IN = 'in';

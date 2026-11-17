@@ -100,7 +100,9 @@ class Reports
                         $p++;
                         $mins += $m;
                         $csv[] = [$r, $child->last_name, $child->first_name, $date, 'Present', $in, $out ?? '', $m ? number_format($m / 60, 2) : ''];
-                        $cells[] = $mode === 'marks' ? ['cls' => 'pr ck', 'a' => '✓', 'b' => ''] : ['cls' => 'pr', 'a' => $in, 'b' => $out ?? '—'];
+                        // Signed in today and not out yet reads as here, not as
+                        // a dash that looks like a missing time (QA #12).
+                        $cells[] = $mode === 'marks' ? ['cls' => 'pr ck', 'a' => '✓', 'b' => ''] : ['cls' => 'pr', 'a' => $in, 'b' => $out ?? ($iso === $today ? 'here' : '—')];
                     } elseif ($iso <= $today && ($mark?->mark === DssDayMark::ABSENT || ($scheduled && $iso < $today && $mark?->mark !== DssDayMark::NONE))) {
                         $a++;
                         $csv[] = [$r, $child->last_name, $child->first_name, $date, 'Absent', '', '', ''];
@@ -345,11 +347,17 @@ class Reports
             foreach ($cols as $k => $col) {
                 $iso = $col['date'];
                 $v = '';
-                if ($col['in'] && $iso < $today && $child->isEnrolledOn($iso)) {
+                // Today counts as soon as somebody is signed in, out or not
+                // (QA #12, 12 Nov 2026: a child in the building this morning
+                // was a blank on today's column). Only a day gone by can be
+                // an A — today's not-yet-arrived are still to come.
+                if ($col['in'] && $iso <= $today && $child->isEnrolledOn($iso)) {
                     $mark = $marks->get($child->id.'|'.$iso);
                     if (isset($records[$child->id][$iso])) {
                         $v = '✓';
                         $present[$k]++;
+                    } elseif ($iso === $today) {
+                        // Nothing yet: not an absence until the day is over.
                     } elseif ($mark?->mark === DssDayMark::ABSENT) {
                         $v = 'A';
                     } elseif (in_array(Carbon::parse($iso)->dayOfWeekIso, $booked, true) && $mark?->mark !== DssDayMark::NONE) {
@@ -389,7 +397,7 @@ class Reports
 
         $grand = [];
         foreach ($cols as $k => $col) {
-            $grand[] = ['v' => $col['in'] && $col['date'] < $today ? (string) $present[$k] : '', 'we' => $col['we']];
+            $grand[] = ['v' => $col['in'] && $col['date'] <= $today ? (string) $present[$k] : '', 'we' => $col['we']];
         }
 
         $schoolDays = count(array_filter($cols, fn ($c) => $c['in'] && $c['date'] < $today));

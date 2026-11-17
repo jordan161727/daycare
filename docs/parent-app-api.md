@@ -256,6 +256,12 @@ Use `data.thread_id` to open the right conversation when the notification is tap
 
 A parent who switches **messages** or **announcements** off (§4.17) gets no push of that kind. Texts are not affected.
 
+**Register pushes (added 17 Nov 2026).** When staff write or change the day's comment on the attendance screen, or record a drop-off or pick-up health check that isn't Normal, the child's parents (the same people §2 lets in, less anyone with **daily** switched off) receive:
+```json
+{ "title": "Mia · Toddler", "body": "Note from the room: fever", "data": { "kind": "daily", "child_id": 1, "date": "2026-11-16" } }
+```
+Health checks read `"title": "Mia · Health", "body": "Health check at drop-off: Fever — Felt warm"`. There is no `thread_id`: open the Daily report for `child_id` on `date`. Changing only a comment's tag sends nothing. A push that fails never stops staff saving.
+
 ### Version 2 (added 9 Nov 2026)
 
 These endpoints read what the centre already records, and invent nothing. Each needs the parent token. A child who isn't this parent's answers `404`, as in §4.8. `{childId}` is the `id` from `/me`.
@@ -280,7 +286,9 @@ These endpoints read what the centre already records, and invent nothing. Each n
   - `absent` comes from a parent's report (§4.15) or the register's DSS absent mark.
   - Otherwise it's `not_arrived`.
 - **`entries`:** one per door punch (`checkin` / `checkout`), or the register's times when there are no punches.
-- **`totals` and `note` are `null`:** meals, naps, changes and teachers' notes aren't recorded at the centre yet.
+- **`totals` is `null`:** meals, naps and changes aren't recorded at the centre yet.
+- **`note`** is the register's comment for the day (the note teachers add on the attendance screen), or `null`: `{ "author": "Ray", "body": "fever", "tag": "Health", "time": "…", "edited": false }`. With two sessions in a day it is the newer one.
+- **Health checks:** a drop-off or pick-up check that found a symptom adds an entry with `"type": "health"`, e.g. `{ "title": "Health check at drop-off", "detail": "Fever — Felt warm" }`. A Normal check adds nothing.
 
 ### 4.13 Photos
 `GET /children/{childId}/photos?page=1`. These are the photos staff sent in this parent's conversations about the child (Room, Office) and in announcements, grouped by day, newest first, 7 days a page.
@@ -354,7 +362,7 @@ Two writes, each answering the whole object above and posting a note in the chil
 ### 4.17 Notification settings
 - `GET /notification-preferences` answers `{ "messages": true, "announcements": true, "daily": true, "photos": true }`. Everything is on until changed.
 - `PUT /notification-preferences` with any of those keys as booleans answers the full set.
-- `messages` and `announcements` control the pushes in §4.11. `daily` and `photos` are stored for pushes the centre doesn't send yet.
+- `messages` and `announcements` control the message pushes in §4.11, and `daily` the register pushes (comments and health checks). `photos` is stored for pushes the centre doesn't send yet.
 
 ---
 
@@ -631,3 +639,4 @@ On the local server the sign-in code is in `storage/logs/laravel.log`; in the sa
 | Version 2 rules (the day, photos, calendar, absences, pickup) | `app/Services/ParentDay.php` |
 | Version 2 tables | `database/migrations/2026_11_09_000001_create_parent_app_v2_tables.php` (models `ParentAbsenceReport`, `ParentPickupPlan`, `ParentNotificationPref`) |
 | Version 2 tests | `tests/Feature/ParentAppDayTest.php` (12 tests) |
+| Register pushes (comments, health checks) | `app/Services/ParentAlerts.php`, `app/Observers/AttendanceCommentObserver.php`, the call at the end of `HealthScreening::record()`; tests in `tests/Feature/ParentAlertsTest.php` |

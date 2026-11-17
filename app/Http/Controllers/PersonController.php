@@ -38,7 +38,7 @@ class PersonController extends Controller
 
         $child = $this->childFor($request);
 
-        $people = $this->directory->search($data['q'] ?? '');
+        $people = $this->directory->search($data['q'] ?? '', reader: $request->user());
 
         return response()->json([
             'people' => $people->map(fn (Person $person) => $this->asSearchResult($person, $child))->values(),
@@ -221,6 +221,8 @@ class PersonController extends Controller
             'gets_texts' => ['nullable', 'boolean'],
             'priority' => ['nullable', 'integer', 'min:1', 'max:99'],
             'restriction' => ['nullable', 'string', 'max:255'],
+            // Pick-up on some days only: short weekday names, "Mon,Thu". Blank is every day.
+            'pickup_days' => ['nullable', 'string', 'max:40', 'regex:/^\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)(\s*,\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun))*\s*$/'],
         ];
     }
 
@@ -241,6 +243,10 @@ class PersonController extends Controller
             Child::whereKey($child->getKey())->visibleTo($request->user())->exists(),
             403
         );
+
+        // Required means a write to the child's family (store, link, unlink):
+        // an archived record is read-only until restored.
+        abort_if($required && $child->isArchived(), 423, 'This record is archived and read-only until restored.');
 
         return $child;
     }
@@ -265,9 +271,11 @@ class PersonController extends Controller
             ->whereHas('child', fn ($query) => $query->visibleTo($user))
             ->exists();
 
-        // A person nobody is linked to yet is fair game: they have just been
-        // created, or they are about to be deleted.
-        abort_unless($visible || ! $person->links()->exists(), 403);
+        // A person nobody is linked to belongs to no room, so no teacher holds
+        // them: editing or deleting a record like that is the office's (QA
+        // probe D26). Creating one goes through store(), which links it in
+        // the same press.
+        abort_unless($visible, 403);
     }
 
     /**

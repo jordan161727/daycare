@@ -170,7 +170,7 @@
                      those are not the same news. --}}
                 @if($closed)
                     <div class="mt-3 rounded-xl border-l-4 border-rose-500 bg-rose-50/70 px-3 py-2.5 dark:bg-rose-500/10">
-                        <p class="text-sm font-bold text-rose-800 dark:text-rose-200">Centre closed</p>
+                        <p class="text-sm font-bold text-rose-800 dark:text-rose-200">Center closed</p>
                         <p class="mt-0.5 text-xs text-rose-700 dark:text-rose-300">{{ $closed }}</p>
                     </div>
                 @endif

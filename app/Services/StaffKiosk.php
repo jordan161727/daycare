@@ -63,6 +63,51 @@ class StaffKiosk
         return $found;
     }
 
+    /**
+     * An administrator's PIN keyed at a room tablet's gear (QA K4, 16 Nov
+     * 2026): re-pairing a tablet to another room now needs a director first.
+     *
+     * The same lookup as identify(), so the lockout is the same one — a PIN
+     * locked at the clock is locked at the gear, and the other way round.
+     * Recorded as a tablet attempt rather than as a kiosk one when it fails,
+     * so login history says somebody tried to move a tablet, not to clock
+     * in. A success is not recorded here; the pairing it leads to is (see
+     * recordPairing), with this administrator on the row.
+     *
+     * @return array{status: string, user?: User}  ok, not_found, locked, or not_admin
+     */
+    public function identifyAdmin(string $pin): array
+    {
+        $found = $this->byPin($pin);
+
+        if ($found['status'] === 'ok' && ! $found['user']->isAdmin()) {
+            $found = ['status' => 'not_admin', 'user' => $found['user']];
+        }
+
+        if ($found['status'] !== 'ok') {
+            $this->recordPairing(false, $found['user'] ?? null, self::METHOD_PIN);
+        }
+
+        return $found;
+    }
+
+    /**
+     * A room tablet paired to a room, or an attempt at it that failed — the
+     * administrator's PIN or the room code (QA K4, 16 Nov 2026). Written to
+     * login history beside the kiosk rows; like them it never holds the PIN
+     * or the code, only which kind was keyed.
+     */
+    public function recordPairing(bool $paired, ?User $user, string $method): void
+    {
+        rescue(fn () => LoginEvent::create([
+            'user_id' => $user?->id,
+            'outcome' => $paired ? LoginEvent::TABLET_PAIRED : LoginEvent::TABLET_PAIR_FAILED,
+            'method' => $method,
+            'ip_address' => request()->ip(),
+            'user_agent' => mb_substr((string) request()->userAgent(), 0, 500),
+        ]), null, false);
+    }
+
     /** The lookup itself, with nothing recorded. */
     private function look(?string $card, ?string $pin): array
     {
@@ -127,41 +172,41 @@ class StaffKiosk
     }
 
     /**
-     * Four digits.
+     * A staff PIN, config('kiosk.pin_length') digits.
      *
      * Short enough to key in with a queue behind you, which is only defensible
-     * because of the lockout — five wrong tries and that number stops being
-     * answered for a while.
+     * because of the limits on the routes — see the kiosk limiters in
+     * AppServiceProvider.
+     *
+     * One PIN, one person (QA K2, 16 Nov 2026): kiosk_pin_index is unique, so
+     * at most one row can match. There used to be an "ambiguous" answer here
+     * for two people on the same digits, which sent them both to the office
+     * every morning; the staff profile now refuses a PIN somebody else holds,
+     * the database refuses it too, and `php artisan kiosk:duplicate-pins`
+     * finds any pair left over from before.
      */
     private function byPin(string $pin): array
     {
-        $candidates = User::where('kiosk_pin_index', User::kioskIndexFor($pin))->get();
+        $user = User::where('kiosk_pin_index', User::kioskIndexFor($pin))->first();
 
-        // Every match locked is a lockout, not a miss: otherwise waiting out
-        // one row's lock could be dodged by a second person sharing the PIN.
-        if ($candidates->isNotEmpty() && $candidates->every(fn (User $user) => $user->kioskIsLocked())) {
+        if ($user === null) {
+            return ['status' => 'not_found'];
+        }
+
+        if ($user->kioskIsLocked()) {
             return ['status' => 'locked'];
         }
 
-        $matches = $candidates
-            ->reject(fn (User $user) => $user->kioskIsLocked())
-            ->filter(fn (User $user) => Hash::check($pin, (string) $user->kiosk_pin_hash));
-
-        if ($matches->isEmpty()) {
-            foreach ($candidates as $user) {
-                $user->noteKioskFailure();
-            }
+        // The index narrows; the hash decides. An index match with the wrong
+        // hash is counted against that row, which is what the lockout shared
+        // by the clock, the room tablets and the tablet gear reads.
+        if (! Hash::check($pin, (string) $user->kiosk_pin_hash)) {
+            $user->noteKioskFailure();
 
             return ['status' => 'not_found'];
         }
 
-        // Two people chose the same four digits. Asked rather than guessed —
-        // the wrong guess here is somebody else's day on somebody's timesheet.
-        if ($matches->count() > 1) {
-            return ['status' => 'ambiguous'];
-        }
-
-        return ['status' => 'ok', 'user' => $matches->first(), 'method' => self::METHOD_PIN];
+        return ['status' => 'ok', 'user' => $user, 'method' => self::METHOD_PIN];
     }
 
     /**

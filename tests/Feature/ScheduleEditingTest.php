@@ -652,7 +652,7 @@ class ScheduleEditingTest extends TestCase
         // not one view's copy of it. So there is exactly one control, and it is
         // not on the page at all.
         $this->assertStringContainsString('Ticked', $html);
-        $this->assertStringContainsString('Centre closed', $html);
+        $this->assertStringContainsString('Center closed', $html);
         $this->assertStringContainsString('this week departs from the days on their record', $html);
         $this->assertSame(0, substr_count($html, '@click="toggleKey()"'));
         $this->assertSame(1, substr_count($html, "\$dispatch('attendance-key')"));

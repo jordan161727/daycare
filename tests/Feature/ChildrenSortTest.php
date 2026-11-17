@@ -58,7 +58,10 @@ class ChildrenSortTest extends TestCase
             $this->assertStringContainsString('sort='.$column, $html, "no link sorts by $column");
         }
 
-        $this->actingAs($this->admin)->get(route('children.index', ['sort' => 'shoe_size']))->assertNotFound();
+        // An unknown sort or direction opens the default LAN order rather
+        // than a 404 page (tester report, Nov 2026).
+        $this->actingAs($this->admin)->get(route('children.index', ['sort' => 'shoe_size', 'direction' => 'sideways']))
+            ->assertOk()->assertViewHas('sort', 'lan')->assertViewHas('direction', 'asc');
     }
 
     /** The surnames down the roll, in the order the page draws them. */

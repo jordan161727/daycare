@@ -16,7 +16,7 @@
 
 <x-kids-background strong />
 
-<div x-data="kiosk(@js($sessionSeconds))" x-cloak class="flex min-h-dvh flex-col">
+<div x-data="kiosk(@js($sessionSeconds), @js($pinLength), @js($idleSeconds))" x-cloak class="flex min-h-dvh flex-col">
     <main id="pad" class="mx-auto w-full max-w-3xl flex-1 px-[max(1rem,env(safe-area-inset-left))] py-8">
 
         {{-- ---------------- the keypad ---------------- --}}
@@ -52,15 +52,15 @@
                                 class="min-h-20 rounded-2xl border-2 border-slate-300 bg-white text-3xl font-medium transition active:scale-95"
                                 x-text="n"></button>
                     </template>
-                    <button type="button" @click="entry = ''"
+                    <button type="button" @click="entry = ''; armIdle()"
                             class="min-h-20 rounded-2xl border-2 border-slate-200 bg-slate-100 text-base font-medium text-slate-600 transition active:scale-95">Clear</button>
                     <button type="button" @click="press('0')"
                             class="min-h-20 rounded-2xl border-2 border-slate-300 bg-white text-3xl font-medium transition active:scale-95">0</button>
-                    <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete last digit"
+                    <button type="button" @click="entry = entry.slice(0, -1); armIdle()" aria-label="Delete last digit"
                             class="min-h-20 rounded-2xl border-2 border-slate-200 bg-slate-100 text-2xl font-medium text-slate-600 transition active:scale-95">⌫</button>
                 </div>
 
-                <p class="mt-5 text-center text-slate-500">Forgotten your PIN? Please see a staff member.</p>
+                <p class="mt-5 text-center text-slate-500">Forgot your PIN? Please see a staff member.</p>
             </div>
         </template>
 
@@ -87,8 +87,21 @@
                                 <div class="min-w-0">
                                     <p class="text-2xl font-semibold" x-text="child.name"></p>
                                     <p class="text-slate-500" x-text="child.room"></p>
+                                    {{-- Allergies and medical alerts on file (QA E3). --}}
+                                    {{-- Same chips as every other screen (<x-child-alert>): colour and icon by kind, solid when severe. --}}
+                                    <x-alert-styles />
+                                    <div x-show="(child.alerts || []).length" x-cloak style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;">
+                                        <template x-for="a in (child.alerts || [])" :key="a.type + a.text">
+                                            <span class="na-alert" :class="'na-alert--' + a.type + (a.severe ? ' na-alert--severe' : '')" style="font-size: 14px;" :data-alert-chip="a.type">
+                                                <span x-html="a.icon" style="display: inline-flex;"></span>
+                                                <span x-text="a.label + ': ' + a.text + (a.severity && ! a.severe ? ' (' + a.severity + ')' : '')"></span>
+                                                <span x-show="a.severe" class="na-alert-sev">Severe</span>
+                                            </span>
+                                        </template>
+                                    </div>
                                     <p class="mt-1 font-medium"
                                        :class="child.present ? 'text-emerald-700' : 'text-slate-600'"
+                                       x-show="! child.restricted"
                                        x-text="child.present ? 'Signed in at ' + child.since : 'Not signed in'"></p>
                                 </div>
                             </div>
@@ -100,11 +113,16 @@
                                 <p class="mt-4 rounded-xl bg-slate-100 p-4 text-center text-slate-600">Not booked in today. Please see a staff member.</p>
                             </template>
 
-                            <template x-if="child.enrolled && child.present && ! child.can_collect">
+                            {{-- A restricted adult is told nothing about the child and offered no button. --}}
+                            <template x-if="child.enrolled && child.restricted">
+                                <p class="mt-4 rounded-xl bg-amber-100 p-4 text-center text-amber-900">Please see a staff member.</p>
+                            </template>
+
+                            <template x-if="child.enrolled && ! child.restricted && child.present && ! child.can_collect">
                                 <p class="mt-4 rounded-xl bg-amber-100 p-4 text-center text-amber-900">Please see a staff member to sign out.</p>
                             </template>
 
-                            <template x-if="child.enrolled && (! child.present || child.can_collect)">
+                            <template x-if="child.enrolled && ! child.restricted && (! child.present || child.can_collect)">
                                 <button type="button" @click="punch(child)" :disabled="busy === child.id"
                                         class="mt-4 min-h-16 w-full rounded-xl text-xl font-semibold text-white transition disabled:opacity-60"
                                         :class="child.present ? 'bg-slate-800' : 'bg-emerald-700'"
@@ -143,7 +161,16 @@
 </div>
 
 <script>
-    function kiosk(sessionSeconds) {
+    /*
+     * pinLength and idleSeconds come from config/kiosk.php (QA K1 and K3,
+     * 16 Nov 2026): pin_length for the dots and the auto-submit, and
+     * idle_clear_seconds for wiping a half-typed PIN.
+     */
+    function kiosk(sessionSeconds, pinLength, idleSeconds) {
+        // The tie-break step asks for the last four digits of a phone number.
+        // That is the phone's four, not a PIN length, so it is not in config.
+        const PHONE_DIGITS = 4;
+
         return {
             screen: 'pin',
             entry: '',
@@ -155,8 +182,9 @@
             result: null,
             countdown: 0,
             timer: null,
+            idle: null,
 
-            get target() { return this.screen === 'phone' ? 4 : 6; },
+            get target() { return this.screen === 'phone' ? PHONE_DIGITS : pinLength; },
 
             init() {
                 // A physical numpad is the commonest kiosk keyboard, and it is
@@ -164,15 +192,41 @@
                 window.addEventListener('keydown', event => {
                     if (this.screen !== 'pin' && this.screen !== 'phone') return;
                     if (/^\d$/.test(event.key)) this.press(event.key);
-                    if (event.key === 'Backspace') this.entry = this.entry.slice(0, -1);
+                    if (event.key === 'Backspace') { this.entry = this.entry.slice(0, -1); this.armIdle(); }
                     if (event.key === 'Escape') this.entry = '';
                 });
+
+                // A tablet put to sleep or switched away from mid-PIN comes
+                // back to an empty keypad, not to somebody's first digits.
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') this.clearHalfTyped();
+                });
+            },
+
+            /*
+             * QA K3, 16 Nov 2026: a half-typed PIN is wiped after
+             * idleSeconds with no key pressed. Every press restarts the
+             * count, so somebody typing slowly is never cut off.
+             */
+            armIdle() {
+                clearTimeout(this.idle);
+                if (this.entry === '' && this.pendingPin === null) return;
+                this.idle = setTimeout(() => this.clearHalfTyped(), idleSeconds * 1000);
+            },
+
+            clearHalfTyped() {
+                clearTimeout(this.idle);
+                if (this.screen !== 'pin' && this.screen !== 'phone') return;
+                // Mid tie-break too: the PIN held for it goes with the digits,
+                // and the keypad starts again from the PIN.
+                Object.assign(this, { entry: '', pendingPin: null, screen: 'pin' });
             },
 
             press(digit) {
                 if (this.entry.length >= this.target) return;
                 this.message = null;
                 this.entry += digit;
+                this.armIdle();
                 if (this.entry.length === this.target) setTimeout(() => this.unlock(), 120);
             },
 
@@ -195,6 +249,7 @@
                     this.pendingPin = this.entry;
                     this.entry = '';
                     this.screen = 'phone';
+                    this.armIdle();
 
                     return;
                 }
@@ -206,7 +261,7 @@
                     kind: 'bad',
                     text: data.status === 'locked'
                         ? 'This PIN is locked for a few minutes. Please see a staff member.'
-                        : 'We did not recognise that PIN. Please try again or see a staff member.',
+                        : 'We did not recognize that PIN. Please try again or see a staff member.',
                 };
                 this.entry = '';
                 this.pendingPin = null;
@@ -245,6 +300,7 @@
 
             go(next) {
                 clearInterval(this.timer);
+                clearTimeout(this.idle);
                 this.screen = next;
                 this.entry = '';
                 this.countdown = next === 'done' ? 8 : sessionSeconds;
@@ -260,6 +316,7 @@
 
             reset() {
                 clearInterval(this.timer);
+                clearTimeout(this.idle);
                 this.post("{{ route('kiosk.lock') }}", {});
                 Object.assign(this, {
                     screen: 'pin', entry: '', pendingPin: null, guardian: '',

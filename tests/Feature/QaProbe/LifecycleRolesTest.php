@@ -28,6 +28,7 @@ use Tests\TestCase;
  */
 class LifecycleRolesTest extends TestCase
 {
+    use \Tests\Concerns\MakesChildrenReadyForActive;
     use RefreshDatabase;
 
     private User $director;
@@ -55,6 +56,7 @@ class LifecycleRolesTest extends TestCase
     public function test_h1_start_today_makes_active_and_appears_on_check_in(): void
     {
         $c = $this->child(['status' => 'Pending', 'first_name' => 'TEST-Pam']);
+        $this->readyForActive($c);
         $this->assertStringNotContainsString('TEST-Pam', $this->actingAs($this->director)->get(route('check-in.index'))->getContent(), 'pending not on check-in');
 
         $this->actingAs($this->director)->post(route('children.start', $c), ['first_day' => '2026-10-29'])->assertRedirect(route('children.show', $c));
@@ -66,6 +68,7 @@ class LifecycleRolesTest extends TestCase
     public function test_h2_start_in_future_waits_then_sync_starts_on_the_day(): void
     {
         $c = $this->child(['status' => 'Pending', 'first_name' => 'TEST-Fut']);
+        $this->readyForActive($c);
         $this->actingAs($this->director)->post(route('children.start', $c), ['first_day' => '2026-11-02'])->assertRedirect();
         $this->assertSame('Pending', $c->fresh()->status);
 
@@ -218,6 +221,7 @@ class LifecycleRolesTest extends TestCase
     public function test_h7_reenroll_keeps_lan_and_family_and_history_shows_both_periods(): void
     {
         $c = $this->child(['first_name' => 'TEST-Back', 'enrolled_on' => '2026-09-01']);
+        $this->readyForActive($c);
         $mom = $this->guardian($c, 'TEST-Mom-Back', '7165550103');
         $lan = $c->lan;
         $this->actingAs($this->director)->post(route('children.withdraw', $c), ['last_day' => '2026-09-15', 'reason' => 'Family choice', 'could_return' => 'Yes', 'note' => 'n'])->assertRedirect();
@@ -236,6 +240,7 @@ class LifecycleRolesTest extends TestCase
     public function test_h7b_reenroll_keeps_the_gap_out_of_the_enrolled_days(): void
     {
         $c = $this->child(['first_name' => 'TEST-Gap', 'enrolled_on' => '2026-09-01']);
+        $this->readyForActive($c);
         $this->actingAs($this->director)->post(route('children.withdraw', $c), ['last_day' => '2026-09-15', 'reason' => 'Family choice', 'could_return' => 'Yes', 'note' => 'n'])->assertRedirect();
         $this->actingAs($this->director)->post(route('children.reenroll', $c))->assertRedirect();
         $c->refresh();
@@ -271,11 +276,14 @@ class LifecycleRolesTest extends TestCase
         $this->assertSame(0, $json['counts']['archived']);
     }
 
-    public function test_h8b_archived_tab_is_404_while_the_setting_is_off(): void
+    public function test_h8b_archived_tab_falls_back_while_the_setting_is_off(): void
     {
+        // Was a 404; an address for a tab that is not offered now opens the
+        // default Active list instead (tester report, Nov 2026).
         $c = $this->child(['first_name' => 'TEST-Arch2', 'status' => 'Inactive', 'withdrawn_on' => '2026-09-30']);
         $c->archive($this->director);
-        $this->actingAs($this->director)->get(route('children.index', ['status' => 'Archived']))->assertNotFound();
+        $this->actingAs($this->director)->get(route('children.index', ['status' => 'Archived']))
+            ->assertOk()->assertViewHas('status', 'Active')->assertDontSee('TEST-Arch2');
     }
 
     /** "Archived records are read-only until restored" — every write endpoint. */
@@ -361,14 +369,20 @@ class LifecycleRolesTest extends TestCase
         $this->post(route('children.reenroll', $archived))->assertStatus(422);
         $this->post(route('children.cancel', $active), ['reason' => 'Other'])->assertStatus(422);
 
-        $this->post(route('children.archive', $active))->assertStatus(422);
-        $this->assertSame('Active', $active->fresh()->status, 'Active child archived by direct POST');
+        // Decided 16 Nov 2026 (Jordan): Archive is allowed from any status,
+        // with Undo (ChildArchiveTest) — a duplicate or mistaken record
+        // should not have to be withdrawn first.
+        $this->post(route('children.archive', $active))->assertRedirect();
+        $this->assertSame('Archived', $active->fresh()->status);
     }
 
     public function test_h10b_archive_a_pending_child_by_direct_post_is_refused(): void
     {
+        // Decided 16 Nov 2026: allowed, and Undo puts it back to Pending.
         $pending = $this->child(['status' => 'Pending']);
-        $this->actingAs($this->director)->post(route('children.archive', $pending))->assertStatus(422);
+        $this->actingAs($this->director)->post(route('children.archive', $pending))->assertRedirect();
+        $this->assertSame('Archived', $pending->fresh()->status);
+        $this->actingAs($this->director)->post(route('children.unarchive', $pending), ['to' => 'previous']);
         $this->assertSame('Pending', $pending->fresh()->status);
     }
 
@@ -396,18 +410,19 @@ class LifecycleRolesTest extends TestCase
         $archived = $this->child(['first_name' => 'TEST-EditArch', 'status' => 'Inactive', 'withdrawn_on' => '2026-09-30']);
         $archived->archive($this->director);
         $pending = $this->child(['first_name' => 'TEST-EditPend', 'status' => 'Pending']);
+        $this->readyForActive($archived);
+        $this->readyForActive($pending);
 
         $this->actingAs($this->director)->put(route('children.update', $archived), ['first_name' => 'TEST-EditArch', 'last_name' => $archived->last_name, 'status' => 'Active']);
         $this->actingAs($this->director)->put(route('children.update', $pending), ['first_name' => 'TEST-EditPend', 'last_name' => $pending->last_name, 'status' => 'Active']);
 
-        $found = [];
-        if ($archived->fresh()->status !== 'Archived') {
-            $found[] = 'Archived → '.$archived->fresh()->status.' via edit form; history: '.$archived->statusChanges()->get()->map(fn ($l) => $l->event.':'.$l->from_status.'>'.$l->to_status)->implode(' | ');
-        }
-        if ($pending->fresh()->status !== 'Pending') {
-            $found[] = 'Pending → '.$pending->fresh()->status.' via edit form, enrolled_on='.($pending->fresh()->enrolled_on?->toDateString() ?? 'null').'; history: '.$pending->statusChanges()->get()->map(fn ($l) => $l->event.':'.$l->from_status.'>'.$l->to_status)->implode(' | ');
-        }
-        $this->assertSame([], $found, implode("\n", $found));
+        // Decided 16 Nov 2026 (Jordan): a director may change status on the
+        // edit form (ChildArchiveTest, ChildPendingStatusTest); what matters
+        // is that every change leaves a trail. Teachers cannot (j3b).
+        $this->assertSame('Active', $archived->fresh()->status);
+        $this->assertSame('Active', $pending->fresh()->status);
+        $this->assertTrue($archived->statusChanges()->where('to_status', 'Active')->exists(), 'restoring on the edit form left no history');
+        $this->assertTrue($pending->statusChanges()->where('to_status', 'Active')->exists(), 'starting on the edit form left no history');
     }
 
     public function test_h12_no_route_deletes_a_child(): void
@@ -491,18 +506,17 @@ class LifecycleRolesTest extends TestCase
         $this->actingAs($this->teacher)->put(route('children.update', $d), [
             'first_name' => 'TEST-TMove', 'last_name' => $d->last_name, 'status' => 'Active', 'classroom_override' => 'Infant',
         ]);
-        if ($d->fresh()->classroom !== 'Toddler') {
-            $found[] = 'teacher moved child to '.$d->fresh()->classroom.' via edit form; teacher can now open it? '.$this->actingAs($this->teacher)->get(route('children.show', $d))->getStatusCode();
-        }
+        // Decided 16 Nov 2026 (Jordan): a teacher keeps the whole record of
+        // their own child — moving them and correcting DSS numbers included
+        // (ChildRecordEditingTest). Status and the last day stay the office's.
+        $this->assertSame([], $found, implode("\n", $found));
+        $this->assertSame('Infant', $d->fresh()->classroom, 'teacher could not move their own child');
 
         $e = $this->child(['first_name' => 'TEST-TDss', 'dss_case_no' => 'S1111111Z']);
         $this->actingAs($this->teacher)->put(route('children.update', $e), [
             'first_name' => 'TEST-TDss', 'last_name' => $e->last_name, 'status' => 'Active', 'classroom_override' => 'Toddler', 'dss_case_no' => 'S2222222Z', 'enrolled_on' => '2026-01-01',
         ]);
-        if ($e->fresh()->dss_case_no !== 'S1111111Z') {
-            $found[] = 'teacher changed DSS case no to '.$e->fresh()->dss_case_no.' and enrolled_on to '.$e->fresh()->enrolled_on?->toDateString();
-        }
-        $this->assertSame([], $found, implode("\n", $found));
+        $this->assertSame('S2222222Z', $e->fresh()->dss_case_no, 'teacher could not correct a DSS number');
     }
 
     public function test_j4_teacher_sees_only_their_rooms(): void
@@ -542,8 +556,11 @@ class LifecycleRolesTest extends TestCase
         $other = $this->child(['first_name' => 'TEST-PhotoKid', 'classroom' => 'Infant', 'classroom_override' => 'Infant']);
         $other->update(['photo_path' => 'children/test-photo.jpg']);
         Storage::disk('local')->put('children/test-photo.jpg', 'jpg');
-        // Spec §4: teacher reads basic info for own room only. Code comment says any staff (door screen).
-        $this->actingAs($this->teacher)->get(route('children.photo', $other))->assertForbidden();
+        // Decided 16 Nov 2026 (Jordan): any staff may see any child's photo —
+        // the door screen shows the whole floor (ChildPhotoTest). The rest of
+        // another room's record stays closed (j4).
+        $this->actingAs($this->teacher)->get(route('children.photo', $other))->assertOk();
+        $this->actingAs($this->teacher)->get(route('children.show', $other))->assertForbidden();
     }
 
     public function test_j4d_teacher_export_is_own_room_and_basic_info_only(): void
@@ -559,7 +576,7 @@ class LifecycleRolesTest extends TestCase
             $headings = $export->sheets()[0]->headings();
             $sensitive = array_values(array_intersect($headings, ['DSS case no', 'DSS CIN', 'Health', 'Custody note', 'Withdrawal reason']));
             $peopleHeadings = $export->sheets()[1]->headings();
-            $this->assertSame([], array_merge($sensitive, array_intersect($peopleHeadings, ['SSN (last 4)', 'Driver licence'])), 'teacher export carries office-only columns');
+            $this->assertSame([], array_merge($sensitive, array_intersect($peopleHeadings, ['SSN (last 4)', 'Driver license'])), 'teacher export carries office-only columns');
 
             return true;
         });
@@ -567,7 +584,9 @@ class LifecycleRolesTest extends TestCase
 
     public function test_j5_teacher_reports_are_owner_only(): void
     {
-        $this->actingAs($this->teacher)->get(route('reports.index'))->assertForbidden();
+        // Decided 16 Nov 2026 (Jordan): teachers keep the children's reports
+        // (ReportsPageTest); Settings is the owner's (j5b).
+        $this->actingAs($this->teacher)->get(route('reports.index'))->assertOk();
     }
 
     public function test_j5b_office_admin_settings_are_owner_only(): void

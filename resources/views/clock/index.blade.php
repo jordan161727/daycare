@@ -137,7 +137,7 @@
 
 <p class="mt-4 text-xs text-slate-500 dark:text-slate-400">
     Lunch is unpaid. A break is paid for its first {{ config('daycare.timesheet.clock.paid_break_cap') }} minutes and unpaid beyond them,
-    which is why they are separate buttons. Your punches go straight onto the timesheet the centre sends to payroll —
+    which is why they are separate buttons. Your punches go straight onto the timesheet the center sends to payroll —
     a day that does not add up pays nothing until a supervisor has sorted it out, rather than being guessed at.
 </p>
 @endsection

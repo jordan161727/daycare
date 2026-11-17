@@ -34,7 +34,7 @@ class ClosureDay extends Model
     /** What the greyed-out column on the attendance board says. */
     public function label(): string
     {
-        return $this->reason ?: 'Centre closed';
+        return $this->reason ?: 'Center closed';
     }
 
     /** How many ticks reopening this day would put back. */

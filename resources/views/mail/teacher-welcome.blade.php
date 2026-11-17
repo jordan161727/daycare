@@ -25,7 +25,7 @@
 
     <p style="margin: 0 0 14px; color: #6b7a88;">Or paste this into your browser: {{ $loginUrl }}</p>
 
-    <p style="margin: 0 0 14px;">This password only works until you set your own. If you were not expecting this email, please tell the centre director so the account can be closed.</p>
+    <p style="margin: 0 0 14px;">This password only works until you set your own. If you were not expecting this email, please tell the center director so the account can be closed.</p>
 
     <p style="margin: 24px 0 0; font-size: 12px; color: #6b7a88;">
         {{ config('app.name') }}

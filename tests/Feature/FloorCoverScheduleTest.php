@@ -139,8 +139,8 @@ class FloorCoverScheduleTest extends TestCase
 
         // The floor plan agrees: Toddler covered by Mary and Sultana, LaQuora home in PreK.
         $rooms = collect(app(FloorPlan::class)->for($this->admin)['rooms'])->keyBy('room');
-        $this->assertSame(['Mary', 'Sultana'], collect($rooms['Toddler']['staff'])->pluck('name')->all());
-        $this->assertSame(['Denise', 'LaQuora'], collect($rooms['PreK']['staff'])->pluck('name')->all());
+        $this->assertSame(['Mary', 'Sultana'], collect($rooms['Toddler']['staff'])->pluck('first')->all());
+        $this->assertSame(['Denise', 'LaQuora'], collect($rooms['PreK']['staff'])->pluck('first')->all());
         $this->assertSame(['Covered', '1 spare'], [$rooms['Toddler']['status'], $rooms['PreK']['status']]);
     }
 

@@ -25,7 +25,7 @@ class PasswordController extends Controller
 
         $validated = $request->validate([
             'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'confirmed', Password::min(8)->letters()->numbers(), 'different:current_password'],
+            'password' => ['required', 'string', 'confirmed', Password::defaults(), 'different:current_password'],
         ], [
             'password.different' => 'Your new password has to be different from the temporary one.',
         ]);

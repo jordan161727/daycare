@@ -130,6 +130,10 @@ class AttendanceController extends Controller
                 ->orderBy('first_name')
                 ->get();
 
+            // A week gone by shows the rooms as they were that week, not the
+            // room a child has moved to since (QA C8).
+            \App\Services\RoomHistory::apply($children, $weekDates->last());
+
             // The room chips are drawn from the same set, so a room that this
             // week holds only a leaver still has one to filter by.
             $classrooms = ClassroomAssignment::inOrder($children->pluck('classroom'));
@@ -245,7 +249,7 @@ class AttendanceController extends Controller
             $closedDays = ClosureDay::betweenDates($weekDates->first(), $weekDates->last())
                 ->get()
                 ->keyBy(fn ($day) => $day->closed_on->toDateString())
-                ->map(fn ($day) => $day->reason ?: 'Centre closed');
+                ->map(fn ($day) => $day->reason ?: 'Center closed');
 
             // Nothing to tick in a week that has not been built, so the schedule
             // view and every copy control wait until it has.
@@ -308,8 +312,42 @@ class AttendanceController extends Controller
             // /attendance?infant — as the door screen does. Else everyone.
             $defaultRoom = ClassroomAssignment::fromQuery(request()) ?? '';
 
+            // The sentence over the sheet, by the one rule every screen counts
+            // by (RoomCounts, QA #2), for the room the page opens on — drawn
+            // by the server so it is right before Alpine starts, and the same
+            // figures the getters then keep moving. A day gone by, or a week
+            // that has been locked, has nobody still to come (QA #3).
+            $dayIsOver = \App\Services\RoomCounts::dayIsOver($selectedDate, $weekIsFrozen);
+            $dayCounts = \App\Services\RoomCounts::tally(
+                $children->filter(fn (Child $child) => $defaultRoom === '' || $child->classroom === $defaultRoom)
+                    // On the roll that day (RoomCounts::isEnrolled), or arrived:
+                    // the week's rows include a child starting on Wednesday,
+                    // who is not one of Monday's enrolled (QA, 16 Nov 2026).
+                    ->filter(fn (Child $child) => \App\Services\RoomCounts::isEnrolled($child, $selectedDate) || ! empty($attendanceMap[$child->id][$selectedDate] ?? []))
+                    ->map(function (Child $child) use ($selectedDate, $scheduleMap, $markMap, $attendanceMap) {
+                        $mark = $markMap[$child->id][$selectedDate] ?? null;
+
+                        return \App\Services\RoomCounts::child(
+                            booked: in_array(true, $scheduleMap[$child->id][$selectedDate] ?? [], true) && $mark !== \App\Models\DssDayMark::NONE,
+                            arrived: ! empty($attendanceMap[$child->id][$selectedDate] ?? []),
+                            absent: $mark === \App\Models\DssDayMark::ABSENT,
+                        );
+                    }),
+                $dayIsOver,
+            );
+
+            // A room with more enrolled or expected than places wears a ⚠ on
+            // its chip — warned, never blocked (QA, 16 Nov 2026).
+            $centre = app(\App\Services\CentreSettings::class);
+            // Checked by physical space: rooms that share one (UPK-4 and School
+            // Age) are added together against its places (QA retest, 16 Nov 2026).
+            $roomWarnings = array_filter(\App\Services\RoomCounts::capacityWarnings(\App\Services\RoomCounts::byRoom($selectedDate), $centre));
+
             return view('attendance.index', compact(
+                'roomWarnings',
                 'defaultRoom',
+                'dayIsOver',
+                'dayCounts',
                 'children',
                 'classrooms',
                 'weekDates',
@@ -742,6 +780,16 @@ class AttendanceController extends Controller
              */
             function ($attribute, $value, $fail) use ($request) {
                 $child = Child::find($request->input('child_id'));
+
+                // Archived is read-only until restored, and a pending child
+                // has not started: neither has a day to sign in.
+                if ($child && ($child->isArchived() || $child->isPending())) {
+                    $fail($child->displayName().($child->isArchived()
+                        ? ' is archived — restore the record before changing its attendance.'
+                        : ' has not started yet.'));
+
+                    return;
+                }
 
                 if ($child && ! $child->isEnrolledOn($value)) {
                     $fail($child->displayName().' was not on the roll on '

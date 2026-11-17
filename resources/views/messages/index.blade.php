@@ -147,7 +147,12 @@
                         <button type="button" class="btn" style="min-height: 32px; padding: 5px 10px;" @click="fam = null">Change</button>
                     </div>
                     <div x-show="! fam" style="display: flex; flex-direction: column; gap: 4px;">
-                        <input class="inp" placeholder="Type a child’s or parent’s name" aria-label="Find a family" x-model.trim="famQuery" @input.debounce.250ms="searchFamilies()" @focus="searchFamilies()">
+                        {{-- Typing clears the list at once and says it is looking,
+                             rather than leaving the last search's names up for the
+                             second the next one takes (QA #24, 12 Nov 2026). --}}
+                        <input class="inp" placeholder="Type a child’s or parent’s name" aria-label="Find a family" x-model.trim="famQuery" @input="famTyped()" @focus="searchFamilies()">
+                        <span x-show="famLoading && ! famResults.length" x-cloak style="font-size: 12.5px;" class="faint" aria-live="polite" data-fam-searching>Searching…</span>
+                        <span x-show="! famLoading && famSearched && famQuery && ! famResults.length" x-cloak style="font-size: 12.5px;" class="faint" data-fam-none>No family matches that name.</span>
                         <div x-show="famResults.length" style="border: 1px solid #e3e6ee; border-radius: 12px; padding: 4px; display: flex; flex-direction: column; max-height: 240px; overflow: auto;">
                             <template x-for="c in famResults" :key="c.child_id">
                                 <button type="button" class="pick" @click="fam = c; famResults = []; loadRecipients()">
@@ -258,6 +263,10 @@ function messagesPage(opts) { return {
     fam: opts.startWith,
     famQuery: '',
     famResults: [],
+    famLoading: false,
+    famSearched: false, // a search has answered since the last keystroke
+    famSeq: 0,          // the newest search; an older answer arriving late is dropped
+    famTimer: null,
     rc: null,
     rcOpen: false,
     excl: [],
@@ -347,13 +356,33 @@ function messagesPage(opts) { return {
             this.rc = null;
         }
     },
+    /* A keystroke: the old names go now, not when the new ones come back, and
+       any search still in flight is made stale. The search itself waits for a
+       pause in the typing (QA #24, 12 Nov 2026). */
+    famTyped() {
+        this.famResults = [];
+        this.famSearched = false;
+        this.famSeq++;
+        this.famLoading = true;
+        clearTimeout(this.famTimer);
+        this.famTimer = setTimeout(() => this.searchFamilies(), 250);
+    },
     async searchFamilies() {
+        // Numbered, so answers that come back out of order cannot put an
+        // older search's names over a newer one's.
+        const seq = ++this.famSeq;
+        this.famLoading = true;
+        let children = [];
         try {
             const response = await fetch(this.urls.search + '?q=' + encodeURIComponent(this.famQuery), {headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
-            this.famResults = response.ok ? (await response.json()).children : [];
+            children = response.ok ? (await response.json()).children : [];
         } catch (e) {
-            this.famResults = [];
+            children = [];
         }
+        if (seq !== this.famSeq) return;
+        this.famResults = children;
+        this.famLoading = false;
+        this.famSearched = true;
     },
     toggle(childId) {
         this.excl = this.excl.includes(childId) ? this.excl.filter(x => x !== childId) : [...this.excl, childId];

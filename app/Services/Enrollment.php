@@ -105,6 +105,18 @@ class Enrollment
     public function reenroll(Child $child): Child
     {
         return DB::transaction(function () use ($child) {
+            // The first period's last day is about to be cleared, so keep the
+            // time away as a gap: the day after it up to yesterday was not an
+            // enrolled day, and the DSS grid and register must not read it as one.
+            if ($child->withdrawn_on) {
+                $from = $child->withdrawn_on->copy()->addDay()->toDateString();
+                $to = Carbon::yesterday()->toDateString();
+
+                if ($from <= $to) {
+                    $child->enrollment_gaps = array_values(array_merge((array) ($child->enrollment_gaps ?? []), [['from' => $from, 'to' => $to]]));
+                }
+            }
+
             $child->status = 'Active';
             $child->withdrawn_on = null;
             $child->withdrawal_reason = null;

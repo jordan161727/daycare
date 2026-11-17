@@ -77,7 +77,24 @@ class Messaging
     /** The children a text to a room would go about: active, in that room. */
     public function childrenIn(string $room): Collection
     {
-        return Child::where('status', 'Active')->where('classroom', $room)->orderBy('first_name')->orderBy('last_name')->get();
+        return Child::where('status', 'Active')->where('classroom', $room)->orderBy('first_name')->orderBy('last_name')->get()
+            ->filter(fn (Child $child) => $this->canMessage($child))->values();
+    }
+
+    /**
+     * Whether the centre still texts this child's family: Active, and not
+     * past their last day. The nightly sync flips a leaver to Withdrawn, but
+     * until it has run the last day is what says they have gone (QA probe
+     * D20b) — and a withdrawn or archived child's family is not texted at
+     * all, by a room, an announcement, a new message or a reply (D21).
+     */
+    public function canMessage(Child $child): bool
+    {
+        if ($child->status !== 'Active') {
+            return false;
+        }
+
+        return ! ($child->withdrawn_on && today()->toDateString() > $child->withdrawn_on->toDateString());
     }
 
     /**
@@ -352,7 +369,7 @@ class Messaging
         $skipped = [];
         $families = 0;
 
-        foreach (Child::where('status', 'Active')->get() as $child) {
+        foreach (Child::where('status', 'Active')->get()->filter(fn (Child $child) => $this->canMessage($child)) as $child) {
             $r = $this->recipientsFor($child);
             if ($r['gets'] !== []) {
                 $families++;

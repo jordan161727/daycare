@@ -42,7 +42,7 @@ class ChildController extends Controller
      */
     public function index()
     {
-        [$children, $sort, $direction, $status, $room, $pay, $gap] = $this->roster();
+        [$children, $sort, $direction, $status, $room, $pay, $gap] = $this->roster(defaultStatus: 'Active', lenient: true);
 
         $requestUser = request()->user();
 
@@ -53,26 +53,28 @@ class ChildController extends Controller
 
         // The whole roll, not the page: "61 active" counted off ten rows would
         // be a different number on every page of the same list.
-        $activeCount = Child::visibleTo($requestUser)->where('status', 'Active')->count();
+        // Active is "enrolled today" — Child::inStatusTab, the rule every
+        // other page counts by (RoomCounts::isEnrolled; QA retest, 16 Nov 2026).
+        $activeCount = Child::visibleTo($requestUser)->inStatusTab('Active')->count();
 
         // Shown only when there are any: a standing "0 pending" is a number
         // that is read once and then stops being looked at.
-        $pendingCount = Child::visibleTo($requestUser)->where('status', 'Pending')->count();
+        $pendingCount = Child::visibleTo($requestUser)->inStatusTab('Pending')->count();
 
         // Every status and how many are in it, for the chips. Counted over the
         // whole roll rather than the filtered view — they are how the filter is
         // chosen, so a count that moved when a chip was pressed would be
-        // answering about somewhere else.
+        // answering about somewhere else. Each tab by Child::inStatusTab, so
+        // the Active tab is the dashboard's enrolled and a child past their
+        // last day is with the leavers until the nightly sync moves them.
         //
         // The archived are not on the roll at all: All, Active and Inactive
         // never include them, whichever tab is open.
-        $statusCounts = Child::visibleTo($requestUser)
-            ->notArchived()
-            ->selectRaw('status, count(*) as total')
-            ->groupBy('status')
-            ->pluck('total', 'status');
+        $statusCounts = collect(['Active', 'Pending', 'Inactive'])->mapWithKeys(fn (string $tab) => [
+            $tab => Child::visibleTo($requestUser)->notArchived()->inStatusTab($tab)->count(),
+        ]);
 
-        $rollCount = $statusCounts->sum();
+        $rollCount = Child::visibleTo($requestUser)->notArchived()->count();
 
         // The Archived tab is a setting, off by default: a centre that has
         // never archived anybody should not be offered an empty drawer. Its
@@ -87,14 +89,14 @@ class ChildController extends Controller
          * active children only — a withdrawn child's missing consent is not
          * a job for today.
          */
-        $active = Child::visibleTo($requestUser)->where('status', 'Active')->with(['personLinks', 'documents'])->get();
+        $active = Child::visibleTo($requestUser)->inStatusTab('Active')->with(['personLinks', 'documents'])->get();
         $gapCounts = collect(Child::GAPS)->map(fn ($label, $key) => $active->filter(fn (Child $child) => array_key_exists($key, $child->missingItems()))->count())->filter();
 
         // The room chips and the pay chips count the tab that is open, as the
         // mock has them: "Toddler 11" is eleven of the children listed.
         $tab = Child::query()->visibleTo($requestUser)
             ->when($status !== Child::ARCHIVED, fn ($q) => $q->notArchived())
-            ->when($status !== '', fn ($q) => $q->where('status', $status))
+            ->when($status !== '', fn ($q) => $q->inStatusTab($status))
             ->get(['id', 'classroom', 'dss_case_no', 'dss_cin']);
         $roomCounts = ClassroomAssignment::rooms();
         $roomCounts = collect($roomCounts)->mapWithKeys(fn ($r) => [$r => $tab->where('classroom', $r)->count()])->all();
@@ -104,7 +106,22 @@ class ChildController extends Controller
             'private' => $tab->filter(fn (Child $c) => ! $c->isDss())->count(),
         ];
 
-        return view('children.index', compact('children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount', 'showArchived', 'archivedCount', 'room', 'pay', 'gap', 'gapCounts', 'roomCounts', 'payCounts'));
+        /*
+         * The search box filters in the browser, so the room and pay chips
+         * have to be recounted there too (tester report, Nov 2026: "Showing
+         * 118 of 123" and "Toddler 11" stood still under a search that found
+         * nobody). Every child the chips count, by LAN: the search text, the
+         * room, and whether DSS pays.
+         */
+        $searchIndex = Child::query()->visibleTo($requestUser)
+            ->when($status !== Child::ARCHIVED, fn ($q) => $q->notArchived())
+            ->when($status !== '', fn ($q) => $q->inStatusTab($status))
+            ->with('personLinks.person')
+            ->get()
+            ->mapWithKeys(fn (Child $c) => [(string) $c->lan => ['h' => $c->rosterSearchText(), 'r' => (string) $c->classroom, 'd' => $c->isDss()]])
+            ->all();
+
+        return view('children.index', compact('searchIndex','children', 'sort', 'direction', 'activeCount', 'pendingCount', 'status', 'statusCounts', 'rollCount', 'showArchived', 'archivedCount', 'room', 'pay', 'gap', 'gapCounts', 'roomCounts', 'payCounts'));
     }
 
     /** Whether the Children page has an Archived tab. Set in Settings › Children. */
@@ -115,6 +132,9 @@ class ChildController extends Controller
 
     /** The setting that adds the Archived tab. Read here and written in SettingController. */
     public const SHOW_ARCHIVED_SETTING = 'children.show_archived';
+
+    /** The status= value for the All tab, now that no status means Active (QA #5). */
+    public const ALL_STATUSES = 'all';
 
     /**
      * The roll as the page is asking for it: filtered, sorted, and narrowed to
@@ -127,8 +147,23 @@ class ChildController extends Controller
      *
      * @return array{0: \Illuminate\Database\Eloquent\Collection<int, Child>, 1: string, 2: string, 3: string}
      */
-    private function roster(): array
+    private function roster(string $defaultStatus = '', bool $lenient = false): array
     {
+        /*
+         * $lenient is the page's: an address with a sort, status or chip
+         * nobody offers — an old bookmark, a hand-edited link — opens the
+         * default list rather than a 404 page (tester report, Nov 2026). The
+         * export stays strict: a file is not to be quietly built from a
+         * different question than the one asked.
+         */
+        $refuse = function (bool $bad) use ($lenient) {
+            if ($bad && ! $lenient) {
+                abort(404);
+            }
+
+            return $bad;
+        };
+
         $allowedSorts = ['lan', 'first_name', 'last_name', 'dob', 'age', 'classroom', 'schedule', 'alerts', 'status'];
         // The roll opens in LAN order: it is the number on the cabinet, the
         // parent letter and every sheet the centre keeps, so it is what
@@ -136,36 +171,61 @@ class ChildController extends Controller
         $sort = trim((string) request('sort')) ?: 'lan';
         $direction = trim((string) request('direction')) ?: 'asc';
 
-        abort_unless(in_array($sort, $allowedSorts, true), 404);
-        abort_unless(in_array($direction, ['asc', 'desc'], true), 404);
+        if ($refuse(! in_array($sort, $allowedSorts, true))) {
+            $sort = 'lan';
+        }
+        if ($refuse(! in_array($direction, ['asc', 'desc'], true))) {
+            $direction = 'asc';
+        }
 
         // Which status the roll is filtered to, or all of them. An invented one
         // is a 404 rather than an empty list: a page that says "no children"
         // when the truth is "no such status" sends somebody looking for a bug
         // in their data.
-        $status = trim((string) request('status'));
-        abort_unless($status === '' || in_array($status, Child::STATUSES, true), 404);
+        //
+        // The page opens on Active (QA #5, 12 Nov 2026): the "Records to
+        // finish" counts are over the active roll, and a list that opened on
+        // everybody — withdrawn included — answered a different question from
+        // the badge above it (84 counted, 88 listed). All is now asked for by
+        // name, status=all; an empty status= still means All, so an address
+        // written before this keeps meaning what it did.
+        $status = request()->has('status') ? trim((string) request('status')) : $defaultStatus;
+        if (strtolower($status) === self::ALL_STATUSES) {
+            $status = '';
+        }
+        if ($refuse(! ($status === '' || in_array($status, Child::STATUSES, true)))) {
+            $status = $defaultStatus;
+        }
 
         // The archived are reachable from this page only through the Archived
         // tab, and the tab only exists while the setting is on. With it off
         // the address is as invented as any other.
+        if ($refuse($status === Child::ARCHIVED && ! self::showsArchived())) {
+            $status = $defaultStatus;
+        }
         $wantsArchived = $status === Child::ARCHIVED;
-        abort_if($wantsArchived && ! self::showsArchived(), 404);
 
         // The room chips, the pay chips and the "Records to finish" buttons
-        // (Phase 2.1). An unknown value is a 404 for the reason a status is.
+        // (Phase 2.1). An unknown value is refused for the reason a status is
+        // — or, on the page, dropped.
         $room = trim((string) request('room'));
-        abort_unless($room === '' || in_array($room, ClassroomAssignment::rooms(), true), 404);
+        if ($refuse(! ($room === '' || in_array($room, ClassroomAssignment::rooms(), true)))) {
+            $room = '';
+        }
         $pay = trim((string) request('pay'));
-        abort_unless(in_array($pay, ['', 'dss', 'private'], true), 404);
+        if ($refuse(! in_array($pay, ['', 'dss', 'private'], true))) {
+            $pay = '';
+        }
         $gap = trim((string) request('gap'));
-        abort_unless($gap === '' || array_key_exists($gap, Child::GAPS), 404);
+        if ($refuse(! ($gap === '' || array_key_exists($gap, Child::GAPS)))) {
+            $gap = '';
+        }
 
         $children = Child::query()
             ->visibleTo(request()->user())
             // Every tab but Archived leaves the archived out — All included.
             ->when(! $wantsArchived, fn ($query) => $query->notArchived())
-            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($status !== '', fn ($query) => $query->inStatusTab($status))
             ->when($room !== '', fn ($query) => $query->where('classroom', $room))
             ->when($pay === 'dss', fn ($query) => $query->where(fn ($q) => $q->whereNotNull('dss_case_no')->where('dss_case_no', '!=', '')->orWhere(fn ($q) => $q->whereNotNull('dss_cin')->where('dss_cin', '!=', ''))))
             ->when($pay === 'private', fn ($query) => $query->where(fn ($q) => $q->whereNull('dss_case_no')->orWhere('dss_case_no', ''))->where(fn ($q) => $q->whereNull('dss_cin')->orWhere('dss_cin', '')))
@@ -244,6 +304,9 @@ class ChildController extends Controller
      */
     public function export()
     {
+        // No status here still means everybody: the page's Export button
+        // names the tab it was pressed on (status=Active, status=all), so
+        // only an address typed without one lands here (QA #5).
         [$children, , , $status] = $this->roster();
 
         $children = $children->values();
@@ -256,7 +319,9 @@ class ChildController extends Controller
 
         // Sent with headers that forbid the browser to keep it — see the
         // never-cached middleware on the route, which every export carries.
-        return Excel::download(new ChildrenExport($children, request()->user()?->nameFormat()), $name);
+        // A teacher's file is their own rooms (the roster above) and the basic
+        // columns: the office-only ones are left out (spec §4).
+        return Excel::download(new ChildrenExport($children, request()->user()?->nameFormat(), (bool) request()->user()?->isAdmin()), $name);
     }
 
     /**
@@ -272,7 +337,22 @@ class ChildController extends Controller
      */
     public function store(Request $request, PeopleDirectory $people)
     {
-        $child = Child::create($this->validatedData($request));
+        $data = $this->validatedData($request);
+
+        /*
+         * Added as Active with no enrolled date: they are enrolled from the
+         * day they were put on the roll (QA #32, 12 Nov 2026). Left empty,
+         * the record read "Enrolled date not set" and counted as less than
+         * complete for a fact the save itself settles. Today in the centre's
+         * time zone, so a record typed at 9pm is not dated tomorrow. A date
+         * somebody gave is kept as given; Pending keeps its blank, which
+         * means "no first day agreed yet".
+         */
+        if (($data['status'] ?? null) === 'Active' && blank($data['enrolled_on'] ?? null)) {
+            $data['enrolled_on'] = now(config('app.timezone'))->toDateString();
+        }
+
+        $child = Child::create($data);
 
         $this->syncPhoto($request, $child);
 
@@ -311,7 +391,10 @@ class ChildController extends Controller
                 ->with('success', $child->first_name.' '.$child->last_name.' added. '.$waiting.' form'.($waiting === 1 ? '' : 's').' still to review — next: '.ChildDocumentController::nextName().'.');
         }
 
-        return redirect()->route('children.index')->with('success', 'Child added successfully.');
+        // Back to the tab the child is on: the list opens on Active now
+        // (QA #5), and a Pending child added a moment ago must not vanish.
+        return redirect()->route('children.index', ['status' => $child->status])->with('success', 'Child added successfully.')
+            ->with('hours_warning', Child::hoursOutsideOpening($child->drop_off_time, $child->pick_up_time, $child->classroom));
     }
 
     /**
@@ -330,6 +413,10 @@ class ChildController extends Controller
         // nobody else's.
         abort_unless($this->isVisibleTo($child, request()->user()), 403);
 
+        // What this reader has in front of them, for the stale-save check (RecordLock).
+        \App\Services\RecordLock::seen($child);
+        \App\Services\RecordLock::alertsSeen($child);
+
         $child->load(['personLinks.person', 'documents.uploadedBy', 'updatedBy']);
 
         return view('children.show', [
@@ -345,8 +432,11 @@ class ChildController extends Controller
              * check-in beside the office's own, this month's attendance, and
              * who the search box offers before "create a new person".
              */
-            'teacherComments' => \App\Models\AttendanceComment::with('author')->where('child_id', $child->id)->latest('date')->latest('id')->limit(60)->get(),
-            'officeNotes' => $child->notes()->with('author')->limit(60)->get(),
+            // All of them (QA F4): the page shows eight and "Show older" the
+            // rest, so a cut-off here made the oldest notes unreachable and
+            // the filter counts wrong. The cap is only a guard on a page size.
+            'teacherComments' => \App\Models\AttendanceComment::with('author')->where('child_id', $child->id)->latest('created_at')->latest('id')->limit(1000)->get(),
+            'officeNotes' => $child->notes()->with('author')->limit(1000)->get(),
             'month' => $this->attendanceMonth($child),
             'relationships' => PersonController::RELATIONSHIPS,
 
@@ -490,11 +580,20 @@ class ChildController extends Controller
 
         $mine = [route('children.show', $child), route('children.edit', $child)];
 
+        // Where Back went last time this record was opened from elsewhere.
+        // A save on one of the record's cards reloads the record, so the
+        // referer becomes the record itself; without this the reader who
+        // came from "Active · Toddler · by age" was sent to the bare roster
+        // after every in-place save.
+        $remembered = 'children.back.'.$child->getKey();
+
         foreach ($mine as $own) {
             if (str_starts_with(strtok($previous, '?'), $own)) {
-                return $roster;
+                return session($remembered, $roster);
             }
         }
+
+        session([$remembered => $previous]);
 
         return $previous;
     }
@@ -518,6 +617,10 @@ class ChildController extends Controller
             }
         }
 
+        // The version the form is drawn from, for the stale-save check (RecordLock).
+        \App\Services\RecordLock::seen($child);
+        \App\Services\RecordLock::alertsSeen($child);
+
         return view('children.edit', compact('child'));
     }
 
@@ -528,9 +631,32 @@ class ChildController extends Controller
     {
         abort_unless($this->isVisibleTo($child, $request->user()), 403);
 
+        // Archived records are read-only until restored. The one save the
+        // form may still make is the restore itself (status off Archived).
+        if ($child->isArchived() && in_array($request->input('status'), [null, '', Child::ARCHIVED], true)) {
+            return redirect()->route('children.show', $child)->withErrors(['archived' => 'This record is archived and read-only until restored.']);
+        }
+
         $before = $child->scheduleDays();
 
         $data = $this->validatedData($request, $child);
+
+        /*
+         * A form drawn before somebody else saved this record would write
+         * every field back as it was then — their phone fix, their case
+         * number, an alert added from the record meanwhile (QA J3, E5). It is
+         * refused instead, nothing written, and the form is drawn again from
+         * the record as it is now.
+         */
+        if (\App\Services\RecordLock::isStale($request, $child)) {
+            return redirect()->route('children.edit', $child)->with('error', \App\Services\RecordLock::message($child));
+        }
+
+        // The last day and why are the director's, set through Withdraw: a
+        // teacher's form leaves them as they are.
+        if (! $request->user()?->isAdmin()) {
+            unset($data['withdrawn_on'], $data['withdrawal_reason'], $data['withdrawal_note'], $data['could_return']);
+        }
 
         /*
          * Archiving from the form is the same act as the Archive button on
@@ -551,6 +677,10 @@ class ChildController extends Controller
         $child->fill($data)->save();
 
         $this->syncPhoto($request, $child);
+        \App\Services\RecordLock::seen($child);
+        if (array_key_exists('alerts', $data)) {
+            \App\Services\RecordLock::alertsSeen($child);
+        }
 
         /*
          * The days they come, brought through to the weeks that have not
@@ -574,7 +704,10 @@ class ChildController extends Controller
             }
         }
 
-        return redirect()->route('children.index')->with('success', $message);
+        // Inside the hard bounds but outside when the centre or room is open:
+        // saved, and said — the same words the Overview card uses.
+        return redirect()->route('children.index', ['status' => $child->status])->with('success', $message)
+            ->with('hours_warning', Child::hoursOutsideOpening($child->drop_off_time, $child->pick_up_time, $child->classroom));
     }
 
     /**
@@ -691,7 +824,11 @@ class ChildController extends Controller
             // cannot drift apart. Archived is the director's alone: a teacher
             // may mark a child in their room as having left, not take them
             // off every list the centre keeps.
-            'status' => ['required', Rule::in($request->user()?->isAdmin() ? Child::STATUSES : Child::ROLL_STATUSES)],
+            //
+            // Since Phase 2.2 the lifecycle (start, cancel, withdraw,
+            // re-enroll, archive) is the director's, from the record's status
+            // pill, so a teacher's form keeps the status the child already has.
+            'status' => ['required', Rule::in($request->user()?->isAdmin() ? Child::STATUSES : ($child ? [$child->status] : Child::ROLL_STATUSES))],
 
             // What a room has to know before the day starts. A kind and a line
             // apiece; the kind is what colours the chip on the roll.
@@ -719,8 +856,8 @@ class ChildController extends Controller
             // The hours of the day the child is here, inside the hours the
             // centre is open. Either end may stand alone while the other is
             // still being agreed, so neither requires the other.
-            'drop_off_time' => ['nullable', 'date_format:H:i', 'after_or_equal:'.Child::DAY_OPENS_AT, 'before_or_equal:'.Child::DAY_CLOSES_AT],
-            'pick_up_time' => ['nullable', 'date_format:H:i', 'after_or_equal:'.Child::DAY_OPENS_AT, 'before_or_equal:'.Child::DAY_CLOSES_AT, 'after:drop_off_time'],
+            // One copy of the rule, shared with the Overview card.
+            ...Child::scheduleTimeRules(),
             // Normalised to Y-m-d above when it is a real date; anything else
             // arrives here as typed and is refused by name (QA #27).
             'birth_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.now()->addYear()->toDateString()],
@@ -731,6 +868,11 @@ class ChildController extends Controller
             // Two letters from the list; Parents status stays free text (see
             // Child::PARENTS_STATUSES) so an imported word is not refused.
             'state' => ['nullable', Rule::in(array_keys(Child::STATES))],
+            // The same shapes the Overview card checks (QA C9) — when the
+            // number is being typed, so an older record carrying a number in
+            // another shape still saves its other fields.
+            'dss_case_no' => ['nullable', 'string', 'max:40', ...(($child && trim((string) $request->input('dss_case_no')) === (string) $child->dss_case_no) ? [] : ['regex:'.Child::DSS_CASE_NO_PATTERN])],
+            'dss_cin' => ['nullable', 'string', 'max:40', ...(($child && trim((string) $request->input('dss_cin')) === (string) $child->dss_cin) ? [] : ['regex:'.Child::DSS_CIN_PATTERN])],
             // A few words on how the child looks, as the centre's sheet keeps it.
             'description' => ['nullable', 'string', 'max:255'],
             'other_notes' => ['nullable', 'string'],
@@ -745,12 +887,42 @@ class ChildController extends Controller
             $rules[$field] ??= ['nullable', 'string', 'max:255'];
         }
 
-        $data = $request->validate($rules, [
-            'photo.max' => 'The photo may not be larger than 4 MB.',
-            'birth_date.date_format' => 'That is not a real date. Type the date of birth as mm/dd/yyyy, for example 02/14/2024.',
-            'birth_date.before_or_equal' => 'That date of birth is more than a year from now. Check the year.',
-            'photo.image' => 'The photo must be an image file.',
-        ]);
+        /*
+         * Every refusal at once (QA, Nov 2026). The duplicate check used to
+         * run only after the field rules and the Active check had passed, so
+         * a new child saved as Active without a guardian was refused for that
+         * alone and the "already on file" warning never showed — five Jace
+         * Millers went in that way. Now the field rules, the Active check and
+         * the duplicate check each run, and whatever they find is sent back
+         * together.
+         */
+        $errors = [];
+
+        try {
+            $data = $request->validate($rules, [
+                'photo.max' => 'The photo may not be larger than 4 MB.',
+                'birth_date.date_format' => 'That is not a real date. Type the date of birth as mm/dd/yyyy, for example 02/14/2024.',
+                'birth_date.before_or_equal' => 'That date of birth is more than a year from now. Check the year.',
+                'photo.image' => 'The photo must be an image file.',
+            ] + Child::scheduleTimeMessages() + Child::dssMessages());
+
+            try {
+                $this->ensureCanBeActive($data, $child);
+            } catch (\Illuminate\Validation\ValidationException $refused) {
+                $errors = $refused->errors();
+            }
+        } catch (\Illuminate\Validation\ValidationException $refused) {
+            $errors = $refused->errors();
+            $data = null;
+        }
+
+        if ($duplicate = $this->duplicateError($request, $data, $child, $errors)) {
+            $errors['duplicate'] = [$duplicate];
+        }
+
+        if ($errors !== []) {
+            throw \Illuminate\Validation\ValidationException::withMessages($errors);
+        }
 
         /*
          * The same child twice.
@@ -761,34 +933,17 @@ class ChildController extends Controller
          * count, the export and the billing all get wrong. So a new record
          * whose name is already on file is refused, naming the record it
          * matches, unless the person says this really is a different child
-         * (two Ava Smiths do happen) — the "Save anyway" box on the form. A
+         * (two Ava Smiths do happen) — "Continue anyway" on the form. A
          * birth date on both that differs is taken as that answer already.
          * Editing a record is never a duplicate of itself.
+         *
+         * The names are compared without case or spaces ("Mary Ann" is
+         * "maryann"), and the birthday is read from either date column — a
+         * record that carries only birth_date was never matched before.
+         * confirm_duplicate is the form's "Continue anyway"; allow_duplicate
+         * is the older name for it and still honoured. See duplicateError,
+         * which runs alongside the other checks above.
          */
-        if ($child === null && ! $request->boolean('allow_duplicate')) {
-            $same = Child::whereRaw('LOWER(TRIM(first_name)) = ?', [mb_strtolower(trim($data['first_name']))])
-                ->whereRaw('LOWER(TRIM(last_name)) = ?', [mb_strtolower(trim($data['last_name']))])
-                ->when(filled($data['birth_date'] ?? null), fn ($query) => $query->where(
-                    fn ($query) => $query->whereNull('dob')->orWhereDate('dob', $data['birth_date'])
-                ))
-                ->orderBy('id')
-                ->first();
-
-            if ($same) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'duplicate' => sprintf(
-                        '%s %s is already on file — LAN %s, %s, %s%s. Open that record instead, or tick "Save anyway" if this is a different child.',
-                        $same->first_name,
-                        $same->last_name,
-                        $same->lan,
-                        $same->classroom ?: 'no room yet',
-                        $same->status,
-                        $same->dob ? ', born '.Carbon::parse($same->dob)->format('M j, Y') : '',
-                    ),
-                ]);
-            }
-        }
-
         // The upload is not a column. syncPhoto puts the stored path in.
         unset($data['photo']);
 
@@ -855,6 +1010,143 @@ class ChildController extends Controller
             : ($data['classroom_override_from'] ?? today()->toDateString());
 
         return $data;
+    }
+
+    /**
+     * The duplicate warning for a save, or null. Run beside the field rules
+     * and the Active check rather than after them, so it is shown even when
+     * those refuse the save too. $data is null when the field rules failed;
+     * the name and birthday are then read off the request, as long as those
+     * fields themselves passed.
+     *
+     * An edit is checked too, but only when it changes the name or the
+     * birthday — so a record that already shares a name is not warned on
+     * every save, and never matches itself (QA retest, 16 Nov 2026).
+     */
+    private function duplicateError(Request $request, ?array $data, ?Child $child, array $errors): ?string
+    {
+        if ($request->boolean('confirm_duplicate') || $request->boolean('allow_duplicate')) {
+            return null;
+        }
+
+        if ($data === null) {
+            if (array_intersect(['first_name', 'last_name', 'birth_date'], array_keys($errors)) !== []) {
+                return null;
+            }
+
+            $data = $request->only(['first_name', 'last_name', 'birth_date']);
+        }
+
+        $first = trim((string) ($data['first_name'] ?? ''));
+        $last = trim((string) ($data['last_name'] ?? ''));
+
+        $identityChanged = $child === null
+            || mb_strtolower(trim((string) $child->first_name)) !== mb_strtolower($first)
+            || mb_strtolower(trim((string) $child->last_name)) !== mb_strtolower($last)
+            || (array_key_exists('birth_date', $data) && (string) $child->birthDate()?->toDateString() !== (string) ($data['birth_date'] ?? ''));
+
+        if (! $identityChanged) {
+            return null;
+        }
+
+        $born = filled($data['birth_date'] ?? null) ? (string) $data['birth_date'] : null;
+        $same = Child::findDuplicate($first, $last, $born, $child?->getKey());
+
+        if (! $same) {
+            return null;
+        }
+
+        session()->flash('duplicate_of', $same->getKey());
+
+        return $same->duplicateSummary($born).' Open that record, or press "Continue anyway" if this is a different child.';
+    }
+
+    /**
+     * The Add and Edit forms' live check (QA, Nov 2026): the children on
+     * file with this name and birthday, in every status, as the form types
+     * them. The same match the save refuses on — Child::findDuplicates — so
+     * what the form warns about is what the save would hold back. At most
+     * five are listed; `count` says how many there are in all.
+     */
+    public function duplicateCheck(Request $request)
+    {
+        $text = fn (string $key) => is_string($value = $request->query($key)) ? $value : null;
+        $born = filled($text('birth_date')) ? $this->normalizeDate($text('birth_date')) : null;
+
+        // Only a whole, real date is matched on: half a date typed so far
+        // would otherwise match every child of that name.
+        if ($born !== null && ! (($date = \DateTime::createFromFormat('!Y-m-d', $born)) && $date->format('Y-m-d') === $born)) {
+            return response()->json(['count' => 0, 'matches' => []]);
+        }
+
+        $except = $request->integer('except') ?: null;
+        $query = Child::duplicatesQuery($text('first_name'), $text('last_name'), $born, $except);
+
+        if ($query === null) {
+            return response()->json(['count' => 0, 'matches' => []]);
+        }
+
+        $count = (clone $query)->count();
+
+        return response()->json([
+            'count' => $count,
+            'matches' => $query->limit(5)->get()->map(fn (Child $match) => [
+                'id' => $match->getKey(),
+                'lan' => $match->lan,
+                'name' => trim($match->first_name.' '.$match->last_name),
+                'status' => Child::statusLabel($match->status),
+                'room' => $match->classroom ?: null,
+                'born' => $match->birthDate()?->format('m/d/Y'),
+                'url' => route('children.show', $match),
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * Active needs a date of birth, a guardian and an emergency contact
+     * (tester report, Nov 2026): a child on the roll with nobody to ring is
+     * not a record the room can work from. Asked only when a save makes the
+     * child Active — added as Active, or moved to it from another status —
+     * so an ordinary edit to a child already Active but incomplete still
+     * saves; "Records to finish" chases those. Pending saves with less.
+     *
+     * A new child has no people yet: its guardians and emergency contacts
+     * are the names on the Add form, which become people once it is saved.
+     */
+    private function ensureCanBeActive(array $data, ?Child $child): void
+    {
+        if (($data['status'] ?? null) !== 'Active' || $child?->status === 'Active') {
+            return;
+        }
+
+        $missing = $child
+            ? $child->loadMissing('personLinks')->missingForActive(array_key_exists('birth_date', $data) ? ['birth_date' => filled($data['birth_date'])] : [])
+            : (new Child)->missingForActive([
+                'birth_date' => filled($data['birth_date'] ?? null),
+                'guardian' => filled($data['mother_name'] ?? null) || filled($data['father_name'] ?? null),
+                'emergency' => filled($data['emergency_contact'] ?? null) || filled($data['secondary_emergency_contact'] ?? null),
+            ]);
+
+        if ($missing === []) {
+            return;
+        }
+
+        $message = Child::activeRequirementMessage($missing, $data['first_name'] ?? $child?->first_name)
+            .($child ? '' : ' Or save as Pending until then.');
+
+        // The status error is the one the save is refused for; the field
+        // errors mark the tabs that hold what is missing.
+        $fieldFor = ['birth_date' => 'birth_date', 'guardian' => 'mother_name', 'emergency' => 'emergency_contact'];
+        $fieldMessage = ['birth_date' => 'Add a date of birth — needed to mark this child Active.', 'guardian' => 'Add a parent or guardian — needed to mark this child Active.', 'emergency' => 'Add an emergency contact — needed to mark this child Active.'];
+
+        $messages = ['status' => $message, 'activation' => $message];
+        foreach (array_keys($missing) as $key) {
+            if ($child === null || $key === 'birth_date') {
+                $messages[$fieldFor[$key]] = $fieldMessage[$key];
+            }
+        }
+
+        throw \Illuminate\Validation\ValidationException::withMessages($messages);
     }
 
     private function normalizeDate(?string $value): ?string

@@ -5,6 +5,13 @@
 <style>
     .ch .btn.s { padding: 5px 9px; min-height: 32px; font-size: 12.5px; border-radius: 9px; }
     .ch .btn.dark { background: #1c2130; border-color: #1c2130; color: #fff; }
+    /* The Subsidy only toggle (QA #6): a box that fills and ticks when on. */
+    .ch .btn.toggle { gap: 7px; }
+    .ch .btn.toggle .tick { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid #8a90a0; font-size: 11px; line-height: 1; }
+    .ch .btn.toggle.on { background: #1c2130; border-color: #1c2130; color: #fff; }
+    .ch .btn.toggle.on .tick { border-color: #fff; background: #fff; color: #1c2130; }
+    .dark .ch .btn.toggle.on { background: #fff; border-color: #fff; color: #1c2130; }
+    .dark .ch .btn.toggle.on .tick { border-color: #1c2130; background: #1c2130; color: #fff; }
     .ch .btn.red { color: #be123c; }
     .ch .grp { display: flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 10px; flex: none; }
     .ch .gl { font-size: 10.5px; font-weight: 700; }

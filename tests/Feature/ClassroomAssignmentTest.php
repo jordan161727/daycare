@@ -43,16 +43,16 @@ class ClassroomAssignmentTest extends TestCase
         $boundaries = [
             ['dob' => $today->copy()->subWeeks(6), 'room' => 'Infant'],
             ['dob' => $today->copy()->subWeeks(6)->addDay(), 'room' => null],
-            ['dob' => $today->copy()->subMonths(18), 'room' => 'Transition'],
-            ['dob' => $today->copy()->subMonths(18)->addDay(), 'room' => 'Infant'],
+            ['dob' => $today->copy()->subMonths(19), 'room' => 'Transition'],
+            ['dob' => $today->copy()->subMonths(19)->addDay(), 'room' => 'Infant'],
             ['dob' => $today->copy()->subYears(2), 'room' => 'Toddler'],
             ['dob' => $today->copy()->subYears(2)->addDay(), 'room' => 'Transition'],
             ['dob' => $today->copy()->subYears(3), 'room' => 'PreK'],
             ['dob' => $today->copy()->subYears(3)->addDay(), 'room' => 'Toddler'],
             ['dob' => $today->copy()->subYears(4), 'room' => 'UPK-4'],
             ['dob' => $today->copy()->subYears(4)->addDay(), 'room' => 'PreK'],
-            ['dob' => $today->copy()->subYears(5), 'room' => 'School Age'],
-            ['dob' => $today->copy()->subYears(5)->addDay(), 'room' => 'UPK-4'],
+            ['dob' => $today->copy()->subYears(6), 'room' => 'School Age'],
+            ['dob' => $today->copy()->subYears(6)->addDay(), 'room' => 'UPK-4'],
         ];
 
         foreach ($boundaries as $case) {
@@ -66,11 +66,11 @@ class ClassroomAssignmentTest extends TestCase
 
     public function test_a_month_end_birthday_moves_room_on_the_month_end(): void
     {
-        // Born on the 31st, 18 months later is the end of February. Rolling the
+        // Born on the 31st, 19 months later is the end of February. Rolling the
         // missing day forward instead would leave this child in Infant three
         // days longer than one born a day earlier.
-        $this->assertSame('Infant', ClassroomAssignment::automaticFor(Carbon::parse('2025-08-31'), Carbon::parse('2027-02-27')));
-        $this->assertSame('Transition', ClassroomAssignment::automaticFor(Carbon::parse('2025-08-31'), Carbon::parse('2027-02-28')));
+        $this->assertSame('Infant', ClassroomAssignment::automaticFor(Carbon::parse('2025-07-31'), Carbon::parse('2027-02-27')));
+        $this->assertSame('Transition', ClassroomAssignment::automaticFor(Carbon::parse('2025-07-31'), Carbon::parse('2027-02-28')));
 
         // A leap-day child turns two at the end of February, not in March.
         $this->assertSame('Transition', ClassroomAssignment::automaticFor(Carbon::parse('2024-02-29'), Carbon::parse('2026-02-27')));
@@ -225,7 +225,7 @@ class ClassroomAssignmentTest extends TestCase
         $this->actingAs($this->admin)
             ->put(route('children.update', $child), $this->recordFor($child, ['classroom_override' => 'Transition']))
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('children.index'));
+            ->assertRedirect(route('children.index', ['status' => 'Active']));
 
         $child->refresh();
 

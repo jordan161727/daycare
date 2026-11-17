@@ -82,7 +82,7 @@ class ChildPendingStatusTest extends TestCase
         $this->child(['status' => 'Pending']);
 
         $this->actingAs($this->admin)
-            ->get(route('children.index'))
+            ->get(route('children.index', ['status' => 'Pending']))
             ->assertOk()
             ->assertSee('Pending')
             // The blue "Starts …" / "Pending" pill in the Record column (Phase 2).

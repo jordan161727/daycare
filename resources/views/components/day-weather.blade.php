@@ -20,7 +20,7 @@
     'present' => ['☀️', 'here'],
     'unplanned' => ['🌈', 'here, not scheduled'],
     'scheduled' => ['☁️', 'expected'],
-    'closed' => ['🌧️', 'centre closed'],
+    'closed' => ['🌧️', 'center closed'],
 ])
 @php($mark = $weather[$state] ?? null)
 

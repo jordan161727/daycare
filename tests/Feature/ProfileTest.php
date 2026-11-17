@@ -232,11 +232,11 @@ class ProfileTest extends TestCase
 
         $this->actingAs($user)->put(route('profile.password.update'), [
             'current_password' => 'old-password',
-            'password' => 'brand-new-password',
-            'password_confirmation' => 'brand-new-password',
+            'password' => 'brand-new-password-2026',
+            'password_confirmation' => 'brand-new-password-2026',
         ])->assertRedirect(route('profile.edit'))->assertSessionHas('success');
 
-        $this->assertTrue(Hash::check('brand-new-password', $user->fresh()->password));
+        $this->assertTrue(Hash::check('brand-new-password-2026', $user->fresh()->password));
     }
 
     public function test_the_wrong_current_password_leaves_the_old_one_in_place(): void
@@ -245,8 +245,8 @@ class ProfileTest extends TestCase
 
         $this->actingAs($user)->put(route('profile.password.update'), [
             'current_password' => 'guessing',
-            'password' => 'brand-new-password',
-            'password_confirmation' => 'brand-new-password',
+            'password' => 'brand-new-password-2026',
+            'password_confirmation' => 'brand-new-password-2026',
         ])->assertSessionHasErrors('current_password');
 
         $this->assertTrue(Hash::check('old-password', $user->fresh()->password));

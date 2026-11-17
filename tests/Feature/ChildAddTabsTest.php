@@ -102,7 +102,7 @@ class ChildAddTabsTest extends TestCase
         $this->actingAs($this->admin)->post(route('children.store'), [
             'first_name' => 'Tess',
             'last_name' => 'Tabwell',
-            'status' => 'Active',
+            'status' => 'Active', 'birth_date' => '2023-05-01', 'emergency_contact' => 'Tom Tabwell',
             'nickname' => 'Tee',
             'city' => 'Trenton',
             'father_name' => 'Tom Tabwell',

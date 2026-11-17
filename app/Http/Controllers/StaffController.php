@@ -15,8 +15,10 @@ use App\Services\TimeClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -106,11 +108,19 @@ class StaffController extends Controller
 
         // Pay is the director's to see and so the director's to change. Not
         // refused — the rest of the form is fine — just left as it was.
-        if (! $request->user()->canSeePay()) {
+        if (! Gate::forUser($request->user())->allows('view-pay')) {
             unset($data['pay_rate'], $data['direct_deposit']);
         }
 
-        $staff->update($data);
+        $staff->fill($data);
+
+        // Pay access is a permission the owner grants here (gate 'grant-pay').
+        // Only admin accounts can hold it; anyone else's save leaves it as it was.
+        if ($request->has('can_view_pay') && Gate::forUser($request->user())->allows('grant-pay')) {
+            $staff->forceFill(['can_view_pay' => $staff->isAdmin() && $request->boolean('can_view_pay')]);
+        }
+
+        $staff->save();
 
         return redirect()->route('staff.show', [$staff, 'tab' => 'details'])->with('success', $staff->firstName().'’s details saved.');
     }
@@ -119,15 +129,15 @@ class StaffController extends Controller
      * A new password, typed by the director and handed over in person — the
      * way it was before the emailed temporary password, which is off at
      * Jordan's request (4 Nov 2026). The old one stops working at once, and
-     * nothing is mailed. Same rule as the teacher form: eight or more,
-     * typed twice.
+     * nothing is mailed. Same rule as every other password form
+     * (Password::defaults(), AppServiceProvider), typed twice.
      */
     public function setPassword(Request $request, User $staff)
     {
         abort_unless(in_array($staff->role, ['teacher', 'admin'], true), 404);
 
         $data = $request->validate([
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', Password::defaults(), 'confirmed'],
         ]);
 
         $staff->forceFill([

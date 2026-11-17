@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Attendance;
 use App\Models\Child;
+use App\Models\DssDayMark;
 use App\Models\RoomSchedule;
 use App\Models\ScheduleSlot;
 use App\Models\StaffShift;
@@ -41,14 +42,24 @@ class DashboardSnapshot
 
     public function __construct(private TimeClock $clock, private CentreSettings $centre) {}
 
-    public function for(User $user, ?Carbon $now = null): array
+    /**
+     * @param  bool  $wholeBuilding  every room, whoever is asking — the floor
+     *                               plan is the building's picture, so a teacher
+     *                               sees the same counts as the director (QA J1).
+     *                               It carries counts, never children's names.
+     */
+    public function for(User $user, ?Carbon $now = null, bool $wholeBuilding = false): array
     {
-        $now = $now ?? now();
-        $today = $now->toDateString();
+        // The centre's clock, whatever clock the caller handed in: "today"
+        // and every "an hour past due" are New York's, not the server's or
+        // the reader's (QA #4, 12 Nov 2026).
         $timezone = config('app.timezone');
+        $now = ($now ?? now())->copy()->timezone($timezone);
+        $today = $now->toDateString();
 
-        $roll = Child::visibleTo($user)->where('status', 'Active')->get()
-            ->filter(fn (Child $child) => $child->isEnrolledOn($today))
+        // On the roll today, by the one definition (RoomCounts::isEnrolled).
+        $roll = ($wholeBuilding ? Child::query() : Child::visibleTo($user))->where('status', 'Active')->get()
+            ->filter(fn (Child $child) => RoomCounts::isEnrolled($child, $today))
             ->values();
         $byId = $roll->keyBy('id');
 
@@ -63,50 +74,67 @@ class DashboardSnapshot
             ->get()
             ->groupBy('child_id');
         $rooms = RoomSchedule::byRoom();
+        // The word on the day from the register: Absent, or not coming after
+        // all. The register and the reports read it ahead of the tick, so the
+        // dashboard does too — else a child marked Absent at eight sat on the
+        // Expected card until nine.
+        $marks = DssDayMark::whereDate('marked_on', $today)->whereIn('child_id', $roll->pluck('id'))
+            ->pluck('mark', 'child_id');
 
         $states = [];
         foreach ($roll as $child) {
-            $states[$child->id] = $this->stateOf($child, $rows[$child->id] ?? collect(), isset($scheduled[$child->id]), $planned[$child->id] ?? collect(), $rooms, $now, $timezone);
+            $mark = $marks[$child->id] ?? null;
+            $booked = $scheduled[$child->id] ?? false;
+            $states[$child->id] = $this->stateOf($child, $rows[$child->id] ?? collect(), $booked, $mark === DssDayMark::ABSENT, $planned[$child->id] ?? collect(), $rooms, $now, $timezone);
         }
         $counts = array_count_values($states) + ['in' => 0, 'returning' => 0, 'out' => 0, 'expected' => 0, 'absent' => 0, 'none' => 0];
+
+        // Scheduled, arrived, expected and absent through the one rule every
+        // screen counts by (App\Services\RoomCounts, QA #2): scheduled is
+        // everyone the day was for, a walk-in included, so arrived + expected
+        // + absent is always scheduled.
+        $tally = RoomCounts::tally(array_map(fn (string $state) => RoomCounts::child(
+            booked: $state !== 'none',
+            arrived: in_array($state, ['in', 'returning', 'out'], true),
+            absent: $state === 'absent',
+        ), $states));
 
         $staff = $this->staffOnTheFloor($today, $now, $timezone);
 
         return [
             'now' => $now,
             'enrolled' => $roll->count(),
-            'scheduled' => count($scheduled),
+            'scheduled' => $tally['expected'],
             'in' => $counts['in'],
             'returning' => $counts['returning'],
             'out' => $counts['out'],
-            'expected' => $counts['expected'],
-            'absent' => $counts['absent'],
-            'arrived' => $counts['in'] + $counts['returning'] + $counts['out'],
+            'expected' => $tally['still_to_come'],
+            'absent' => $tally['absent'],
+            'arrived' => $tally['in'],
             'staffOnFloor' => $staff->count(),
             'ratios' => $this->ratios($roll, $states, $staff, $planned, $today, $timezone),
             'states' => $states,
         ];
     }
 
-    /** Who is booked today: the week's ticks, or the roll's day pattern before a week is opened. */
+    /**
+     * Who is booked today — RoomCounts::bookedOn, the one rule. It used to
+     * be the week's ticks if anybody had any today, else everybody's
+     * registered days: so opening the register for the first time on a
+     * Monday moved "Scheduled today" from 110 to 114 at 2:18 in the
+     * morning with nothing else changed (QA, 16 Nov 2026).
+     */
     private function scheduledToday(Collection $roll, string $today): array
     {
-        $ticked = ScheduleSlot::whereDate('slot_date', $today)->where('is_scheduled', true)
-            ->whereIn('child_id', $roll->pluck('id'))
-            ->distinct()->pluck('child_id');
-
-        if ($ticked->isNotEmpty()) {
-            return array_fill_keys($ticked->all(), true);
-        }
-
-        $weekday = Carbon::parse($today)->dayOfWeekIso;
-
-        return $roll->filter(fn (Child $child) => in_array($weekday, $child->scheduleDays() ?? [], true))
-            ->pluck('id')->flip()->map(fn () => true)->all();
+        return RoomCounts::bookedOn($roll, $today);
     }
 
-    private function stateOf(Child $child, Collection $rows, bool $scheduled, Collection $slots, Collection $rooms, Carbon $now, string $timezone): string
+    private function stateOf(Child $child, Collection $rows, bool $scheduled, bool $markedAbsent, Collection $slots, Collection $rooms, Carbon $now, string $timezone): string
     {
+        if ($rows->isEmpty() && $markedAbsent) {
+            return 'absent';
+        }
+
         if ($rows->contains(fn (Attendance $row) => $row->signed_out_at === null)) {
             return 'in';
         }
@@ -220,8 +248,19 @@ class DashboardSnapshot
                 $notes[] = $returning->count().' checked out · returning'.($back ? ' at '.Carbon::parse($today.' '.substr((string) $back, 0, 5), $timezone)->format('g:i') : ' later today');
             }
 
+            // More enrolled or expected than places: warned, never blocked (QA, 16 Nov 2026).
+            $expectedHere = RoomCounts::tally($children->map(fn (Child $child) => RoomCounts::child(
+                booked: ($states[$child->id] ?? 'none') !== 'none',
+                arrived: in_array($states[$child->id] ?? 'none', ['in', 'returning', 'out'], true),
+                absent: ($states[$child->id] ?? 'none') === 'absent',
+            )))['expected'];
+
             $out[] = [
                 'room' => $room,
+                'capacity' => $this->centre->capacity($room),
+                'enrolled' => $children->count(),
+                'expected' => $expectedHere,
+                'capacityWarning' => RoomCounts::capacityWarning($this->centre->capacity($room), $children->count(), $expectedHere),
                 'children' => $in,
                 'staff' => $here,
                 'needed' => $needed,
@@ -230,6 +269,18 @@ class DashboardSnapshot
                 'tone' => $status[1],
                 'note' => implode(' · ', $notes),
             ];
+        }
+
+        // Places are checked by physical space: UPK-4 and School Age share
+        // one room, so they are added together against its places and carry
+        // one warning between them — the page shows it once (QA retest, 16
+        // Nov 2026). Each class keeps its own ratio above.
+        $warnings = RoomCounts::capacityWarnings(collect($out)->keyBy('room')->all(), $this->centre);
+        $said = [];
+        foreach ($out as $i => $row) {
+            $warning = $warnings[$row['room']] ?? null;
+            $out[$i]['capacityWarning'] = $warning !== null && ! in_array($warning, $said, true) ? $warning : null;
+            $said[] = $warning;
         }
 
         return $out;

@@ -538,6 +538,55 @@ class WeekSchedule
     }
 
     /**
+     * Whether a week not yet built for a child would tick a weekday — the
+     * same answer open() would write, read without writing anything.
+     *
+     * The counts (App\Services\RoomCounts::bookedOn) read the ticks where
+     * they exist and this where they do not, so "scheduled today" is the
+     * same number before somebody opens the week as after (QA, 16 Nov 2026:
+     * the dashboard read 110 at 2:15 on a Monday and 114 at 2:18 — the
+     * register had been opened in between and the week built from last
+     * week's ticks and drop-ins, where the dashboard had been reading the
+     * registered days).
+     *
+     * Mirrors fill(): a closed day is never ticked; a child the source week
+     * knows carries its weekday forward (an arrival counting as a tick);
+     * a child it does not know falls back to the days on their record.
+     *
+     * @param  iterable<Child>  $children
+     * @return array<int, bool> child id => would be ticked (any session)
+     */
+    public function wouldTick(iterable $children, string $date): array
+    {
+        $weekStart = ScheduleWeek::startOf($date);
+        $offset = (int) Carbon::parse($weekStart)->diffInDays(Carbon::parse($date), false);
+        $out = [];
+
+        if ($offset < 0 || $offset > 4 || in_array($date, ClosureDay::inWeek($weekStart), true)) {
+            foreach ($children as $child) {
+                $out[$child->id] = false;
+            }
+
+            return $out;
+        }
+
+        $existing = ScheduleWeek::firstWhere('week_start', $weekStart);
+        $source = $existing
+            ? ($existing->copied_from_week_start?->toDateString() ?? $this->sourceFor($weekStart))
+            : $this->sourceFor($weekStart);
+
+        $pattern = $source ? $this->patternOf($source, attendedCountsAsScheduled: true) : [];
+
+        foreach ($children as $child) {
+            $out[$child->id] = isset($pattern[$child->id])
+                ? in_array(true, $pattern[$child->id][$offset] ?? [], true)
+                : $child->attendsOn($date);
+        }
+
+        return $out;
+    }
+
+    /**
      * Take away boxes a child is no longer entitled to.
      *
      * Enrolment dates decide whether a box exists at all, and they can change

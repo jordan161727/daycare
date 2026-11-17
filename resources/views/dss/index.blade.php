@@ -35,7 +35,13 @@
             </div>
             <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                 <input class="inp" style="width: 190px; border-radius: 999px;" placeholder="Search name, LAN or CIN" aria-label="Search" x-model.trim="q" @input.debounce.300ms="reload()">
-                <button type="button" class="btn" :class="sub ? 'dark' : ''" @click="sub = ! sub; rooms = rooms; reload()">Subsidy only · <span x-text="d.subsidyCount"></span></button>
+                {{-- A toggle that says which way it is (QA #6, 12 Nov 2026): pressed,
+                     the grid lists subsidised children only; released, private pay
+                     too. The tick and aria-pressed carry the state as well as the
+                     colour, and the count beside the grid says how many are shown. --}}
+                <button type="button" class="btn toggle" :class="sub ? 'on' : ''" aria-pressed="{{ $filter['sub'] ? 'true' : 'false' }}" :aria-pressed="sub ? 'true' : 'false'"
+                        :title="sub ? 'Showing subsidised children only — press to include private pay' : 'Showing everyone — press for subsidised children only'"
+                        @click="sub = ! sub; reload()" data-subsidy-toggle><span class="tick" aria-hidden="true" x-text="sub ? '✓' : ''">{{ $filter['sub'] ? '✓' : '' }}</span>Subsidy only · <span x-text="d.subsidyCount">{{ $data['subsidyCount'] }}</span></button>
                 <button type="button" class="btn pri" @click="openExport()">Export for KinderConnect</button>
             </div>
         </div>
@@ -103,7 +109,7 @@
 
     {{-- ---- the grid ---- --}}
     <section class="ch-card" style="overflow: hidden;">
-        <div class="gridwrap" tabindex="0" @keydown="onKey($event)" @mousedown="$el.focus({preventScroll: true})" data-grid>
+        <div class="gridwrap" tabindex="0" @keydown="onKey($event)" @mousedown="$el.focus({preventScroll: true})" :aria-busy="loading ? 'true' : 'false'" :style="loading ? 'opacity: .55' : ''" data-grid>
             <table class="grid">
                 <thead><tr>
                     <th class="stk" style="text-align: left; padding-left: 10px; min-width: 250px;" @click="selectAll()">CHILD · AGREED HOURS · ENROLLMENT NOTE</th>
@@ -121,7 +127,7 @@
                                 <div style="display: flex; align-items: center; gap: 8px; min-width: 230px;">
                                     <span style="width: 4px; height: 26px; border-radius: 2px; flex: none;" :style="'background:' + r.color"></span>
                                     <div style="display: flex; flex-direction: column; min-width: 0;">
-                                        <span style="font-weight: 700; font-size: 13px;"><span x-text="r.last + ', ' + r.first"></span> <span style="font-weight: 500; font-size: 11.5px;" class="faint" x-text="r.lan"></span></span>
+                                        <span style="font-weight: 700; font-size: 13px;"><span x-text="r.name"></span> <span style="font-weight: 500; font-size: 11.5px;" class="faint" x-text="r.lan"></span></span>
                                         <span style="font-size: 11.5px;" class="muted"><span x-text="r.agreed"></span> · <span x-text="r.daysTxt"></span> <span :style="'color:' + r.cinColor">· <span x-text="r.cin"></span></span></span>
                                         <span x-show="r.wd" style="font-size: 11.5px; font-weight: 600; color: #be123c; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="r.wd">⏏ <span x-text="r.wd"></span></span>
                                         <span x-show="r.note" style="font-size: 11.5px; font-weight: 600; color: #6d28d9; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="'Enrollment note: ' + r.note">✎ <span x-text="r.note"></span></span>
@@ -152,7 +158,7 @@
         <div style="padding: 10px 16px; border-top: 1px solid #f0f1f5; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; align-items: center;" class="muted">
             <span>Click a cell · <span class="kbd">Shift</span>+click or <span class="kbd">Shift</span>+arrows to select a block · click a date or a child to select the column / row</span>
             <span><span class="kbd">Ctrl</span>+<span class="kbd">C</span> / <span class="kbd">Ctrl</span>+<span class="kbd">V</span> copy and paste · <span class="kbd">H</span> agreed hours · <span class="kbd">A</span> absent · <span class="kbd">Del</span> clear</span>
-            <span style="margin-left: auto;">Showing <span x-text="d.rows.length"></span> children · every change is written to the register with your name</span>
+            <span style="margin-left: auto;" role="status" aria-live="polite"><span x-show="loading" x-cloak>Loading… · </span>Showing <span x-text="d.rows.length"></span> <span x-text="sub ? 'subsidised children' : 'children'"></span> · every change is written to the register with your name</span>
         </div>
     </section>
 </div>
@@ -204,18 +210,33 @@ function dssPage(opts) { return {
         Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
         return p;
     },
+    /*
+     * QA #6, 12 Nov 2026: a month takes a moment to build, and a second
+     * press (Subsidy only twice, a room chip, a keystroke in the search)
+     * could be answered before the first — the older grid then landed last
+     * and the page showed the opposite of the button. Only the newest
+     * request's answer is drawn, and the grid says it is loading meanwhile.
+     */
+    loading: false,
+    loadSeq: 0,
     async reload(month) {
         this.sel = null;
         this.error = '';
+        const seq = ++this.loadSeq;
+        this.loading = true;
         try {
             const p = this.params(month ? {month} : {});
             const response = await fetch(this.urls.grid + '?' + p, {headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
             if (! response.ok) throw new Error('Could not load the month.');
-            this.d = await response.json();
+            const data = await response.json();
+            if (seq !== this.loadSeq) return;
+            this.d = data;
             history.replaceState(null, '', '?' + p);
             if (this.ex.open) this.preview();
         } catch (e) {
-            this.error = e.message;
+            if (seq === this.loadSeq) this.error = e.message;
+        } finally {
+            if (seq === this.loadSeq) this.loading = false;
         }
     },
     go(month) { this.reload(month); },

@@ -162,8 +162,10 @@ class MonthSheetController extends Controller
         // current before anything is grouped.
         ClassroomAssignment::syncAll();
 
+        // Everyone on the roll at any point in the month: a child who left on
+        // the 23rd still has three weeks of lines on the paper sheet.
         $children = Child::visibleTo($user)
-            ->where('status', 'Active')
+            ->onRollDuring($start->toDateString(), $end->toDateString())
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();

@@ -51,6 +51,14 @@ class KioskAttendance
             return ['status' => 'not_enrolled'];
         }
 
+        // Only an Active child arrives: pending has not started, and a
+        // withdrawn or archived record (archived straight from Active keeps no
+        // last day) is off the roll. Signing out is left open, so a child
+        // already in the building can always go home.
+        if ($direction === ChildAttendancePunch::IN && $child->status !== 'Active') {
+            return ['status' => 'not_enrolled'];
+        }
+
         return DB::transaction(function () use ($child, $direction, $person, $device, $date, $session) {
             $attendance = Attendance::firstOrCreate(
                 ['child_id' => $child->id, 'attendance_date' => $date, 'session' => $session],

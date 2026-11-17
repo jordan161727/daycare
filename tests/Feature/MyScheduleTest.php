@@ -93,7 +93,7 @@ class MyScheduleTest extends TestCase
         $this->actingAs($this->aisha)
             ->get(route('staff-schedule.mine'))
             ->assertOk()
-            ->assertSee('Centre closed')
+            ->assertSee('Center closed')
             ->assertSee('Civic Holiday');
 
         $this->assertSame(0, StaffShift::where('user_id', $this->aisha->id)->where('shift_date', '2026-07-29')->count());

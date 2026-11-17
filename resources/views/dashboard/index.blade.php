@@ -13,13 +13,15 @@
     {{-- The heading at the mock's size, and one welcome line that carries the
          date and the time — the time keeps going, since it is the first thing
          looked at by somebody about to write an hour down. Server-rendered
-         first, then ticked by the browser. --}}
+         first, then ticked by the browser — on the centre's clock, never the
+         browser's: a director reading this from Manila saw 11:07 PM while the
+         rooms were at ten in the morning (QA #4, 12 Nov 2026). --}}
     <div>
         <p class="text-sm font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Daycare management</p>
         <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Dashboard</h1>
-        <p class="mt-2 text-base text-slate-500 dark:text-slate-400" data-dashboard-clock
-           x-data="{ at: '' }"
-           x-init="const tick = () => { at = new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + ', ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }; tick(); setInterval(tick, 15000);">
+        <p class="mt-2 text-base text-slate-500 dark:text-slate-400" data-dashboard-clock data-time-zone="{{ config('app.timezone') }}"
+           x-data="{ at: '', zone: @js(config('app.timezone')) }"
+           x-init="const tick = () => { const now = new Date(); at = now.toLocaleDateString('en-US', { timeZone: zone, weekday: 'long', month: 'short', day: 'numeric' }) + ', ' + now.toLocaleTimeString('en-US', { timeZone: zone, hour: 'numeric', minute: '2-digit' }); }; tick(); setInterval(tick, 15000);">
             Welcome back! Here’s what’s happening at your daycare today · <span x-text="at">{{ $snapshot['now']->timezone(config('app.timezone'))->format('l, M j, g:i A') }}</span>
         </p>
     </div>
@@ -72,6 +74,10 @@
                     @if($room['note'] !== '')
                         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ $room['note'] }}</p>
                     @endif
+                    {{-- More enrolled or expected than places: warned, never blocked. --}}
+                    @if($room['capacityWarning'] ?? null)
+                        <p class="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300" data-capacity-warning>⚠ {{ $room['capacityWarning'] }}</p>
+                    @endif
                 </div>
             @endforeach
         </div>
@@ -94,7 +100,7 @@
             <a href="{{ route('attendance.index') }}" class="mt-6 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:-translate-y-0.5 hover:bg-indigo-700">Take attendance <span>→</span></a>
         </section>
 
-        {{-- The days the centre is shut, on the screen everybody opens. A
+        {{-- The days the center is shut, on the screen everybody opens. A
              teacher has no way into the holidays page, so without this they
              find out about Labour Day from the greyed-out column on the
              attendance board — on the day, which is too late. --}}
@@ -107,7 +113,7 @@
             </header>
 
             @if($upcomingClosures->isEmpty())
-                <p class="px-6 pb-6 text-sm text-slate-500 dark:text-slate-400">Nothing scheduled — the centre is open every weekday from here on.</p>
+                <p class="px-6 pb-6 text-sm text-slate-500 dark:text-slate-400">Nothing scheduled — the center is open every weekday from here on.</p>
             @else
                 <ul class="divide-y divide-slate-100 border-t border-slate-100 dark:divide-white/10 dark:border-white/10">
                     @foreach($upcomingClosures as $closure)

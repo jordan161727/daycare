@@ -79,6 +79,14 @@ class ChildRecordDemoSeeder extends Seeder
 
     public function run(Enrollment $enrollment): void
     {
+        // Invented alerts, notes and papers written onto whoever is on the
+        // roll: never on live, whatever --force says.
+        if (app()->environment('production')) {
+            $this->command?->error('ChildRecordDemoSeeder writes demo details onto the children on the roll; it does not run in production.');
+
+            return;
+        }
+
         $director = User::where('role', 'admin')->orderBy('id')->first();
 
         $this->makeExtras($director);
@@ -258,7 +266,11 @@ class ChildRecordDemoSeeder extends Seeder
             }
         }
         unset($alert);
-        if ($alerts === [] && in_array($i % 19, [4, 8, 12, 15], true)) {
+        // Each example once, on the first child in its slot — not every 19th
+        // child down the roll. Run over a big roll (a copy of real data) the
+        // old "$i % 19" stamped the same invented court order, "No pickup by
+        // Jordan Key", onto about one child in nineteen (QA, 16 Nov 2026).
+        if ($alerts === [] && $i < 19 && in_array($i, [4, 8, 12, 15], true)) {
             [$text, $type, $severity, $reaction, $action] = self::ALERTS[array_search($i % 19, [4, 8, 12, 15], true)];
             $alerts[] = ['text' => $text, 'type' => $type, 'severity' => $severity, 'reaction' => $reaction, 'action' => $action, 'plan_on' => $severity ? $today->copy()->subMonths(2)->toDateString() : null];
         }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Child;
 use App\Models\ChildAttendancePunch;
+use App\Models\ChildPerson;
 use App\Models\Person;
 use App\Services\GuardianPin;
 use App\Services\KioskAttendance;
@@ -43,16 +44,24 @@ class KioskController extends Controller
             'guardian' => $this->currentGuardian($request),
             'sessionSeconds' => self::SESSION_SECONDS,
             'device' => config('daycare.kiosk.device'),
+            // QA K1 and K3, 16 Nov 2026: the keypad reads both from config.
+            'pinLength' => (int) config('kiosk.pin_length'),
+            'idleSeconds' => (int) config('kiosk.idle_clear_seconds'),
         ]);
     }
 
-    /** Six digits, and possibly the last four of a phone number to break a tie. */
+    /**
+     * The guardian's PIN — config('kiosk.pin_length') digits (QA K1,
+     * 16 Nov 2026) — and possibly the last four of a phone number to break a
+     * tie. Parent PINs may be shared between families on purpose; staff PINs
+     * may not.
+     */
     public function unlock(Request $request)
     {
         abort_unless(config('daycare.kiosk.enabled'), 404);
 
         $data = $request->validate([
-            'pin' => ['required', 'digits:6'],
+            'pin' => ['required', 'digits:'.(int) config('kiosk.pin_length')],
             'last4' => ['nullable', 'digits:4'],
         ]);
 
@@ -92,7 +101,9 @@ class KioskController extends Controller
 
         $child = Child::find($data['child_id']);
 
-        if (! $child) {
+        // A restricted adult signs the child neither in nor out: a no-contact
+        // order is not only about the afternoon.
+        if (! $child || $this->isRestricted($person, $child)) {
             return response()->json(['status' => 'not_authorised'], 200);
         }
 
@@ -102,8 +113,12 @@ class KioskController extends Controller
         // be timed out between the second and the third.
         $request->session()->put('kiosk.until', now()->addSeconds(self::SESSION_SECONDS)->timestamp);
 
+        // The child's name only when the press went through. It used to come
+        // back whatever the answer, so a guardian's open screen could post any
+        // child_id and read off the first name of a child who is not theirs
+        // (kiosk payload review, QA K1–K6, 16 Nov 2026).
         return response()->json($result + [
-            'child' => ['id' => $child->id, 'name' => $child->first_name],
+            'child' => $result['status'] === 'ok' ? ['id' => $child->id, 'name' => $child->first_name] : null,
             'children' => $this->familyOf($person),
         ]);
     }
@@ -144,20 +159,44 @@ class KioskController extends Controller
 
             $present = $attendance !== null && $attendance->signed_out_at === null;
 
+            // Somebody under a restriction for this child (a no-contact order,
+            // most often) is not told whether the child is in, or since when,
+            // and is offered no button: the tile sends them to a member of staff.
+            $restricted = $this->isRestricted($person, $child);
+
             return [
                 'id' => $child->id,
                 'name' => $child->first_name,
                 'room' => $child->classroom,
                 'animal' => \App\Services\ClassroomAssignment::animal($child->classroom),
-                'present' => $present,
-                'since' => $present ? $attendance->signed_in_at->format('g:i A') : null,
+                'present' => $restricted ? null : $present,
+                'since' => ! $restricted && $present ? $attendance->signed_in_at->format('g:i A') : null,
+                'restricted' => $restricted,
                 // Being on a child's record and being allowed to take them home
                 // are different permissions. The tile shows the difference —
                 // and a court order set in the office now reaches this line,
                 // which it could not while the door read its own table.
                 'can_collect' => $person->mayCollect($child),
                 'enrolled' => $child->isEnrolledOn($today),
+                // The child's allergies and medical alerts, so the family
+                // confirming a drop-off sees what the room has on file (QA E3).
+                // Court orders and remarks stay in the office, and someone
+                // under a restriction is told nothing about the child.
+                // Medication counts as health too (Child::HEALTH_ALERT_TYPES).
+                'alerts' => $restricted ? [] : array_values(array_filter(
+                    $child->alertsForScreen(),
+                    fn (array $a) => $a['health'],
+                )),
             ];
         })->all();
+    }
+
+    /** Whether this adult is under a restriction on this child's record. */
+    private function isRestricted(Person $person, Child $child): bool
+    {
+        return ChildPerson::where('person_id', $person->id)
+            ->where('child_id', $child->id)
+            ->whereNotNull('restriction')
+            ->exists();
     }
 }

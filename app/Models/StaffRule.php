@@ -27,12 +27,26 @@ class StaffRule extends Model
 
     public const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'ALL'];
 
-    /** Employment types, in the order they appear in the picker. */
-    public const EMPLOYMENT = ['LEAD', 'FT', 'FT_SALARY', 'PT', 'PT_FLEX', 'SUB', 'INACTIVE'];
+    /**
+     * Employment types, in the order they appear in the picker.
+     *
+     * Contract types only. "Lead" used to sit here too, but it is a position,
+     * not a contract (QA, 16 Nov 2026): it is the Lead Teacher job role now.
+     */
+    public const EMPLOYMENT = ['FT', 'FT_SALARY', 'PT', 'PT_FLEX', 'SUB', 'INACTIVE'];
+
+    /**
+     * Types older rows may still hold, and the contract type each reads as.
+     * LEAD was always scheduled as full time (40 hours, config
+     * daycare.weekly_hours), so it shows as FT; the "Lead" part shows in the
+     * job role instead (User::jobRole). Never offered and not accepted on
+     * save: the forms preselect the type it reads as, so the next save of
+     * that person stores FT. Nothing rewrites the rows in bulk.
+     */
+    public const LEGACY_EMPLOYMENT = ['LEAD' => 'FT'];
 
     /** What each employment type is called on screen (Phase 5: FT, PT, PT flex, Substitute, Inactive). */
     public const EMPLOYMENT_LABELS = [
-        'LEAD' => 'Lead',
         'FT' => 'FT',
         'FT_SALARY' => 'FT salary',
         'PT' => 'PT',
@@ -41,9 +55,17 @@ class StaffRule extends Model
         'INACTIVE' => 'Inactive',
     ];
 
+    /** The contract type a stored value reads as: LEAD as FT, the rest as they are. */
+    public static function employmentType(?string $type): ?string
+    {
+        return $type === null || $type === '' ? null : (self::LEGACY_EMPLOYMENT[$type] ?? $type);
+    }
+
     public static function employmentLabel(?string $type): string
     {
-        return $type === null || $type === '' ? 'Not set' : (self::EMPLOYMENT_LABELS[$type] ?? str_replace('_', ' ', $type));
+        $type = self::employmentType($type);
+
+        return $type === null ? 'Not set' : (self::EMPLOYMENT_LABELS[$type] ?? str_replace('_', ' ', $type));
     }
 
     /**
@@ -93,7 +115,7 @@ class StaffRule extends Model
             'AVAILABLE_AFTER' => 'Cannot start before a time',
             'FIXED_SHIFT' => 'Always works set hours',
             'FIXED_END' => 'Must stay until a time',
-            'CAN_OPEN' => 'May open the centre',
+            'CAN_OPEN' => 'May open the center',
         ],
         'How much they work' => [
             'REQUIRED_HOURS' => 'Owed a set number of hours',

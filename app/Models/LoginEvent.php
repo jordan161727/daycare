@@ -41,6 +41,16 @@ class LoginEvent extends Model
     /** A card or PIN it did not, or one belonging to a locked-out account. */
     public const KIOSK_FAILED = 'kiosk_failed';
 
+    /*
+     * A room tablet re-paired to a room at its gear (QA K4, 16 Nov 2026).
+     * user_id is the administrator whose PIN opened the gear; method says
+     * what was keyed, "pin" for that PIN and "room_code" for the code.
+     */
+    public const TABLET_PAIRED = 'tablet_paired';
+
+    /** An administrator PIN or a room code at the gear that did not work. */
+    public const TABLET_PAIR_FAILED = 'tablet_pair_failed';
+
     /* ---- done to the account by somebody else ---- */
 
     /**
@@ -75,12 +85,12 @@ class LoginEvent extends Model
     /** Everything that did not work, of either kind. */
     public function scopeFailures(Builder $query): Builder
     {
-        return $query->whereIn('outcome', [self::FAILED, self::KIOSK_FAILED]);
+        return $query->whereIn('outcome', [self::FAILED, self::KIOSK_FAILED, self::TABLET_PAIR_FAILED]);
     }
 
     public function failed(): bool
     {
-        return in_array($this->outcome, [self::FAILED, self::KIOSK_FAILED], true);
+        return in_array($this->outcome, [self::FAILED, self::KIOSK_FAILED, self::TABLET_PAIR_FAILED], true);
     }
 
     /** What each outcome is called on screen. */
@@ -91,7 +101,9 @@ class LoginEvent extends Model
             self::FAILED => 'Sign-in failed',
             self::LOGOUT => 'Signed out',
             self::KIOSK => 'Recognised at kiosk',
-            self::KIOSK_FAILED => 'Not recognised at kiosk',
+            self::KIOSK_FAILED => 'Not recognized at kiosk',
+            self::TABLET_PAIRED => 'Room tablet paired',
+            self::TABLET_PAIR_FAILED => 'Room tablet pairing failed',
             self::TEMP_PASSWORD => 'Temporary password sent',
             self::PASSWORD_RESET => 'Password reset',
             self::PASSWORD_SET => 'Password set',
@@ -111,6 +123,7 @@ class LoginEvent extends Model
         return match ($this->method) {
             'card' => 'Card',
             'pin' => 'PIN',
+            'room_code' => 'Room code',
             'email' => 'Emailed by '.($this->by?->name ?? 'a director'),
             'link' => 'Email link',
             'director' => 'Set by '.($this->by?->name ?? 'a director'),
@@ -121,6 +134,6 @@ class LoginEvent extends Model
     /** Whether this row came from the kiosk rather than the sign-in form. */
     public function fromKiosk(): bool
     {
-        return in_array($this->outcome, [self::KIOSK, self::KIOSK_FAILED], true);
+        return in_array($this->outcome, [self::KIOSK, self::KIOSK_FAILED, self::TABLET_PAIRED, self::TABLET_PAIR_FAILED], true);
     }
 }

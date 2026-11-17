@@ -1,8 +1,19 @@
-<div x-show="mobileOpen" x-transition.opacity class="fixed inset-0 z-40 bg-slate-950/50 desktop:hidden" @click="mobileOpen = false"></div>
+{{-- x-cloak: hidden until Alpine says otherwise, so the dimmer does not
+     cover a phone-width page for the moment before Alpine boots (QA #14,
+     12 Nov 2026). --}}
+<div x-show="mobileOpen" x-cloak x-transition.opacity class="fixed inset-0 z-40 bg-slate-950/50 desktop:hidden" @click="mobileOpen = false"></div>
 
 {{-- Narrower than it was: the labels are smaller now, so the old 17rem was
-     paid for by the page beside it and bought nothing. --}}
-<aside :class="[collapsed ? 'desktop:w-16' : 'desktop:w-48', mobileOpen ? 'translate-x-0' : '-translate-x-full desktop:translate-x-0']" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-[#B6C3E6] text-slate-900 shadow-2xl dark:bg-night-900 dark:text-slate-100 transition-all duration-300 desktop:sticky desktop:top-0 desktop:h-screen">
+     paid for by the page beside it and bought nothing.
+
+     The closed drawer and the open rail are in the server's class list, not
+     only in Alpine's :class (QA #14, 12 Nov 2026). They used to be added by
+     Alpine alone, so below the desktop breakpoint the page arrived with the
+     drawer open and slid it away once the script ran — a flash of the menu
+     on every load. The :class is the object form on purpose: that form
+     removes a false class even when the server put it there, so opening the
+     drawer can still take -translate-x-full off. --}}
+<aside :class="{ 'desktop:w-16': collapsed, 'desktop:w-48': !collapsed, 'translate-x-0': mobileOpen, '-translate-x-full': !mobileOpen }" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-[#B6C3E6] text-slate-900 shadow-2xl dark:bg-night-900 dark:text-slate-100 transition-all duration-300 desktop:sticky desktop:top-0 desktop:h-screen desktop:w-48 -translate-x-full desktop:translate-x-0">
     {{-- Deep enough for the logo to be read rather than merely acknowledged.
          It costs the nav sixteen pixels, which that list can spare — it already
          scrolls on its own.
@@ -30,8 +41,10 @@
                  width="531" height="228"
                  class="h-12 w-auto shrink-0 drop-shadow-sm lg:h-16 dark:brightness-0 dark:invert">
             {{-- The app's name, under the centre's: the logo says whose it is,
-                 this says what it is. --}}
-            <span class="text-xs font-bold tracking-wide text-slate-700 dark:text-slate-200" data-wordmark>Angel Nest</span>
+                 this says what it is. Read from config and spelt the way the
+                 emails, texts and parent app spell it — "AngelNest", one word —
+                 rather than typed here as "Angel Nest" (QA #22, 12 Nov 2026). --}}
+            <span class="text-xs font-bold tracking-wide text-slate-700 dark:text-slate-200" data-wordmark>{{ config('daycare.parent_app.name', 'AngelNest') }}</span>
         </a>
         <button @click="collapsed = !collapsed" class="hidden rounded-lg p-2 text-slate-700 hover:bg-white/55 dark:text-slate-300 dark:hover:bg-white/10 desktop:block" aria-label="Collapse sidebar"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg></button>
         <button @click="mobileOpen = false" class="rounded-lg p-2 text-2xl leading-none text-slate-700 dark:text-slate-300 desktop:hidden" aria-label="Close menu">×</button>
@@ -45,7 +58,7 @@
          flex-1 and overflow-y-auto alone left the nav as tall as its links and
          went on pushing the account block below off the bottom of the screen —
          the scrollbar never appeared because there was nothing to overflow. --}}
-    {{-- pt-4: room under the "Angel Nest" wordmark before the first link
+    {{-- pt-4: room under the "AngelNest" wordmark before the first link
          (Jordan, 31 Oct 2026). --}}
     <nav class="sidebar-scroll min-h-0 flex-1 space-y-px overflow-y-auto overscroll-contain px-3 pb-1 pt-4">
         {{-- The menu as Phase 1.1 of docs/work.md orders it (24 Oct 2026):

@@ -78,21 +78,25 @@ class ExpectedCountTest extends TestCase
             $html
         );
         $this->assertStringContainsString(
-            'return this.scopeChildren.filter(child => this.isExpectedOn(child.id, this.countDate)).length;',
+            "const booked = this.isExpectedOn(child.id, date) && mark !== 'none';",
             $html
         );
     }
 
-    public function test_still_to_come_is_expected_minus_arrived(): void
+    /**
+     * Expected, in, absent and still to come by App\Services\RoomCounts' rule
+     * (QA #2, 12 Nov 2026): a walk-in is inside expected, an Absent mark is
+     * out of still to come, and expected = in + absent + still to come.
+     */
+    public function test_still_to_come_is_expected_minus_arrived_and_absent(): void
     {
         $html = $this->sheet();
 
-        // Expected and not yet in — the number a room acts on. Read off the
-        // same attendance map "in" is counted from, so the two move together.
-        $this->assertStringContainsString(
-            'this.isExpectedOn(child.id, this.countDate) && ! this.hasAnyAttendanceForDate(child.id, this.countDate)',
-            $html
-        );
+        // Read off the same attendance map "in" is counted from, so the two
+        // move together.
+        $this->assertStringContainsString('const arrived = this.hasAnyAttendanceForDate(child.id, date);', $html);
+        $this->assertStringContainsString('stillToCome: Math.max(0, expected - inCount - absent)', $html);
+        $this->assertStringContainsString('get awaitedCount() { return this.dayCounts.stillToCome; },', $html);
     }
 
     public function test_nothing_is_kept_as_a_running_total(): void

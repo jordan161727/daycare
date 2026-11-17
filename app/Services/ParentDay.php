@@ -3,16 +3,19 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\AttendanceComment;
 use App\Models\Child;
 use App\Models\ChildAttendancePunch;
 use App\Models\ChildPerson;
 use App\Models\ClosureDay;
 use App\Models\DssDayMark;
+use App\Models\HealthAudit;
 use App\Models\Message;
 use App\Models\MessageThread;
 use App\Models\ParentAbsenceReport;
 use App\Models\ParentPickupPlan;
 use App\Models\Person;
+use App\Models\SymptomCode;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -69,13 +72,64 @@ class ParentDay
                 $a->signed_out_at ? ['id' => $a->id * 10 + 2, 'time' => $this->iso($a->signed_out_at), 'type' => 'checkout', 'title' => 'Checked out', 'detail' => null] : null,
             ]));
 
+        // Health checks that found something (17 Nov 2026): a symptom at drop-off or pick-up.
+        $entries = $entries->concat($rows->flatMap(fn (Attendance $a) => array_filter([
+            $this->healthEntry($a, HealthAudit::IN),
+            $this->healthEntry($a, HealthAudit::OUT),
+        ])));
+
         return [
             'date' => $date,
             'status' => $this->status($child, $date, $rows, $punches),
             // Not recorded at the centre yet: null, not a row of zeros.
             'totals' => null,
             'entries' => $entries->sortBy('time')->values()->all(),
-            'note' => null,
+            'note' => $this->note($child, $date),
+        ];
+    }
+
+    /** A Health row for one end of the day, or null when the check was Normal or not taken. */
+    private function healthEntry(Attendance $a, string $direction): ?array
+    {
+        $code = $a->healthCode($direction);
+        $at = $direction === HealthAudit::OUT ? $a->signed_out_at : $a->signed_in_at;
+        if (! SymptomCode::isSick($code) || ! $at) {
+            return null;
+        }
+        $label = SymptomCode::find($code)?->label ?? 'Symptom '.$code;
+        $note = $a->healthNote($direction);
+
+        return [
+            'id' => $a->id * 10 + ($direction === HealthAudit::OUT ? 4 : 3),
+            'time' => $this->iso($at),
+            'type' => 'health',
+            'title' => $direction === HealthAudit::OUT ? 'Health check at pick-up' : 'Health check at drop-off',
+            'detail' => $label.($note ? ' — '.$note : ''),
+        ];
+    }
+
+    /**
+     * The register's comment for the day — "what the next teacher, or the parent at pick-up,
+     * should know" (AttendanceComment). The newest one, if a child had more than one session.
+     */
+    private function note(Child $child, string $date): ?array
+    {
+        $comment = AttendanceComment::where('child_id', $child->id)
+            ->where('date', $date)
+            ->with('author')
+            ->latest('created_at')->latest('id')
+            ->first();
+
+        if (! $comment) {
+            return null;
+        }
+
+        return [
+            'author' => $comment->author?->name ? Str::before($comment->author->name, ' ') : null,
+            'body' => $comment->body,
+            'tag' => $comment->tag?->label(),
+            'time' => $this->iso($comment->created_at),
+            'edited' => $comment->edited_at !== null,
         ];
     }
 

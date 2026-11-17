@@ -6,7 +6,8 @@ use App\Models\Person;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * Turning six digits typed at a door into a guardian, or into a refusal.
+ * Turning a PIN typed at a door — config('kiosk.pin_length') digits,
+ * six by default (QA K1, 16 Nov 2026) — into a guardian, or into a refusal.
  *
  * Four answers, and the difference between them is the whole of the design:
  *

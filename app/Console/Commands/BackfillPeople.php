@@ -136,9 +136,21 @@ class BackfillPeople extends Command
                 $counts['people']++;
             }
 
-            // The PIN and its lockout state, which only exist here.
-            $person->pin_index = $guardian->pin_index;
-            $person->pin_hash = $guardian->pin_hash;
+            // The PIN and its lockout state, which only exist here — unless
+            // somebody else already answers to that PIN. people.pin_index is
+            // unique since QA K2 (16 Nov 2026), so a shared PIN is left off
+            // and said, for the director to set this person a new one.
+            $pinTaken = filled($guardian->pin_index) && (
+                Person::where('pin_index', $guardian->pin_index)->when($person->exists, fn ($q) => $q->whereKeyNot($person->getKey()))->exists()
+                || \App\Models\User::where('kiosk_pin_index', $guardian->pin_index)->exists()
+            );
+
+            if ($pinTaken) {
+                $this->warn("{$guardian->name}'s door PIN is somebody else's too, so it was not copied. Give them a new one.");
+            } else {
+                $person->pin_index = $guardian->pin_index;
+                $person->pin_hash = $guardian->pin_hash;
+            }
             $person->phone_last4 = $guardian->phone_last4;
             $person->failed_attempts = $guardian->failed_attempts;
             $person->locked_until = $guardian->locked_until;

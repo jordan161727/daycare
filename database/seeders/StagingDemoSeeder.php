@@ -47,7 +47,7 @@ class StagingDemoSeeder extends Seeder
             'password' => Hash::make('password'),
             'role' => 'admin',
             'job_role' => 'Director',
-        ]);
+        ])->forceFill(['can_view_pay' => true])->save();
 
         $step('2/11 The roll: the mock-ups\' children, this week ticked…');
         $this->call(DemoScenarioSeeder::class);

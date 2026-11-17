@@ -68,8 +68,8 @@ at a tablet rather than the door.
 ## The front door iPad, press by press (HANDOFF §5.2)
 
 1. **Keypad.** "Scan your card" (or "Enter your PIN" when the scanner is off).
-   The same errors as before: not recognised, locked, ambiguous, expired,
-   stale.
+   The same errors as before: not recognized, locked, expired, stale. No
+   "ambiguous" any more: staff PINs are unique (QA K2, 16 Nov 2026).
 2. **Staff card.** Name, a pill — *Not on the clock* / *Working* / *On
    break* — and one sentence that is always about *now*:
    - Working: "On the clock since 8:31 AM · in PreK" (or "· office / no room")
@@ -114,7 +114,8 @@ the payroll fact and is never held hostage to the room — but places nobody.
 The header says **Room tablet · PreK** on every screen, so a tablet in the
 wrong room is obvious from the door.
 
-1. **Keypad.** "Coming into PreK?" · "Same PIN as the front door".
+1. **Keypad.** "Coming into PreK?" · "Same PIN as the staff time clock"
+   (was "the front door", which read as the parents' kiosk; QA K1, 16 Nov 2026).
 2. **After the PIN:**
    - **Working elsewhere, or in the office** → a big green **Check into
      PreK** ("Checks you out of Toddler · 8 children · 1 teacher, need 1"),
@@ -137,7 +138,9 @@ wrong room is obvious from the door.
    - There is **no Office / no room tile** — that is done at the door.
    - "Clock out at the front door." **RULE:** a tablet cannot clock anyone
      out; the action is refused as stale.
-3. **The gear (⚙) → Set up this tablet.** "Key the 4-digit room code. Right
+3. **The gear (⚙) → Set up this tablet.** First "An administrator's PIN
+   first." — a staff PIN whose account is an admin (QA K4, 16 Nov 2026); a
+   teacher's PIN gets "Ask a director". Then "Key the 4-digit room code. Right
    now this tablet is PreK." A correct code switches the room at once —
    "This tablet is now UPK-4" — and writes a grey line in the feed, "Room
    tablet set to UPK-4 (was PreK)". A wrong code says "That's not a room
@@ -149,6 +152,46 @@ wrong room is obvious from the door.
    at `/room` becomes a tablet of its own on first visit, with no room until
    the gear sets one. The code only chooses the
    room; it records nothing.
+
+   **RULES (QA K4, 16 Nov 2026):** the server checks the administrator's PIN
+   (the same lookup and lockout as the clock), then holds a go-ahead in the
+   tablet's session for two minutes; `POST /room/setup` refuses a code
+   without it ("needs_admin") and checks again that the person is still an
+   unlocked admin. Five tries per ten minutes for the PIN and five for the
+   code, per address and tablet (limiter `room-setup`), then "Too many tries
+   — wait 10 minutes". Every pairing and every failed PIN or code goes into
+   Settings → Login history ("Room tablet paired" / "Room tablet pairing
+   failed").
+
+## Kiosk settings (QA K1–K6, 16 Nov 2026)
+
+`config/kiosk.php`, each with an env override:
+
+| Key | Default | Used by |
+|---|---|---|
+| `pin_length` (`KIOSK_PIN_LENGTH`) | 6 | every PIN: `/kiosk`, `/clock` and `/room` dots, auto-submit and validation; the director's PIN at the gear; the staff profile's Set PIN |
+| `room_code_length` | 4 | the gear's code pad; Settings → Rooms & hours |
+| `idle_clear_seconds` | 15 | a half-typed PIN or code is wiped after this long with no key pressed, and when the tab is hidden, on all three kiosks |
+| `setup_token_seconds` | 120 | how long the administrator's PIN holds the gear open |
+
+Changing a PIN length does not change anybody's PIN: staff need new ones.
+
+Every PIN is one person's, staff and parents together. `users.kiosk_pin_index`
+and `people.pin_index` are the same HMAC of the PIN keyed with APP_KEY, each
+with a unique index; `App\Rules\UniqueKioskPin` refuses a staff PIN that is a
+parent's and the other way round, which no index across two tables can. The
+migrations that add the indexes stop if two people share a PIN.
+
+`php artisan kiosk:duplicate-pins` (read-only, never prints a PIN) lists:
+
+- people who share a PIN, staff with staff, parents with parents, or across;
+- PINs that are not `pin_length` digits and so can never be keyed. Each PIN
+  records its length when set; one set before 16 Nov 2026 counts as 4 for
+  staff and 6 for parents. **Moving to 6 digits means every staff member
+  needs a new PIN** — this list is who is left.
+
+Room tablet codes live in `room_tablet_codes`, with a unique index on the
+room and on the code.
 
 ## Who's where (HANDOFF §5.3.1)
 
@@ -196,7 +239,7 @@ exactly as a forgotten clock-out always has.
 
 ```bash
 php artisan migrate
-php artisan db:seed --class=KioskStaffDemoSeeder  # Lana 3333 (PreK), Sultana 4444 (Toddler), Evana 5555 (Infant), Lana's shift today
+php artisan db:seed --class=KioskStaffDemoSeeder  # Lana 333333 (PreK), Sultana 444444 (Toddler), Evana 555555 (Infant), Lana's shift today
 npm run build
 ```
 
@@ -218,11 +261,11 @@ Log in as a director and:
    - [ ] Each room shows "No tablet yet".
 2. **The screens.** Open `/clock` in one browser profile and `/room` in
    another. Each pairs itself on first visit (Settings → Devices and its QR
-   were removed 29 Oct 2026). On the tablet, tap the gear and key 2104: it
-   becomes the PreK tablet.
+   were removed 29 Oct 2026). On the tablet, tap the gear, key your own PIN
+   (you are an administrator), then 2104: it becomes the PreK tablet.
    - [ ] Rooms & hours now says "1 tablet · never used" against PreK.
-3. **Staff.** The seeder above made Lana (3333, home room PreK), Sultana
-   (4444, Toddler) and Evana (5555, Infant), and gave Lana a shift today in
+3. **Staff.** The seeder above made Lana (333333, home room PreK), Sultana
+   (444444, Toddler) and Evana (555555, Infant), and gave Lana a shift today in
    PreK so *Your schedule* comes first. If it warned that a PIN was already
    somebody else's, give that teacher another on the Staff page.
 4. **Director Attendance / Teacher Attendance.** Sign in eight PreK children
@@ -230,7 +273,7 @@ Log in as a director and:
 
 ### The door
 
-5. On the clock, key **3333**.
+5. On the clock, key **333333**.
    - [ ] Pill *Not on the clock*; line "Not on the clock today."; one green
      button **Clock In** with "Next: pick the room you're going to".
 6. Tap **Clock In**.
@@ -243,7 +286,7 @@ Log in as a director and:
    - [ ] `/staff/whos-where`: PreK shows Lana since now, pill green
      "1 teacher · need 2 · 8 kids" is **red** (one short). Activity: two lines,
      a blue punch and a green room move.
-8. Key **3333** again.
+8. Key **333333** again.
    - [ ] Line "On the clock since … · in PreK"; **Start Break** says
      "Checks you out of PreK"; **Clock Out** says "End of your day".
 9. Tap **Start Break**.
@@ -251,26 +294,26 @@ Log in as a director and:
      teachers for 8 children (needs 2). The office has been told."
    - [ ] Who's where: Lana under **On break** "since … · from PreK"; a red
      flag "Ratio: PreK short after Lana … left" under *For the office*.
-10. Key **3333** again.
+10. Key **333333** again.
     - [ ] Only **End Break** (green, "Back to PreK") and the link
       **Going somewhere else?** — no Clock Out.
 11. Tap **End Break**.
     - [ ] "Welcome back · Break ended. Checked into PreK at …". Who's where
       puts Lana back in PreK.
-12. Key **3333**, **Start Break**, key **3333**, tap **Going somewhere
+12. Key **333333**, **Start Break**, key **333333**, tap **Going somewhere
     else?**, pick **Toddler**.
     - [ ] Picker is titled "Where are you going after your break?". Lana is
       now in Toddler.
-13. Key **3333**, **Clock Out**.
+13. Key **333333**, **Clock Out**.
     - [ ] "See you tomorrow · Clocked out at … · Nh NNm today", with the
       Toddler short-room warning.
-    - [ ] Key **3333** once more: the card says "Not on the clock today." and
+    - [ ] Key **333333** once more: the card says "Not on the clock today." and
       nothing about "since". Clock in again into Infant: the line reads
       "On the clock since … · in Infant".
 
 ### The room tablet
 
-14. On the PreK tablet, key **4444** (Sultana, not clocked in).
+14. On the PreK tablet, key **444444** (Sultana, not clocked in).
     - [ ] "Clocked in for you · You weren't clocked in, so we clocked you in
       at … and checked you into PreK. Next time, start at the front door."
     - [ ] Who's where: Sultana in PreK; a red flag "Sultana … skipped the
@@ -278,8 +321,8 @@ Log in as a director and:
       "clocked in (auto, PreK tablet)".
     - [ ] Employee Timesheets: Sultana's IN punch is there, source
       *room_tablet*.
-15. At the door, clock Evana (**5555**) into Infant, then **Start Break**.
-    On the tablet key **5555**.
+15. At the door, clock Evana (**555555**) into Infant, then **Start Break**.
+    On the tablet key **555555**.
     - [ ] "Hi Evana", the amber banner "You're on a break. Picking a room
       **ends your break**.", the line "On break since … · was in Infant",
       the big button says "Ends your break · …", and **Taking a break** is
@@ -287,24 +330,26 @@ Log in as a director and:
 16. Tap **Check into PreK**.
     - [ ] "You're in PreK · Break ended. Checked into PreK at …". Who's where:
       Evana in PreK, a blue "ended break (N min) · PreK tablet" line.
-17. Key **5555** again.
+17. Key **555555** again.
     - [ ] "You're already checked into PreK." PreK is not among the tiles;
       the other rooms are. Tap **Toddler**: "Checked out of PreK. Checked
       into Toddler at …" — and no new punch on her timesheet.
-18. Key **5555**, tap **Taking a break**.
+18. Key **555555**, tap **Taking a break**.
     - [ ] "Enjoy your break · Break started at … End it at the front door or
       by tapping into any room." plus the Toddler warning if it is short.
 19. Look for a way to clock out from the tablet.
     - [ ] There is none; the foot says "Clock out at the front door." There
       is no Office tile.
-20. Tap **⚙**. Key **0000**.
+20. Tap **⚙**. Key a teacher's PIN: "Ask a director". Key a director's
+    PIN, then **0000**.
     - [ ] "That's not a room code." Key **2105**.
     - [ ] "This tablet is now UPK-4"; the header says **Room tablet · UPK-4**;
       the keypad reads "Coming into UPK-4?". Who's where has a grey line
       "Room tablet set to UPK-4 (was PreK)". Rooms & hours now counts the
       tablet against UPK-4.
 21. Open `/room` in a browser that was never used.
-    - [ ] It opens as a new tablet; the gear and 2104 make it PreK.
+    - [ ] It opens as a new tablet; the gear, a director's PIN and 2104 make it
+      PreK.
 
 ### Closing
 

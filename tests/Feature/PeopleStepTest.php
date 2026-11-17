@@ -125,7 +125,7 @@ class PeopleStepTest extends TestCase
         // The whole point of the people table: a mother with two children at
         // the centre is one record, not two.
         $form = [
-            'status' => 'Active', 'last_name' => 'Adkins', 'birth_date' => '2022-12-15',
+            'status' => 'Pending', 'last_name' => 'Adkins', 'birth_date' => '2022-12-15',
             'mother_name' => 'Kaylynn Adkins', 'mother_cell' => '585-820-5029',
         ];
 
@@ -143,7 +143,7 @@ class PeopleStepTest extends TestCase
 
     public function test_a_scanned_form_is_marked_for_review_and_a_typed_one_is_not(): void
     {
-        $base = ['first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Active'];
+        $base = ['first_name' => 'Maeve', 'last_name' => 'Adkins', 'status' => 'Pending'];
 
         $this->actingAs($this->admin)->post(route('children.store'), $base)->assertRedirect();
         $this->assertSame('ok', Child::firstOrFail()->import_status, 'typed by hand, already seen by a person');

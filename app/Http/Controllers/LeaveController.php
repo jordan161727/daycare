@@ -101,7 +101,7 @@ class LeaveController extends Controller
         // cost nothing and mean nothing. Said plainly rather than saved as a
         // request for zero hours that a director has to puzzle over.
         if ($leave->days() === 0) {
-            return back()->withInput()->with('warning', 'Those dates are all weekends or days the centre is closed, so there is no leave to take.');
+            return back()->withInput()->with('warning', 'Those dates are all weekends or days the center is closed, so there is no leave to take.');
         }
 
         $leave->save();

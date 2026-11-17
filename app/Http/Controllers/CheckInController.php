@@ -38,8 +38,18 @@ use Illuminate\Validation\Rule;
  * code is a small mark in a dense grid; here it is the second half of the act
  * of checking a child in, and the screen will not complete one without it.
  */
-class CheckInController extends Controller
+class CheckInController extends Controller implements \Illuminate\Routing\Controllers\HasMiddleware
 {
+    /**
+     * Staff only. The door shows the whole floor, so the routes sit outside
+     * the role groups — which let any signed-in account in, a stray "parent"
+     * account included. Only the director and the teachers work the door.
+     */
+    public static function middleware(): array
+    {
+        return ['role:admin,teacher'];
+    }
+
     /** How much of the record the grid draws at once. */
     public const WEEK = 'week';
 
@@ -133,6 +143,7 @@ class CheckInController extends Controller
          * The register (AttendanceController) keeps the per-room scope.
          */
         $children = Child::query()
+            ->with('personLinks.person:id,name')
             ->where('status', 'Active')
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -150,8 +161,12 @@ class CheckInController extends Controller
              * left out: those are not schedule, they are whether the centre
              * has this child at all.
              */
-            ->filter(fn (Child $child) => $child->isEnrolledOn($today))
+            // On the roll today by the one definition (RoomCounts::isEnrolled).
+            ->filter(fn (Child $child) => \App\Services\RoomCounts::isEnrolled($child, $today))
             ->values();
+
+        // A day gone by is shown with the rooms as they were on it (QA C8).
+        \App\Services\RoomHistory::apply($children, $anchor);
 
         $records = DoorAttendance::whereBetween('attendance_date', [
                 $days->first()->toDateString(),
@@ -173,7 +188,11 @@ class CheckInController extends Controller
         // can say "Last comment: Fri, Oct 16 · View" without a request.
         $lastCommentOn = CommentDays::lastCommentDays($children->pluck('id'), $date);
 
-        $rows = $children->map(function (Child $child) use ($records, $days, $timezone, $lastCommentOn) {
+        $bookedByDay = $days->mapWithKeys(fn (Carbon $day) => [
+            $day->toDateString() => \App\Services\RoomCounts::bookedOn($children, $day->toDateString()),
+        ])->all();
+
+        $rows = $children->map(function (Child $child) use ($records, $days, $timezone, $lastCommentOn, $date, $bookedByDay) {
             $byDay = [];
             // The same days, a session at a time: what the dialog edits. A
             // School Age child's morning and afternoon are two rows on the
@@ -213,8 +232,16 @@ class CheckInController extends Controller
                     continue;
                 }
 
-                foreach ($onDay->sortBy('signed_in_at') as $row) {
-                    $bySession[$iso][$row->session ?? 'FULL'] = $slot($row);
+                // The sessions of the day being looked at only. The dialog,
+                // the comment badges and the panel all read this.day and
+                // nothing else; the rest of the week was a slot and its
+                // comments a child a day, inlined into the page and never
+                // read (QA, page weight, 12 Nov 2026). The sheet's other
+                // columns read byDay, below, which is still the whole span.
+                if ($iso === $date) {
+                    foreach ($onDay->sortBy('signed_in_at') as $row) {
+                        $bySession[$iso][$row->session ?? 'FULL'] = $slot($row);
+                    }
                 }
 
                 // First in and last out: one pair of lines per day, as on the
@@ -241,14 +268,15 @@ class CheckInController extends Controller
                 ];
             }
 
-            // The days the standing arrangement puts this child here. Read
-            // off the child's registered pattern rather than the week's
-            // ticks: this says who is expected, not who was planned for by
-            // somebody filling in a rota.
+            // Who is expected each day, by the one rule every screen counts
+            // by (RoomCounts::bookedOn — the week's ticks, or what building
+            // the week would tick; never a closed day or a "not coming").
+            // It was the registered days alone, so the door's "awaited"
+            // disagreed with the dashboard and the register (QA, 16 Nov 2026).
             $booked = [];
 
             foreach ($days as $day) {
-                $booked[$day->toDateString()] = $child->attendsOn($day);
+                $booked[$day->toDateString()] = $bookedByDay[$day->toDateString()][$child->id] ?? false;
             }
 
             return [
@@ -277,7 +305,13 @@ class CheckInController extends Controller
                 // The alerts on the child's record — allergy, medical, court
                 // order — shown when the child is selected (Phase 0's approved
                 // behaviour, drawn from the Phase 2 record). Read-only here.
-                'alerts' => array_map(fn (array $a) => ['label' => $a['label'], 'text' => $a['text'], 'severity' => $a['severity'] ?? null], $child->alertList()),
+                'alerts' => $child->alertsForScreen(),
+                // Who may collect, and who must not, for whoever hands the
+                // child over at the door. A restriction beats the tick.
+                'cleared' => $child->personLinks->filter(fn ($link) => $link->allowsPickup())
+                    ->map(fn ($link) => $link->person?->name)->filter()->values()->all(),
+                'barred' => $child->personLinks->filter(fn ($link) => filled($link->restriction))
+                    ->map(fn ($link) => trim(($link->person?->name ?? 'Name not on file').' — '.$link->restriction))->values()->all(),
                 'avatar' => preg_replace('/>\s+</', '><', trim(view('components.child-avatar', [
                     'child' => $child,
                     'size' => 'h-24 w-24',
@@ -313,15 +347,48 @@ class CheckInController extends Controller
         // Booked today and not here yet. "Not in" counts the whole roll,
         // most of whom were never coming; this is the number somebody is
         // actually chasing at half past eight.
-        $stats['awaited'] = $rows->filter(fn (array $row) => ($row['booked'][$today] ?? false)
-            && ($row['byDay'][$today]['in'] ?? null) === null)->count();
+        // RoomCounts' "still to come" — expected less in less marked Absent —
+        // the same figure as the dashboard's Expected card and the register's
+        // (QA, 16 Nov 2026).
+        $absentToday = \App\Models\DssDayMark::whereDate('marked_on', $today)->whereIn('child_id', $rows->pluck('id'))
+            ->where('mark', \App\Models\DssDayMark::ABSENT)->pluck('child_id')->flip();
+        $day = \App\Services\RoomCounts::tally($rows->map(fn (array $row) => \App\Services\RoomCounts::child(
+            booked: (bool) ($row['booked'][$today] ?? false),
+            arrived: ($row['byDay'][$today]['in'] ?? null) !== null,
+            absent: $absentToday->has($row['id']),
+        )));
+        $stats['expected'] = $day['expected'];
+        $stats['awaited'] = $day['still_to_come'];
 
         // The room the screen opens on: a teacher's own, every time — the
         // Infant teacher lands on Infant — with the other rooms a chip away.
         // The director opens on everyone. Either can be sent to a room by the
         // address: /check-in?infant, /check-in?upk4, /check-in?school-age —
         // a link the office can put on a tablet's home screen, one a room.
-        $defaultRoom = ClassroomAssignment::fromQuery($request) ?? ($user->isAdmin() ? '' : ($user->assignedClassrooms()[0] ?? ''));
+        // ?room=all is "All" chosen on purpose: the day stepper sends it when
+        // a teacher had switched to every room, so the next day does not
+        // fall back to their own (QA #16, 12 Nov 2026).
+        $defaultRoom = $request->query('room') === 'all'
+            ? ''
+            : (ClassroomAssignment::fromQuery($request) ?? ($user->isAdmin() ? '' : ($user->assignedClassrooms()[0] ?? '')));
+
+        $view = $request->input('view') === 'sheet' ? 'sheet' : 'today';
+
+        /*
+         * The cards read one day; only the sheet reads the span.
+         *
+         * Every row went to the page with the whole week — or month — of
+         * first-in/last-out and of "booked", for a sheet the page opens
+         * without and has no tab to (QA, page weight, 12 Nov 2026). Off the
+         * sheet, the day being looked at is all that is sent; the counts
+         * above were already taken from the full rows.
+         */
+        if ($view !== 'sheet') {
+            $rows = $rows->map(fn (array $row) => [
+                'byDay' => array_intersect_key($row['byDay'], [$date => true]),
+                'booked' => array_intersect_key($row['booked'], [$date => true]),
+            ] + $row);
+        }
 
         return view('attendance.check-in', [
             'rows' => $rows,
@@ -340,7 +407,7 @@ class CheckInController extends Controller
             // The roster is what the screen opens on: one card a child, today
             // only, worked from a door. The four-line sheet is a tab away for
             // the glance sideways — did she come yesterday, is he in tomorrow.
-            'view' => $request->input('view') === 'sheet' ? 'sheet' : 'today',
+            'view' => $view,
             // The day stepper's neighbours: the school day either side,
             // weekends skipped, and never past today.
             'prevDay' => self::schoolDayFrom($anchor, -1)->toDateString(),
@@ -404,7 +471,9 @@ class CheckInController extends Controller
         $child = Child::findOrFail($data['child_id']);
         $today = today()->toDateString();
 
-        abort_unless($child->isEnrolledOn($today), 422, $child->displayName().' is not on the roll today.');
+        // Active only: the screen lists nobody else, so a pending, withdrawn
+        // or archived child reaches here only by a stale tab or a direct post.
+        abort_unless($child->status === 'Active' && $child->isEnrolledOn($today), 422, $child->displayName().' is not on the roll today.');
 
         // Checked before the row is written, so a refused code does not leave
         // an arrival behind it.
@@ -635,6 +704,12 @@ class CheckInController extends Controller
                     return;
                 }
                 $child = Child::find($request->input('child_id'));
+                // Archived is read-only until restored; pending has not started.
+                if ($child && ($child->isArchived() || $child->isPending())) {
+                    $fail($child->displayName().($child->isArchived() ? ' is archived — restore the record first.' : ' has not started yet.'));
+
+                    return;
+                }
                 if ($child && ! $child->isEnrolledOn($value)) {
                     $fail($child->displayName().' was not on the roll on '.Carbon::parse($value)->format('l, M j').'.');
                 }

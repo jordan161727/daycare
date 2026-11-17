@@ -128,7 +128,7 @@ class ChildPhotoTest extends TestCase
                 'lan' => '2002',
                 'first_name' => 'Grace',
                 'last_name' => 'Hopper',
-                'status' => 'Active',
+                'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother',
                 'photo' => UploadedFile::fake()->image('grace.jpg'),
             ])
             ->assertRedirect();

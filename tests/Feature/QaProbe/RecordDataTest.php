@@ -261,15 +261,19 @@ class RecordDataTest extends TestCase
         $seen['check_in'] = collect($alerts)->contains(fn ($a) => $a['text'] === 'TEST peanuts' && $a['severity'] === 'severe');
 
         $director = $this->actingAs($this->admin)->get(route('attendance.index'))->getContent();
-        $seen['director_attendance'] = str_contains($director, 'TEST peanuts');
+        // Decided 17 Nov 2026 (Jordan): Director Attendance shows no alerts.
+        $seen['director_attendance_shows_no_alerts'] = ! str_contains($director, 'TEST peanuts');
 
         auth()->logout();
         $this->flushSession();
         $kiosk = $this->postJson(route('kiosk.unlock'), ['pin' => '481902'])->assertOk()->json();
         $seen['kiosk_unlock_json'] = str_contains(json_encode($kiosk), 'TEST peanuts');
 
+        // Decided 16 Nov 2026 (Jordan, first on 29 Oct): the signed-out room
+        // tablet shows nothing about anybody before a PIN, allergies
+        // included — the kitchen list and check-in carry them instead.
         $tablet = $this->get(route('room.kiosk'))->getContent();
-        $seen['room_tablet'] = str_contains($tablet, 'TEST peanuts');
+        $seen['room_tablet_shows_nothing_before_a_pin'] = ! str_contains($tablet, 'TEST peanuts');
 
         $seen['kitchen_list_route_exists'] = collect(\Illuminate\Support\Facades\Route::getRoutes())->contains(fn ($r) => str_contains(strtolower($r->uri()), 'kitchen'));
 
@@ -401,7 +405,7 @@ class RecordDataTest extends TestCase
         $this->actingAs($this->admin)->put(route('children.overview', $child), ['schedule_days' => ['', 1, 2, 3], 'drop_off_time' => '08:00', 'pick_up_time' => '17:00', 'dss_case_no' => 'S1177706D', 'dss_cin' => 'AB12345C']);
         $this->actingAs($this->admin)->put(route('children.overview', $child), ['schedule_days' => ['', 1, 2, 3], 'drop_off_time' => '08:00', 'pick_up_time' => '17:00', 'dss_case_no' => 'S9999999Z', 'dss_cin' => 'AB12345C']);
         $this->actingAs($this->admin)->put(route('children.overview', $child), ['schedule_days' => ['', 1, 2, 3], 'drop_off_time' => '08:00', 'pick_up_time' => '17:00', 'dss_case_no' => '', 'dss_cin' => '']);
-        $this->actingAs($this->admin)->post(route('children.withdraw', $child), ['last_day' => '2026-10-29', 'reason' => 'Family choice', 'note' => 'TEST'])->assertSessionHasNoErrors();
+        $this->actingAs($this->admin)->post(route('children.withdraw', $child), ['last_day' => '2026-10-29', 'reason' => 'Family choice', 'could_return' => 'Yes', 'note' => 'TEST'])->assertSessionHasNoErrors();
 
         $rows = $child->statusChanges()->get()->map(fn ($c) => $c->created_at->toDateString().' ['.$c->event.'] '.$c->summary().($c->note ? ' — '.$c->note : '').($c->changedBy ? ' by '.$c->changedBy->name : ''))->all();
         file_put_contents($this->scratch('F2-history.txt'), implode("\n", $rows));

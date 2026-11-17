@@ -32,7 +32,22 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class PeopleSheet implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle, ShouldAutoSize
 {
     /** @param  Collection<int, Child>  $children */
-    public function __construct(private Collection $children, private ?string $nameFormat = null) {}
+    public function __construct(private Collection $children, private ?string $nameFormat = null, private bool $full = true) {}
+
+    /** Left out of a teacher's file: identity papers are the office's (spec §4). */
+    public const OFFICE_ONLY = ['Driver license', 'SSN (last 4)'];
+
+    /** The cells whose heading the reader may have, in order. */
+    private function keep(array $cells): array
+    {
+        if ($this->full) {
+            return $cells;
+        }
+
+        $headings = $this->allHeadings();
+
+        return array_values(array_filter($cells, fn ($cell, $i) => ! in_array($headings[$i] ?? null, self::OFFICE_ONLY, true), ARRAY_FILTER_USE_BOTH));
+    }
 
     /**
      * Every link belonging to the children on the other sheet.
@@ -73,6 +88,17 @@ class PeopleSheet implements FromCollection, WithHeadings, WithMapping, WithStyl
 
     public function headings(): array
     {
+        return $this->keep($this->allHeadings());
+    }
+
+    /** @param  array{0: Child, 1: ChildPerson}  $row */
+    public function map($row): array
+    {
+        return $this->keep($this->allColumns($row));
+    }
+
+    private function allHeadings(): array
+    {
         return [
             'Child LAN',
             'Child',
@@ -93,13 +119,12 @@ class PeopleSheet implements FromCollection, WithHeadings, WithMapping, WithStyl
             'Employer',
             'Title',
             'Fax',
-            'Driver licence',
+            'Driver license',
             'SSN (last 4)',
         ];
     }
 
-    /** @param  array{0: Child, 1: ChildPerson}  $row */
-    public function map($row): array
+    private function allColumns(array $row): array
     {
         [$child, $link] = $row;
         $person = $link->person;

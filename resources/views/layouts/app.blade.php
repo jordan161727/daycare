@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title>
-        @yield('title', 'Daycare Dashboard')
+        @yield('title', 'AngelNest')
     </title>
 
     @include('layouts.favicon')

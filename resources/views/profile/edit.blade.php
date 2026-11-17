@@ -4,17 +4,21 @@
 
 @php
     // Stored as codes so the scheduler can match on them; spelled out here.
+    // "Lead" is a job role, not a contract: an old LEAD row reads as full
+    // time here and as Lead Teacher under Role (StaffRule::LEGACY_EMPLOYMENT).
     $employmentLabels = [
-        'LEAD' => 'Lead teacher',
         'FT' => 'Full time',
         'FT_SALARY' => 'Full time (salaried)',
         'PT' => 'Part time',
+        'PT_FLEX' => 'Part time (flexible)',
         'SUB' => 'Substitute',
+        'INACTIVE' => 'Inactive',
     ];
+    $employmentType = \App\Models\StaffRule::employmentType($user->employment);
 
     $employment = [
-        'Employment' => $employmentLabels[$user->employment] ?? $user->employment,
-        'Role' => ucfirst($user->role ?? 'staff'),
+        'Employment' => $employmentLabels[$employmentType] ?? $employmentType,
+        'Role' => $user->jobRole(),
         'Room' => $user->title,
         'Classrooms' => implode(', ', $user->assignedClassrooms()) ?: null,
         'Legal name (payroll)' => $user->legal_name,
@@ -149,7 +153,7 @@
                     <label class="block sm:col-span-2">
                         <span class="form-label">Transport</span>
                         <input name="transport" value="{{ old('transport', $user->transport) }}" placeholder="Own car, bus, walks…" class="form-input">
-                        <p class="mt-1.5 text-xs text-slate-500">How you get to the centre, so cover can be arranged when the weather turns.</p>
+                        <p class="mt-1.5 text-xs text-slate-500">How you get to the center, so cover can be arranged when the weather turns.</p>
                         <x-input-error :messages="$errors->get('transport')" />
                     </label>
                 </div>
@@ -208,7 +212,7 @@
                     <span class="card-icon"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a4 4 0 11-4 4h-1l-2 2-2-2v-2l4-4a4 4 0 015 2z"/></svg></span>
                     Change password
                 </h2>
-                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">At least 8 characters. You stay signed in on this device.</p>
+                <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">At least 12 characters, with letters and numbers. You stay signed in on this device.</p>
 
                 <div class="mt-6 space-y-5">
                     <label class="block">
@@ -218,12 +222,12 @@
                     </label>
                     <label class="block">
                         <span class="form-label">New password <span class="text-rose-500">*</span></span>
-                        <input :type="show ? 'text' : 'password'" type="password" name="password" autocomplete="new-password" class="form-input" required>
+                        <input :type="show ? 'text' : 'password'" type="password" name="password" autocomplete="new-password" minlength="12" class="form-input" required>
                         <x-input-error :messages="$errors->get('password')" />
                     </label>
                     <label class="block">
                         <span class="form-label">Confirm new password <span class="text-rose-500">*</span></span>
-                        <input :type="show ? 'text' : 'password'" type="password" name="password_confirmation" autocomplete="new-password" class="form-input" required>
+                        <input :type="show ? 'text' : 'password'" type="password" name="password_confirmation" autocomplete="new-password" minlength="12" class="form-input" required>
                         <x-input-error :messages="$errors->get('password_confirmation')" />
                     </label>
                     <label class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">

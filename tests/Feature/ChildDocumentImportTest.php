@@ -107,9 +107,9 @@ class ChildDocumentImportTest extends TestCase
             'first_name' => 'Ada',
             'last_name' => 'Lovelace',
             'classroom' => 'Infant',
-            'status' => 'Active',
+            'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother',
             'import_token' => $token,
-        ])->assertRedirect(route('children.index'));
+        ])->assertRedirect(route('children.index', ['status' => 'Active']));
 
         $this->assertDatabaseHas('children', ['first_name' => 'Ada', 'last_name' => 'Lovelace']);
         $this->assertCount(0, Storage::disk('local')->files('child-imports'));
@@ -124,8 +124,8 @@ class ChildDocumentImportTest extends TestCase
             'first_name' => 'Someone',
             'last_name' => 'Else',
             'classroom' => 'Infant',
-            'status' => 'Active',
-        ])->assertRedirect(route('children.index'));
+            'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother',
+        ])->assertRedirect(route('children.index', ['status' => 'Active']));
 
         $this->assertCount(1, Storage::disk('local')->files('child-imports'), 'the unrelated pending import survives');
         $this->assertNotNull(session('child_imports.'.$token));
@@ -204,7 +204,7 @@ class ChildDocumentImportTest extends TestCase
 
         // Saving the first opens the second.
         $save = $this->actingAs($this->admin)->post(route('children.store'), [
-            'lan' => '1071', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Infant', 'status' => 'Active', 'import_token' => $first,
+            'lan' => '1071', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Infant', 'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother', 'import_token' => $first,
         ]);
         $save->assertRedirect();
         $this->assertStringContainsString('/review', $save->headers->get('Location'));
@@ -306,9 +306,9 @@ class ChildDocumentImportTest extends TestCase
 
         // Saving the child keeps the notes and drops both pages.
         $this->actingAs($this->admin)->post(route('children.store'), [
-            'lan' => '1071', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Infant', 'status' => 'Active', 'import_token' => $token,
+            'lan' => '1071', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Infant', 'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother', 'import_token' => $token,
             'important_notes' => "Known allergies: Eggs, Nuts, and dogs", 'other_notes' => 'Insurance: Highmark',
-        ])->assertRedirect(route('children.index'));
+        ])->assertRedirect(route('children.index', ['status' => 'Active']));
         $this->assertDatabaseHas('children', ['first_name' => 'Ada', 'important_notes' => 'Known allergies: Eggs, Nuts, and dogs']);
         $this->assertCount(0, Storage::disk('local')->files('child-imports'));
     }
@@ -340,7 +340,7 @@ class ChildDocumentImportTest extends TestCase
 
         // A save names the next one.
         $this->actingAs($this->admin)->post(route('children.store'), [
-            'lan' => '1071', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Infant', 'status' => 'Active', 'import_token' => $first,
+            'lan' => '1071', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'classroom' => 'Infant', 'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother', 'import_token' => $first,
         ])->assertSessionHas('success', 'Ada Lovelace added. 1 form still to review — next: ben.pdf.');
 
         // And the pile can be thrown away.
@@ -362,13 +362,14 @@ class ChildDocumentImportTest extends TestCase
     {
         $existing = \App\Models\Child::create(['lan' => '1050', 'first_name' => 'Ada', 'last_name' => 'Lovelace', 'status' => 'Active', 'classroom' => 'Infant', 'dob' => '2024-03-02']);
         $token = $this->importDocument(['first_name' => 'Ada', 'last_name' => 'Lovelace', 'birth_date' => '2024-03-02']);
-        $form = ['lan' => '1071', 'first_name' => ' ada ', 'last_name' => 'LOVELACE', 'birth_date' => '2024-03-02', 'classroom' => 'Infant', 'status' => 'Active', 'import_token' => $token];
+        $form = ['lan' => '1071', 'first_name' => ' ada ', 'last_name' => 'LOVELACE', 'birth_date' => '2024-03-02', 'classroom' => 'Infant', 'status' => 'Active', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother', 'import_token' => $token];
 
         // Refused, naming the record — and the form is still waiting.
         $this->actingAs($this->admin)->post(route('children.store'), $form)->assertSessionHasErrors('duplicate');
         $message = session('errors')->first('duplicate');
-        $this->assertStringStartsWith('Ada Lovelace is already on file — LAN 1050, ', $message);
-        $this->assertStringContainsString('born Mar 2, 2024. Open that record instead, or tick "Save anyway" if this is a different child.', $message);
+        // Worded as the tester asked (Nov 2026): what matched, then the record.
+        $this->assertStringStartsWith('A child with this name and birthday already exists: LAN 1050 · Ada Lovelace · ', $message);
+        $this->assertStringContainsString('born Mar 2, 2024. Open that record, or press "Continue anyway" if this is a different child.', $message);
         $this->assertSame(1, \App\Models\Child::count());
         $this->assertCount(1, Storage::disk('local')->files('child-imports'));
         $this->actingAs($this->admin)->get(route('children.document-import.review', $token))->assertOk();

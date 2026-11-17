@@ -77,6 +77,9 @@ class StaffClockController extends Controller
 
         return view('clock.kiosk', [
             'device' => $this->pairedDevice($request),
+            // QA K1 and K3, 16 Nov 2026: the keypad reads both from config.
+            'pinLength' => (int) config('kiosk.pin_length'),
+            'idleSeconds' => (int) config('kiosk.idle_clear_seconds'),
         ]);
     }
 
@@ -94,7 +97,9 @@ class StaffClockController extends Controller
 
         $data = $request->validate([
             'card' => ['nullable', 'string', 'max:120'],
-            'pin' => ['nullable', 'digits:4'],
+            // The staff PIN's length from config/kiosk.php, the same value
+            // the keypad's dots and auto-submit read (QA K1, 16 Nov 2026).
+            'pin' => ['nullable', 'digits:'.(int) config('kiosk.pin_length')],
         ]);
 
         if ($this->pairedDevice($request) === null) {

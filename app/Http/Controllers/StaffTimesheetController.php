@@ -393,7 +393,7 @@ class StaffTimesheetController extends Controller
             // the room on their account, failing that the office.
             'room' => $person->title ?: ($person->classroom ?: 'Office'),
             // Pay is the director's alone; anyone else gets no number at all.
-            'rate' => auth()->user()?->canSeePay() ? $person->pay_rate : null,
+            'rate' => auth()->user()?->can('view-pay') ? $person->pay_rate : null,
             'hours' => round($worked / 60, 1),
             'minutes' => $worked,
             'total' => $this->duration($worked),
@@ -677,13 +677,18 @@ class StaffTimesheetController extends Controller
         return ['rows' => $rows, 'counts' => $counts];
     }
 
-    /** "FT · opens", "PT flex", "Type not set" — under the name on the live list. */
+    /**
+     * "Director · FT · opens", "Assistant · PT flex", "Teacher · Type not set"
+     * — under the name on the live list. Led by the same job role the Staff
+     * page prints (User::jobRole), so one person is not "Director" there and
+     * "Lead" here (QA, 16 Nov 2026); the employment type follows it.
+     */
     private function roleLine(User $person): string
     {
         $type = $person->employmentLabel();
         $opens = $person->staffRules->contains(fn (StaffRule $rule) => $rule->rule_type === 'CAN_OPEN');
 
-        return ($type === 'Not set' ? 'Type not set' : $type).($opens ? ' · opens' : '');
+        return $person->jobRole().' · '.($type === 'Not set' ? 'Type not set' : $type).($opens ? ' · opens' : '');
     }
 
     /* ---------------------------------------------------------------

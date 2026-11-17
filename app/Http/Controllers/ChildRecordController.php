@@ -29,25 +29,49 @@ class ChildRecordController extends Controller
     /** Overview: days, drop-off and pick-up, the DSS numbers, the nickname. */
     public function overview(Request $request, Child $child, WeekSchedule $weeks)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         if (is_array($request->input('schedule_days'))) {
             $request->merge(['schedule_days' => array_values(array_filter($request->input('schedule_days'), fn ($d) => $d !== '' && $d !== null))]);
         }
 
+        // A time read back as H:i:s is the same time (the full form does the same).
+        foreach (['drop_off_time', 'pick_up_time'] as $field) {
+            if (is_string($request->input($field)) && preg_match('/^\d{2}:\d{2}:\d{2}$/', $request->input($field))) {
+                $request->merge([$field => substr($request->input($field), 0, 5)]);
+            }
+        }
+
         $data = $request->validate([
             'schedule_days' => ['nullable', 'array'],
             'schedule_days.*' => [Rule::in(array_keys(Child::WEEKDAYS))],
-            'drop_off_time' => ['nullable', 'date_format:H:i'],
-            'pick_up_time' => ['nullable', 'date_format:H:i', 'after:drop_off_time'],
-            'dss_case_no' => ['nullable', 'string', 'max:40'],
-            'dss_cin' => ['nullable', 'string', 'max:40'],
+            // The centre's opening hours, as the full edit form enforces them (QA C2).
+            ...Child::scheduleTimeRules(),
+            // The shapes the state issues them in (QA C9).
+            // Only a number being typed: one already on file in another shape still saves.
+            'dss_case_no' => ['nullable', 'string', 'max:40', ...(trim((string) $request->input('dss_case_no')) === (string) $child->dss_case_no ? [] : ['regex:'.Child::DSS_CASE_NO_PATTERN])],
+            'dss_cin' => ['nullable', 'string', 'max:40', ...(trim((string) $request->input('dss_cin')) === (string) $child->dss_cin ? [] : ['regex:'.Child::DSS_CIN_PATTERN])],
             'nickname' => ['nullable', 'string', 'max:60'],
-        ]);
+        ], Child::scheduleTimeMessages() + Child::dssMessages());
+
+        // A save from a copy of the page drawn before somebody else's save is
+        // refused rather than written over theirs (QA J2).
+        if (\App\Services\RecordLock::isStale($request, $child)) {
+            return redirect()->route('children.show', $child)->with('error', \App\Services\RecordLock::message($child));
+        }
+
+        foreach (['dss_case_no', 'dss_cin'] as $field) {
+            if (array_key_exists($field, $data) && filled($data[$field])) {
+                $data[$field] = strtoupper(trim($data[$field]));
+            }
+        }
 
         $before = $child->scheduleDays();
 
+        // "N/A", "None", "-" and the like are stored as no nickname by the
+        // model's nickname mutator (Child::cleanNickname, QA #20).
         $child->fill($data + ['schedule_days' => $data['schedule_days'] ?? []])->save();
+        \App\Services\RecordLock::seen($child);
 
         $message = 'Overview saved.';
 
@@ -58,7 +82,10 @@ class ChildRecordController extends Controller
             }
         }
 
-        return redirect()->route('children.show', $child)->with('success', $message);
+        // Inside the hard bounds but outside when the centre or room is open:
+        // saved, and said — the same words the full form uses.
+        return redirect()->route('children.show', $child)->with('success', $message)
+            ->with('hours_warning', Child::hoursOutsideOpening($child->drop_off_time, $child->pick_up_time, $child->classroom));
     }
 
     /**
@@ -70,6 +97,7 @@ class ChildRecordController extends Controller
     public function room(Request $request, Child $child)
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        $this->authoriseWrite($request, $child);
 
         if ($request->boolean('automatic')) {
             $child->classroom_override = null;
@@ -88,6 +116,9 @@ class ChildRecordController extends Controller
             'room' => ['required', Rule::in(ClassroomAssignment::rooms())],
             'from' => ['nullable', 'date'],
             'why' => ['nullable', 'string', 'max:160'],
+        ], [
+            // The picker opens on "Choose a room…" (QA #38, 12 Nov 2026).
+            'room.required' => 'Choose the room to move '.$child->first_name.' to.',
         ]);
 
         $from = filled($data['from'] ?? null) ? Carbon::parse($data['from']) : Carbon::today();
@@ -95,6 +126,7 @@ class ChildRecordController extends Controller
         $child->classroom_override = $data['room'];
         $child->classroom_override_from = $from->toDateString();
         $child->roomChangeNote = trim('From '.$from->format('M j, Y').(filled($data['why'] ?? null) ? ' · '.$data['why'] : ''));
+        $child->roomChangeAt = $from->copy();
         $child->save();
 
         // A move dated ahead changes nothing today; the history still says it is coming.
@@ -108,7 +140,7 @@ class ChildRecordController extends Controller
     /** The one enrollment note, saved or cleared. */
     public function enrollmentNote(Request $request, Child $child)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate(['enrollment_note' => ['nullable', 'string', 'max:300']]);
 
@@ -128,7 +160,7 @@ class ChildRecordController extends Controller
     /** Health: doctor, immunizations, medication, custody. The alerts are below. */
     public function health(Request $request, Child $child)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate([
             'doctor' => ['nullable', 'string', 'max:160'],
@@ -151,7 +183,7 @@ class ChildRecordController extends Controller
     /** One alert added, as its own entry with what to do about it. */
     public function storeAlert(Request $request, Child $child)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(Child::ALERT_TYPES))],
@@ -160,35 +192,117 @@ class ChildRecordController extends Controller
             'reaction' => ['nullable', 'string', 'max:200'],
             'action' => ['nullable', 'string', 'max:200'],
             'plan_on' => ['nullable', 'date'],
+        ], [
+            // The Type box opens on "Choose…" rather than Court order (QA #37, 12 Nov 2026).
+            'type.required' => 'Choose what kind of alert this is.',
         ]);
 
         $alerts = $child->alerts ?? [];
         $alerts[] = array_filter($data, fn ($v) => filled($v));
         $child->alerts = array_values($alerts);
         $child->save();
+        \App\Services\RecordLock::seen($child);
 
         return redirect()->route('children.show', $child)->with('success', 'Alert added. It shows on the roll, check-in and the kitchen list.');
     }
 
-    /** One alert removed, by its place in the list. */
+    /** One alert removed: the one that was clicked, found by what it says. */
     public function destroyAlert(Request $request, Child $child, int $index)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
+
+        // Taking an allergy or a court order off the record is the office's
+        // (spec §4: a teacher reads basic info). A teacher may still add one.
+        abort_unless($request->user()?->isAdmin(), 403, 'Only the office can remove an alert.');
 
         $alerts = array_values($child->alerts ?? []);
-        abort_unless(array_key_exists($index, $alerts), 404);
+        $found = $this->alertIndex($request, $child, $alerts, $index);
 
-        unset($alerts[$index]);
+        if ($found === null) {
+            return redirect()->route('children.show', $child)->with('error', 'That alert was changed or removed by someone else after you opened this page, so nothing was removed. The alerts below are as they are now.');
+        }
+
+        unset($alerts[$found]);
         $child->alerts = array_values($alerts);
         $child->save();
+        \App\Services\RecordLock::seen($child);
 
         return redirect()->route('children.show', $child)->with('success', 'Alert removed.');
+    }
+
+    /** One alert corrected in place, from its row on the Health card (QA E2). */
+    public function updateAlert(Request $request, Child $child, int $index)
+    {
+        $this->authoriseWrite($request, $child);
+
+        $data = $request->validate([
+            'type' => ['required', Rule::in(array_keys(Child::ALERT_TYPES))],
+            'text' => ['required', 'string', 'max:120'],
+            'severity' => ['nullable', Rule::in(['mild', 'moderate', 'severe'])],
+            'reaction' => ['nullable', 'string', 'max:200'],
+            'action' => ['nullable', 'string', 'max:200'],
+            'plan_on' => ['nullable', 'date'],
+        ], [
+            'type.required' => 'Choose what kind of alert this is.',
+        ]);
+
+        $alerts = array_values($child->alerts ?? []);
+        $found = $this->alertIndex($request, $child, $alerts, $index);
+
+        if ($found === null) {
+            return redirect()->route('children.show', $child)->with('error', 'That alert was changed or removed by someone else after you opened this page, so your edit was not saved. The alerts below are as they are now.');
+        }
+
+        $alerts[$found] = array_filter($data, fn ($v) => filled($v));
+        $child->alerts = array_values($alerts);
+        $child->save();
+        \App\Services\RecordLock::seen($child);
+
+        return redirect()->route('children.show', $child)->with('success', 'Alert updated.');
+    }
+
+    /**
+     * Which stored alert a Remove or Edit means.
+     *
+     * The page posts the alert's fingerprint (Child::alertKey) beside its
+     * place in the list, so a row that moved because somebody else removed
+     * the one above it is still found, and one that was changed or removed
+     * meanwhile is not — rather than the action landing on whatever alert
+     * now sits at that place (QA E4). A post with no fingerprint is trusted
+     * only when the record has not been changed by someone else since this
+     * user last saw it (RecordLock).
+     *
+     * @param  array<int, mixed>  $alerts
+     */
+    private function alertIndex(Request $request, Child $child, array $alerts, int $index): ?int
+    {
+        $key = $request->input('key');
+
+        if (is_string($key) && $key !== '') {
+            if (isset($alerts[$index]) && Child::alertKey($alerts[$index]) === $key) {
+                return $index;
+            }
+
+            foreach ($alerts as $i => $alert) {
+                if (Child::alertKey($alert) === $key) {
+                    return $i;
+                }
+            }
+
+            return null;
+        }
+
+        if (! array_key_exists($index, $alerts)) {
+            abort(404);
+        }
+
+        return \App\Services\RecordLock::alertsStale($child) ? null : $index;
     }
 
     /** An office or health note on the child. */
     public function storeNote(Request $request, Child $child)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate([
             'body' => ['required', 'string', 'max:1000'],
@@ -207,13 +321,22 @@ class ChildRecordController extends Controller
     /** A document uploaded, or recorded as in the cabinet. */
     public function storeDocument(Request $request, Child $child)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate([
             'kind' => ['required', Rule::in(array_keys(Child::DOCUMENT_KINDS))],
-            'file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            // A paper with no file is fine — it is in the cabinet — but then
+            // the date it was signed is what says so. Neither is an empty
+            // form, and saving that used to mark the paper on file (and
+            // clear the photo-consent gap) with nothing behind it.
+            'file' => ['nullable', 'required_without:signed_on', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
             'signed_on' => ['nullable', 'date'],
-            'expires_on' => ['nullable', 'date'],
+            'expires_on' => ['nullable', 'date', 'after_or_equal:'.($request->filled('signed_on') ? 'signed_on' : 'today')],
+        ], [
+            'file.required_without' => 'Choose the file, or enter the date it was signed if the paper is in the cabinet.',
+            'expires_on.after_or_equal' => $request->filled('signed_on')
+                ? 'The expiry date cannot be before the date it was signed.'
+                : 'The expiry date cannot be before today.',
         ]);
 
         $path = $request->hasFile('file') ? $request->file('file')->store('children/documents', 'local') : null;
@@ -251,7 +374,7 @@ class ChildRecordController extends Controller
     /** What one person is for this child: the ticks, the relationship. */
     public function personFlags(Request $request, Child $child, Person $person, PeopleDirectory $directory)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate([
             'relationship' => ['nullable', 'string', 'max:60'],
@@ -282,6 +405,13 @@ class ChildRecordController extends Controller
         }
         unset($data['name'], $data['cell']);
 
+        // A restriction on file (a court order, a no-contact note) is the
+        // office's to lift or reword. A teacher may add one where there is
+        // none; one already there stays as it is.
+        if (! $request->user()?->isAdmin() && filled($link->restriction)) {
+            $data['restriction'] = $link->restriction;
+        }
+
         $directory->link($child, $person, ['priority' => $link->priority] + $data);
 
         return redirect()->route('children.show', $child)->with('success', $person->name.' updated.');
@@ -290,7 +420,7 @@ class ChildRecordController extends Controller
     /** Call order: ring this person earlier or later. */
     public function personOrder(Request $request, Child $child, Person $person, PeopleDirectory $directory)
     {
-        $this->authorise($request, $child);
+        $this->authoriseWrite($request, $child);
 
         $data = $request->validate(['direction' => ['required', Rule::in(['up', 'down'])]]);
 
@@ -319,5 +449,26 @@ class ChildRecordController extends Controller
         $user = $request->user();
 
         abort_unless($user && Child::whereKey($child->getKey())->visibleTo($user)->exists(), 403);
+    }
+
+    /**
+     * The door for a save: the record's own, and not while it is archived.
+     *
+     * The archived record's banner says it is read-only until restored, and
+     * these cards are the only way to write to it from the record — so they
+     * have to mean it. Back to the record with the reason rather than a bare
+     * 403, since the reader is looking at the banner that explains it.
+     */
+    private function authoriseWrite(Request $request, Child $child): void
+    {
+        $this->authorise($request, $child);
+
+        if ($child->isArchived()) {
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                $request->expectsJson()
+                    ? response()->json(['message' => 'This record is archived and read-only until restored.'], 423)
+                    : redirect()->route('children.show', $child)->withErrors(['archived' => 'This record is archived and read-only until restored.'])
+            );
+        }
     }
 }

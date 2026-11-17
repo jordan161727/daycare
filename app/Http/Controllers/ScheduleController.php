@@ -124,7 +124,7 @@ class ScheduleController extends Controller
 
         if (in_array($data['slot_date'], ClosureDay::inWeek($weekStart), true)) {
             return response()->json([
-                'message' => 'The centre is closed on '.Carbon::parse($data['slot_date'])->format('l, M j').'.',
+                'message' => 'The center is closed on '.Carbon::parse($data['slot_date'])->format('l, M j').'.',
             ], 422);
         }
 
@@ -227,6 +227,9 @@ class ScheduleController extends Controller
             'classroom_override' => $child->classroom_override,
             'classroom_override_from' => $child->classroom_override_from?->toDateString(),
             'override_stale' => $child->classroomOverrideIsStale(),
+            // The one age-against-room check the ⚠ is drawn from.
+            'room_fit' => ($fit = $child->roomFit())['state'],
+            'room_fit_text' => $fit['text'],
             'sessions' => $child->sessions(),
         ]);
     }

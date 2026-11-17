@@ -157,7 +157,7 @@ class StaffReportController extends Controller
         $period = self::REPORTS[$report]['period'];
         // Pay columns are the director's alone (User::canSeePay) — anyone else
         // gets the report without them, not the report with them blanked.
-        $pay = self::REPORTS[$report]['pay'] && $request->boolean('pay') && (bool) $request->user()?->canSeePay();
+        $pay = self::REPORTS[$report]['pay'] && $request->boolean('pay') && (bool) $request->user()?->can('view-pay');
 
         // A report about right now has no period, and offering one would only
         // invite somebody to set it and wonder why nothing moved.

@@ -224,13 +224,13 @@
                                 <span class="cs-label">Drop-off time</span>
                                 <input type="time" name="drop_off_time" value="{{ $scheduleDefault('drop_off_time', \App\Models\Child::DEFAULT_DROP_OFF) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="cs-input">
                                 <x-input-error :messages="$errors->get('drop_off_time')" />
-                                <span class="cs-help">When they normally arrive. The centre opens at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_OPENS_AT) }}.</span>
+                                <span class="cs-help">When they normally arrive. The center opens at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_OPENS_AT) }}.</span>
                             </label>
                             <label>
                                 <span class="cs-label">Pick-up time</span>
                                 <input type="time" name="pick_up_time" value="{{ $scheduleDefault('pick_up_time', \App\Models\Child::DEFAULT_PICK_UP) }}" min="{{ \App\Models\Child::DAY_OPENS_AT }}" max="{{ \App\Models\Child::DAY_CLOSES_AT }}" class="cs-input">
                                 <x-input-error :messages="$errors->get('pick_up_time')" />
-                                <span class="cs-help">When they normally go home. The centre closes at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_CLOSES_AT) }}.</span>
+                                <span class="cs-help">When they normally go home. The center closes at {{ \App\Models\Child::timeLabel(\App\Models\Child::DAY_CLOSES_AT) }}.</span>
                             </label>
                         </div>
                         </div>

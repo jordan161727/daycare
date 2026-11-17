@@ -49,6 +49,14 @@ class AttendanceWeek
 
         ClassroomAssignment::syncAll();
 
+        // The week we are standing in always has its sheet, as on the
+        // register (AttendanceController::index): build it before reading
+        // the ticks, so today's "expected" here is the ticks the dashboard
+        // and Check-in count by (RoomCounts::bookedOn), not an empty week.
+        if ($weekStart === ScheduleWeek::startOf($today)) {
+            $this->weeks->open($weekStart, $user);
+        }
+
         $children = Child::visibleTo($user)->onRollDuring($from, $to)->orderBy('last_name')->orderBy('first_name')->get();
         $ids = $children->pluck('id');
 
@@ -60,7 +68,7 @@ class AttendanceWeek
             ->keyBy(fn ($m) => $m->child_id.'|'.$m->marked_on->toDateString());
         $amendments = AttendanceAmendment::mapForRange($from, $to);
         $closed = ClosureDay::betweenDates($dates->first(), $dates->last())->get()
-            ->mapWithKeys(fn ($d) => [$d->closed_on->toDateString() => $d->reason ?: 'Centre closed'])->all();
+            ->mapWithKeys(fn ($d) => [$d->closed_on->toDateString() => $d->reason ?: 'Center closed'])->all();
 
         $rows = [];
         foreach ($children as $child) {
@@ -78,6 +86,7 @@ class AttendanceWeek
             $todayParts = $cells[array_search($today, $dates->map->toDateString()->all(), true) ?: 0]['parts'];
             $onToday = $dates->contains(fn ($d) => $d->toDateString() === $today);
             $expected = $onToday && collect($todayParts)->contains(fn ($p) => $p['st'] === 'pres');
+            $markedAbsent = $onToday && collect($todayParts)->contains(fn ($p) => $p['st'] === 'abs');
             $came = $onToday && collect($todayParts)->contains(fn ($p) => $p['in'] !== null);
             $inNow = $onToday && collect($todayParts)->contains(fn ($p) => $p['in'] !== null && $p['out'] === null);
 
@@ -96,8 +105,12 @@ class AttendanceWeek
                 'url' => route('children.show', $child),
                 'cells' => $cells,
                 'expected' => $expected,
+                'absent' => $markedAbsent,
                 'came' => $came,
                 'inNow' => $inNow,
+                // On the roll today by the one definition (RoomCounts::isEnrolled):
+                // the week's rows include a child who starts on Wednesday.
+                'onRoll' => ! $onToday || $came || RoomCounts::isEnrolled($child, $today),
                 'search' => strtolower($child->first_name.' '.$child->last_name.' '.$child->lan),
             ];
         }
@@ -114,7 +127,14 @@ class AttendanceWeek
             $chips[] = ['name' => $r, 'color' => ScheduleEditor::colour($r)[1], 'n' => $g->count(), 'inN' => $g->where('inNow', true)->count(), 'on' => $room === $r];
         }
 
-        $inN = $all->where('inNow', true)->count();
+        // Today's sentence, through the one rule every screen counts by
+        // (App\Services\RoomCounts, QA #2, 12 Nov 2026). "In" is everyone who
+        // has arrived today — booked or not — and a walk-in is inside
+        // "expected", so expected = in + absent + still to come. It was in
+        // the building this minute against expected-and-not-arrived, which
+        // read "20 expected, 11 in, 11 still to come". The chips keep "in
+        // now": they say who is in each room, not how the day added up.
+        $sum = RoomCounts::tally($all->where('onRoll', true)->map(fn ($r) => RoomCounts::child($r['expected'], $r['came'], $r['absent'])));
 
         return [
             'weekStart' => $weekStart,
@@ -126,11 +146,12 @@ class AttendanceWeek
             'days' => $dates->map(fn ($d) => ['date' => $d->toDateString(), 'dow' => $d->format('D'), 'label' => $d->format('M j'), 'today' => $d->toDateString() === $today, 'closed' => $closed[$d->toDateString()] ?? null])->all(),
             'chips' => $chips,
             'sum' => [
-                'enr' => $all->count(),
-                'exp' => $all->where('expected', true)->count(),
-                'inN' => $inN,
-                'come' => $all->filter(fn ($r) => $r['expected'] && ! $r['came'])->count(),
-                'notIn' => $all->count() - $inN,
+                'enr' => $sum['enrolled'],
+                'exp' => $sum['expected'],
+                'inN' => $sum['in'],
+                'abs' => $sum['absent'],
+                'come' => $sum['still_to_come'],
+                'notIn' => $sum['not_in'],
             ],
             'rows' => $shown->all(),
             'total' => $all->count(),
@@ -261,7 +282,7 @@ class AttendanceWeek
             throw new \InvalidArgumentException($child->displayName().' is not enrolled on that day.');
         }
         if (in_array($date, ClosureDay::inWeek(ScheduleWeek::startOf($date)), true)) {
-            throw new \InvalidArgumentException('The centre is closed that day.');
+            throw new \InvalidArgumentException('The center is closed that day.');
         }
 
         $weekStart = ScheduleWeek::startOf($date);
@@ -327,7 +348,7 @@ class AttendanceWeek
             throw new \InvalidArgumentException($child->displayName().' is not enrolled on that day.');
         }
         if (in_array($date, ClosureDay::inWeek(ScheduleWeek::startOf($date)), true)) {
-            throw new \InvalidArgumentException('The centre is closed that day.');
+            throw new \InvalidArgumentException('The center is closed that day.');
         }
 
         $this->weeks->open(ScheduleWeek::startOf($date), $user);

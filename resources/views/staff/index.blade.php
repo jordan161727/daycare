@@ -69,7 +69,7 @@
                 @php($st = $statuses[$person->id])
                 <a href="{{ route('staff.show', [$person, 'tab' => $tab]) }}" class="srow {{ $selected?->id === $person->id ? 'on' : '' }}"
                    x-show="matches(@js(strtolower($person->name.' '.$person->jobRole().' '.($person->classroom ?? ''))))" data-staff-row="{{ $person->id }}">
-                    <span class="av" style="background: #dcebfa; color: #1b5e91; width: 30px; height: 30px;">{{ $ini($person) }}</span>
+                    <span class="av" style="background: #dcebfa; color: #1b5e91; width: 30px; height: 30px;" title="{{ $person->name }} — badge {{ $ini($person) }} (badges are kept unique across the team)">{{ $ini($person) }}</span>
                     <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;">
                         <span style="font-weight: 600; font-size: 14px;">{{ $person->name }}</span>
                         <span style="font-size: 12px;" class="muted">{{ $person->employmentLabel() }} · {{ $person->classroom ?: '—' }}</span>
@@ -96,7 +96,7 @@
             <div style="padding: 20px 22px 0; display: flex; flex-direction: column; gap: 12px;">
                 <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
                     <div style="display: flex; align-items: center; gap: 14px;">
-                        <span class="av" style="width: 52px; height: 52px; font-size: 17px; background: #dcebfa; color: #1b5e91;">{{ $ini($selected) }}</span>
+                        <span class="av" style="width: 52px; height: 52px; font-size: 17px; background: #dcebfa; color: #1b5e91;" title="{{ $selected->name }} — badge {{ $ini($selected) }} (badges are kept unique across the team)">{{ $ini($selected) }}</span>
                         <div style="display: flex; flex-direction: column; gap: 3px;">
                             <span style="font-size: 22px; font-weight: 700;">{{ $selected->name }}</span>
                             <span style="font-size: 13px;" class="muted">{{ $selected->jobRole() }} · {{ $selected->employmentLabel() }} · {{ $selected->classroom ?: '—' }}</span>
@@ -134,12 +134,12 @@
                         <label class="fld"><span class="lbl">Employment type</span>
                             <select class="inp" name="employment">
                                 <option value="">Not set</option>
-                                @foreach(StaffRule::EMPLOYMENT as $type)<option value="{{ $type }}" @selected(old('employment', $selected->employment) === $type)>{{ StaffRule::EMPLOYMENT_LABELS[$type] }}</option>@endforeach
+                                @foreach(StaffRule::EMPLOYMENT as $type)<option value="{{ $type }}" @selected(old('employment', StaffRule::employmentType($selected->employment)) === $type)>{{ StaffRule::EMPLOYMENT_LABELS[$type] }}</option>@endforeach
                             </select></label>
                         <label class="fld"><span class="lbl">Role</span>
                             <select class="inp" name="job_role">
                                 <option value="">Not set</option>
-                                @foreach(\App\Models\User::JOB_ROLES as $option)<option value="{{ $option }}" @selected(old('job_role', $selected->job_role) === $option)>{{ $option }}</option>@endforeach
+                                @foreach(\App\Models\User::JOB_ROLES as $option)<option value="{{ $option }}" @selected(old('job_role', $selected->jobRoleOrLegacy()) === $option)>{{ $option }}</option>@endforeach
                             </select></label>
                         <label class="fld"><span class="lbl">Home room</span>
                             <select class="inp" name="classroom">
@@ -160,7 +160,7 @@
                         <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px;">
                             <div style="display: flex; justify-content: space-between;"><span class="muted">Staff ID</span><b>{{ $selected->staffId() }}</b></div>
                             <div style="display: flex; justify-content: space-between;"><span class="muted">Card</span><b>{{ $selected->hasCard() ? 'Issued '.$selected->card_issued_at?->format('M j, Y') : 'Not issued' }}</b></div>
-                            <div style="display: flex; justify-content: space-between;"><span class="muted">4-digit PIN</span><b>{{ $selected->hasKioskPin() ? 'Set' : 'Not set' }}@if($selected->kioskIsLocked()) <span class="pill bad">Locked</span>@endif</b></div>
+                            <div style="display: flex; justify-content: space-between;"><span class="muted">{{ (int) config('kiosk.pin_length') }}-digit PIN</span><b>{{ $selected->hasKioskPin() ? 'Set' : 'Not set' }}@if($selected->kioskIsLocked()) <span class="pill bad">Locked</span>@endif</b></div>
                         </div>
                         @if($cardReady)
                             <div style="display: flex; gap: 12px; align-items: flex-start;">
@@ -175,25 +175,30 @@
                             <button type="submit" class="btn sm" form="card-form">{{ $selected->hasCard() ? 'Reprint card' : 'Issue card' }}</button>
                             <button type="button" class="btn sm" @click="pinForm = ! pinForm">{{ $selected->hasKioskPin() ? 'Reset PIN' : 'Set PIN' }}</button>
                         </div>
+                        {{-- The clock's PIN length, not a written 4 (QA K1, 16 Nov 2026). --}}
+                        @php($pinLength = (int) config('kiosk.pin_length'))
                         <div x-show="pinForm" x-cloak class="side-form" data-pin-form>
-                            <label class="fld"><span class="lbl">New PIN</span><input class="inp" form="pin-form" type="password" name="kiosk_pin" inputmode="numeric" maxlength="4" required style="width: 90px; text-align: center; letter-spacing: .3em;" placeholder="••••"></label>
-                            <label class="fld"><span class="lbl">Again</span><input class="inp" form="pin-form" type="password" name="kiosk_pin_confirmation" inputmode="numeric" maxlength="4" required style="width: 90px; text-align: center; letter-spacing: .3em;" placeholder="••••"></label>
+                            <label class="fld"><span class="lbl">New PIN</span><input class="inp" form="pin-form" type="password" name="kiosk_pin" inputmode="numeric" maxlength="{{ $pinLength }}" required style="width: 90px; text-align: center; letter-spacing: .3em;" placeholder="{{ str_repeat('•', $pinLength) }}"></label>
+                            <label class="fld"><span class="lbl">Again</span><input class="inp" form="pin-form" type="password" name="kiosk_pin_confirmation" inputmode="numeric" maxlength="{{ $pinLength }}" required style="width: 90px; text-align: center; letter-spacing: .3em;" placeholder="{{ str_repeat('•', $pinLength) }}"></label>
                             <button type="submit" class="btn sm pri" form="pin-form">Save PIN</button>
                         </div>
                         <span style="font-size: 12px;" class="faint">A reprint issues a new card and the old one stops working. The PIN is the fallback for the morning the card is at home.</span>
                     </div>
 
-                    {{-- Pay: director only, and hidden until asked for, so a
+                    {{-- Pay: for people with pay access (gate 'view-pay',
+                         users.can_view_pay), and hidden until asked for, so a
                          screen shared over a shoulder shows dots. Anyone
-                         else is sent no values at all (User::canSeePay). --}}
-                    @if($isAdmin && ! auth()->user()->canSeePay())
+                         else is sent no values at all. --}}
+                    @if($isAdmin && auth()->user()->cannot('view-pay'))
                     <div class="sec pay" style="padding: 18px;" data-pay data-pay-locked>
-                        <div class="sech"><h2 style="font-size: 14px;">Pay</h2><span class="pill must">Director only</span></div>
-                        <span style="font-size: 13.5px;" class="muted">Only {{ \App\Models\User::payViewerName() ?? 'the director' }} can view pay.</span>
+                        <div class="sech"><h2 style="font-size: 14px;">Pay</h2><span class="pill must">Pay access only</span></div>
+                        <span style="font-size: 13.5px;" class="muted">Only people with pay access can view pay.</span>
+                        @php($payViewers = \App\Models\User::payViewerNames())
+                        @if($payViewers !== [])<span style="font-size: 12px;" class="faint" data-pay-viewers>Pay access: {{ implode(', ', $payViewers) }}</span>@endif
                     </div>
                     @elseif($isAdmin)
                     <div class="sec pay" style="padding: 18px;" data-pay>
-                        <div class="sech"><h2 style="font-size: 14px;">Pay</h2><span class="pill must">Director only</span></div>
+                        <div class="sech"><h2 style="font-size: 14px;">Pay</h2><span class="pill must">Pay access only</span></div>
                         <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px;">
                             <div style="display: flex; justify-content: space-between; align-items: center;"><span class="muted">Pay rate</span>
                                 <b x-show="! showPay">••••</b>
@@ -208,6 +213,16 @@
                     </div>
                     @endif
 
+                    {{-- Granting pay access: the owner's, and only for admin
+                         accounts (User::canGrantPay, gate 'grant-pay'). --}}
+                    @if($isAdmin && auth()->user()->can('grant-pay') && $selected->isAdmin())
+                    <div class="sec" style="padding: 18px;" data-pay-access>
+                        <div class="sech"><h2 style="font-size: 14px;">Pay access</h2></div>
+                        <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 14px;"><input type="hidden" name="can_view_pay" value="0"><input type="checkbox" name="can_view_pay" value="1" @checked(old('can_view_pay', $selected->can_view_pay)) data-pay-access-toggle> Can view and change pay rates and direct deposit</label>
+                        <span style="font-size: 12px;" class="faint">Saved with the details below.</span>
+                    </div>
+                    @endif
+
                     <div class="sec" style="padding: 18px;" data-login>
                         <div class="sech"><h2 style="font-size: 14px;">AngelNest login</h2></div>
                         <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px;">
@@ -218,12 +233,12 @@
                              as before; nothing is emailed (Jordan, 4 Nov 2026). --}}
                         <button type="button" class="btn sm" style="align-self: flex-start;" @click="passwordForm = ! passwordForm" data-password-open>{{ $selected->mustChangePassword() ? 'Set password' : 'Reset password' }}</button>
                         <div x-show="passwordForm" x-cloak class="side-form" data-password-form>
-                            <label class="fld"><span class="lbl">New password</span><input class="inp" form="password-form" type="password" name="password" minlength="8" required autocomplete="new-password" style="width: 150px;"></label>
-                            <label class="fld"><span class="lbl">Again</span><input class="inp" form="password-form" type="password" name="password_confirmation" minlength="8" required autocomplete="new-password" style="width: 150px;"></label>
+                            <label class="fld"><span class="lbl">New password</span><input class="inp" form="password-form" type="password" name="password" minlength="12" required autocomplete="new-password" style="width: 150px;"></label>
+                            <label class="fld"><span class="lbl">Again</span><input class="inp" form="password-form" type="password" name="password_confirmation" minlength="12" required autocomplete="new-password" style="width: 150px;"></label>
                             <button type="submit" class="btn sm pri" form="password-form">Save password</button>
                         </div>
                         @error('password')<span style="font-size: 12.5px; color: #be123c;" data-password-error>{{ $message }}</span>@enderror
-                        <span style="font-size: 12px;" class="faint">At least 8 characters. The old password stops working straight away.</span>
+                        <span style="font-size: 12px;" class="faint">At least 12 characters, with letters and numbers. The old password stops working straight away.</span>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 8px;"><a class="btn" href="{{ $tabUrl('details') }}">Cancel</a><button type="submit" class="btn pri">Save changes</button></div>
@@ -248,7 +263,7 @@
                             @if(in_array($rule->rule_type, StaffRule::NOT_YET_ENFORCED, true))<span style="font-size: 12px; color: #b45309; font-weight: 600;">Recorded, but the schedule does not act on this rule yet.</span>@endif
                         </div>
                         <button type="button" class="btn sm" @click="editRule({{ $rule->id }})">Edit</button>
-                        <form method="POST" action="{{ route('teachers.rules.destroy', [$selected, $rule]) }}" onsubmit="return confirm('Remove this rule? The next generated schedule will stop honouring it.')">@csrf @method('DELETE')<button type="submit" class="btn sm" style="color: #be123c;">Delete</button></form>
+                        <form method="POST" action="{{ route('teachers.rules.destroy', [$selected, $rule]) }}" onsubmit="return confirm('Remove this rule? The next generated schedule will stop honoring it.')">@csrf @method('DELETE')<button type="submit" class="btn sm" style="color: #be123c;">Delete</button></form>
                     </div>
                 @empty
                     <div style="padding: 14px; border: 1px dashed #cfd3de; border-radius: 12px; font-size: 13px;" class="muted" data-no-rules>No rules yet — the schedule treats {{ $selected->firstName() }} as available {{ StaffRule::formatTime((int) config('daycare.default_earliest')) }} – {{ StaffRule::formatTime((int) config('daycare.close')) }} every weekday.</div>

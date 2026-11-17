@@ -111,8 +111,8 @@ class StaffPageTest extends TestCase
 
     public function test_details_save_and_the_home_room_becomes_the_first_assigned_classroom(): void
     {
-        // Pay is the director's to change (User::canSeePay).
-        $this->admin->update(['job_role' => 'Director']);
+        // Pay is for people with pay access (gate 'view-pay').
+        $this->admin->forceFill(['job_role' => 'Director', 'can_view_pay' => true])->save();
 
         $this->actingAs($this->admin)
             ->put(route('staff.update', $this->zameera), [
@@ -138,7 +138,7 @@ class StaffPageTest extends TestCase
         $this->assertStringContainsString('Assistant · PT flex · Toddler', $html);
         // Pay is there for the director, behind Show.
         $this->assertStringContainsString('data-pay', $html);
-        $this->assertStringContainsString('Director only', $html);
+        $this->assertStringContainsString('Pay access only', $html);
     }
 
     public function test_the_time_clock_card_is_on_the_details_tab(): void

@@ -40,7 +40,7 @@ class FloorCover
             throw new \DomainException("A Must rule says {$this->first($person)} is never assigned to {$to}.");
         }
 
-        return DB::transaction(function () use ($person, $to, $for, $date, $minute, $now) {
+        return DB::transaction(function () use ($person, $to, $for, $actor, $date, $minute, $now) {
             $own = StaffShift::where('user_id', $person->id)->whereDate('shift_date', $date)->orderBy('starts_at')->get();
             $current = $own->first(fn (StaffShift $s) => $s->covers($minute));
             $end = $current?->ends_at ?? max($minute + 60, $own->max('ends_at') ?? (int) config('daycare.close'));
@@ -65,6 +65,8 @@ class FloorCover
                 'classroom' => $to,
                 'role' => StaffShift::ROLE_FLOAT,
                 'covers_user_id' => $for?->id,
+                // Who approved the move; created_at is when (QA G5).
+                'moved_by' => $actor->id,
             ]);
 
             StaffScheduleWeek::firstOrCreate(['week_start' => $base['week_start']], ['generated_at' => null])->noteEdit();

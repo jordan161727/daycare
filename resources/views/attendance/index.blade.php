@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Class Attendance')
+@section('title', 'Director Attendance')
 @section('content')
 {{-- The two screens a family stands in front of. See components/kids-background. --}}
 <x-kids-background />
@@ -60,7 +60,7 @@
          * and the record has to be able to say so.
          */
         'closed' => [
-            'label' => 'centre closed',
+            'label' => 'center closed',
             'swatch' => '—',
             'classes' => 'att-closed',
         ],    ];
@@ -101,8 +101,15 @@
                 @php($prevWeek = \Illuminate\Support\Carbon::parse($weekStartDate)->subWeek()->toDateString())
                 @php($nextWeek = \Illuminate\Support\Carbon::parse($weekStartDate)->addWeek()->toDateString())
                 @php($thisWeek = \Illuminate\Support\Carbon::today()->startOfWeek(\Illuminate\Support\Carbon::MONDAY)->toDateString())
+                {{-- Another week, in the room the chips are on (QA #16, 12 Nov
+                     2026): the arrows, "This week" and the picker dropped it,
+                     so stepping a week put the chips back on All. Drawn here
+                     for the room the page opened on; Alpine keeps the href in
+                     step as the chips change — see attendanceWeekUrl(). --}}
+                @php($roomSlug = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($defaultRoom)), '-'))
+                @php($weekUrl = fn (?string $date) => route('attendance.index').'?'.implode('&', array_filter([$date ? 'date='.$date : null, $roomSlug ?: null])))
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <h1 class="text-base font-bold tracking-tight sm:text-lg">Attendance</h1>
+                    <h1 class="text-base font-bold tracking-tight sm:text-lg">Director Attendance</h1>
 
 
                     {{-- The week as one control: a step either side of the range
@@ -115,7 +122,7 @@
                          baseline the font had for them, which is not the same
                          font on a tablet as on the office machine. --}}
                     <div class="flex items-center rounded-full border border-slate-200 bg-white dark:border-white/10 dark:bg-slate-800">
-                        <a href="{{ route('attendance.index', ['date' => $prevWeek]) }}" class="grid h-7 w-8 place-items-center rounded-l-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($prevWeek)->format('M j') }}" aria-label="Previous week">
+                        <a href="{{ $weekUrl($prevWeek) }}" :href="attendanceWeekUrl(@js($prevWeek), room)" class="grid h-7 w-8 place-items-center rounded-l-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($prevWeek)->format('M j') }}" aria-label="Previous week">
                             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                         </a>
                         {{-- The dates open a month. Hovering it picks a whole
@@ -183,7 +190,7 @@
                                 </div>
                             </template>
                         </div>
-                        <a href="{{ route('attendance.index', ['date' => $nextWeek]) }}" class="grid h-7 w-8 place-items-center rounded-r-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($nextWeek)->format('M j') }}" aria-label="Next week">
+                        <a href="{{ $weekUrl($nextWeek) }}" :href="attendanceWeekUrl(@js($nextWeek), room)" class="grid h-7 w-8 place-items-center rounded-r-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-900 dark:hover:bg-white/10 dark:hover:text-white" title="Week of {{ \Illuminate\Support\Carbon::parse($nextWeek)->format('M j') }}" aria-label="Next week">
                             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                         </a>
                     </div>
@@ -195,7 +202,7 @@
                     @if($weekStartDate === $thisWeek)
                         <span class="rounded-full bg-sky-100 px-4 py-1.5 text-xs font-semibold text-sky-700 dark:bg-sky-400/15 dark:text-sky-300" aria-current="date">This week</span>
                     @else
-                        <a href="{{ route('attendance.index') }}" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-4 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25">
+                        <a href="{{ $weekUrl(null) }}" :href="attendanceWeekUrl(null, room)" class="flex items-center gap-1.5 rounded-full bg-sky-100 px-4 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-200 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/25">
                             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg>
                             This week
                         </a>
@@ -437,22 +444,30 @@
                 {{-- Search and room filters on the second line. Hidden while setting
                      the schedule, which always covers the whole centre — a filter
                      sitting there would imply it applies. --}}
-                <div x-show="view === 'signin'" class="mt-2.5 flex items-center gap-2 border-t border-slate-200/70 pt-2.5 dark:border-white/10">
+                {{-- On a phone the chips take the whole line and the counts wrap on the
+                     line below (QA #15, 12 Nov 2026): side by side, the counts would
+                     not wrap, squeezed the chips down to "All", and pushed the page
+                     wider than the phone — which slid the Recent drawer's time
+                     column off the right edge. --}}
+                <div x-show="view === 'signin'" class="mt-2.5 flex flex-col items-stretch gap-2 border-t border-slate-200/70 pt-2.5 sm:flex-row sm:items-center dark:border-white/10">
                     {{-- Rooms scroll sideways on a phone instead of stacking three
                          rows deep. Each carries its own count, so the size of a
                          room is answered without filtering to it first. --}}
                     <div class="-mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
-                        <button @click="pickRoom('')" :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
-                            All <span class="ml-0.5 opacity-60 tabular-nums" x-text="centreIn + '/' + {{ $totalChildren }}" :title="centreIn + ' of {{ $totalChildren }} in'"></span>
+                        {{-- Each chip says what it is and whether it is the one on (QA #17):
+                             a name for a screen reader, which the icon and the
+                             bare "3/6" did not give, and aria-pressed. --}}
+                        <button type="button" @click="pickRoom('')" :aria-pressed="room === '' ? 'true' : 'false'" :aria-label="'All rooms, ' + centreIn + ' of ' + centreCount + ' in'" data-room-chip="" :class="room === '' ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
+                            All <span class="ml-0.5 opacity-60 tabular-nums" x-text="centreIn + '/' + centreCount" :title="centreIn + ' of ' + centreCount + ' in'"></span>
                         </button>
                         @foreach($classrooms as $classroom)
-                            <button @click="pickRoom(@js($classroom))" :class="room === @js($classroom) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
-                            <x-room-icon :room="$classroom" size="text-sm" /> {{ $classroom }} <span class="ml-0.5 opacity-60 tabular-nums" x-text="roomIn(@js($classroom)) + '/' + roomCount(@js($classroom))" :title="roomIn(@js($classroom)) + ' of ' + roomCount(@js($classroom)) + ' in'"></span>
+                            <button type="button" @click="pickRoom(@js($classroom))" :aria-pressed="room === @js($classroom) ? 'true' : 'false'" :aria-label="@js($classroom) + ', ' + roomIn(@js($classroom)) + ' of ' + roomCount(@js($classroom)) + ' in'" data-room-chip="{{ $classroom }}" :class="room === @js($classroom) ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/10'" class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition">
+                            <x-room-icon :room="$classroom" size="text-sm" /> {{ $classroom }} <span class="ml-0.5 opacity-60 tabular-nums" x-text="roomIn(@js($classroom)) + '/' + roomCount(@js($classroom))" :title="roomIn(@js($classroom)) + ' of ' + roomCount(@js($classroom)) + ' in'"></span>@if($roomWarnings[$classroom] ?? null)<span class="ml-0.5 text-amber-600 dark:text-amber-300" title="{{ $roomWarnings[$classroom] }}" data-capacity-warning="{{ $classroom }}">⚠</span>@endif
                             </button>
                         @endforeach
                     </div>
 
-                    <div class="flex shrink-0 items-center gap-3">
+                    <div class="flex min-w-0 items-center gap-3 sm:shrink-0">
                         {{-- Days the centre is shut are why a column is gray, so the
                              count sits beside the filters rather than being found by
                              opening the schedule view. --}}
@@ -464,23 +479,30 @@
                         {{-- Counts as a sentence rather than three chips: the numbers
                              are the point, so they carry the colour and the weight and
                              the labels stay out of the way. --}}
-                        <p class="flex shrink-0 items-center gap-x-2.5 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+                        <p class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500 sm:shrink-0 sm:flex-nowrap sm:whitespace-nowrap dark:text-slate-400 [&>span]:whitespace-nowrap" data-day-counts>
                             {{-- The room being looked at, when it is not the whole
                                  centre: three numbers that quietly changed meaning
                                  when a filter was clicked would be worse than three
                                  numbers that never moved. --}}
                             <span x-show="room !== ''" x-cloak class="font-semibold text-slate-700 dark:text-slate-200" x-text="room"></span>
-                            <span><b class="font-bold text-slate-900 dark:text-white" x-text="enrolledCount"></b> enrolled</span>
+                            <span><b class="font-bold text-slate-900 dark:text-white" x-text="enrolledCount">{{ $dayCounts['enrolled'] }}</b> enrolled</span>
                             {{-- Who the day was planned for, then who has come, then
                                  the gap between the two. "Expected" wears the sky of
                                  the dashed box because it is the same fact: a tick
                                  for this day. "Still to come" is the one number a
                                  room acts on at nine, so it is amber and sits beside
                                  the arrivals it is waiting on. --}}
-                            <span title="Ticked for this day — any session — in the room being looked at"><b class="font-bold text-sky-600 dark:text-sky-400" x-text="expectedCount"></b> expected</span>
-                            <span><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount"></b> in</span>
-                            <span title="Expected and not yet signed in"><b class="font-bold text-amber-600 dark:text-amber-400" x-text="awaitedCount"></b> still to come</span>
-                            <span title="On the roll and not signed in, whether or not they were expected"><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount"></b> not in</span>
+                            {{-- One rule with the dashboard, the floor plan and
+                                 the week grid (App\Services\RoomCounts, QA #2 and
+                                 #3, 12 Nov 2026): expected = in + absent + still
+                                 to come, always. The server's figures are drawn
+                                 first; Alpine takes over and moves them with
+                                 every tap. --}}
+                            <span title="Ticked for this day — any session — or marked Absent, plus anyone who came in unbooked, in the room being looked at"><b class="font-bold text-sky-600 dark:text-sky-400" x-text="expectedCount">{{ $dayCounts['expected'] }}</b> expected</span>
+                            <span title="Signed in on this day, whether still here or gone home"><b class="font-bold text-emerald-600 dark:text-emerald-400" x-text="presentCount">{{ $dayCounts['in'] }}</b> in</span>
+                            <span x-show="markedAbsentCount > 0" @if($dayCounts['absent'] === 0) x-cloak @endif title="Expected and marked Absent — or, on a day that is over, expected and never came"><b class="font-bold text-rose-600 dark:text-rose-400" x-text="markedAbsentCount">{{ $dayCounts['absent'] }}</b> absent</span>
+                            <span title="Expected, not signed in and not marked Absent. Nobody is still to come on a day that is over or in a locked week."><b class="font-bold text-amber-600 dark:text-amber-400" x-text="awaitedCount">{{ $dayCounts['still_to_come'] }}</b> still to come</span>
+                            <span title="On the roll and not signed in, whether or not they were expected"><b class="font-bold text-rose-600 dark:text-rose-400" x-text="absentCount">{{ $dayCounts['not_in'] }}</b> not in</span>
                         </p>
                     </div>
                 </div>
@@ -670,6 +692,10 @@
                                                           class="att-status"
                                                           :class="child.status === 'Pending' ? 'att-status-pending' : 'att-status-off'"
                                                           x-text="child.status"></span>
+                                                    {{-- No alerts, allergies or notes on the director's
+                                                         register (Jordan, 17 Nov 2026): it is a sheet of
+                                                         days. Teacher Attendance, the kiosk, the kitchen
+                                                         list and the child record carry them. --}}
                                                 </span>
                                             </div>
                                         </td>
@@ -679,7 +705,7 @@
                                         <td class="att-td att-meta att-w-room">
                                             <span class="inline-flex items-center gap-0.5" :class="roomClass(child)" :title="roomTitle(child)">
                                                 <span x-text="roomLabel(child)"></span>
-                                                <span x-show="child.classroom_override" x-cloak x-text="child.override_stale ? '⚠' : '✎'"></span>
+                                                <span x-show="roomMark(child)" x-cloak x-text="roomMark(child)" :title="roomTitle(child)" :aria-label="roomTitle(child)" role="img"></span>
                                             </span>
                                         </td>
                                         <td class="att-td att-meta att-w-dob" :class="blankClass(child.birth_date)" x-text="child.birth_date || '—'"></td>
@@ -752,7 +778,7 @@
 
                     <p x-show="filteredCount === 0" class="p-8 text-center text-sm text-slate-500">No children match this search.</p>
                     <div x-show="filteredCount > 0" class="border-t border-slate-200 px-4 py-2.5 text-sm text-slate-500 dark:border-white/10">
-                        Showing all <span class="font-medium text-slate-700 dark:text-slate-200" x-text="filteredCount"></span> children
+                        <span class="font-medium text-slate-700 dark:text-slate-200" x-text="footerText" data-register-footer></span>
                         {{-- What a tap does, in the mode you are in. --}}
                         <span class="att-hint ml-2" x-text="hint"></span>
                     </div>
@@ -1068,9 +1094,23 @@ function weekPicker() { return {
     },
 
     go(monday) {
-        window.location = @js(route('attendance.index')) + '?date=' + monday;
+        // In the room the chips are on — this sits inside attendanceApp, so
+        // its room is in scope (QA #16).
+        window.location = attendanceWeekUrl(monday, this.room ?? '');
     },
 }; }
+
+/**
+ * The register for another week, in a room. The room goes as the bare slug
+ * pickRoom() writes (/attendance?date=2026-11-09&school-age), which
+ * ClassroomAssignment::fromQuery reads back, so the chips open where they
+ * were (QA #16, 12 Nov 2026). No date is this week.
+ */
+function attendanceWeekUrl(date, room) {
+    const slug = String(room ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const query = [date ? 'date=' + date : '', slug].filter(Boolean).join('&');
+    return @js(route('attendance.index')) + (query ? '?' + query : '');
+}
 
 function attendanceApp() { return {
     search: '',
@@ -1445,7 +1485,7 @@ function attendanceApp() { return {
             .map(s => (s === 'FULL' ? '' : s + ' ') + this.sessionSpan(child.id, this.today, s));
 
         if (parts.length) return (sessions.length === 1 && ! this.isOut(child.id, this.today, 'FULL') ? 'In · ' : '') + parts.join(' · ');
-        if (this.isClosed(this.today)) return 'Centre closed';
+        if (this.isClosed(this.today)) return 'Center closed';
 
         return this.isScheduled(child.id, this.today, sessions[0]) ? 'Expected' : 'Not attending';
     },
@@ -1652,7 +1692,7 @@ function attendanceApp() { return {
         'shape' => '',
         'attributes' => new \Illuminate\View\ComponentAttributeBag,
     ])->render())))
-    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'lan' => $child->lan, 'name' => $child->displayName(), 'status' => $child->status, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'schedule_hours' => $child->scheduleLabel(), 'drop_off_label' => \App\Models\Child::timeLabel($child->drop_off_time), 'pick_up_label' => \App\Models\Child::timeLabel($child->pick_up_time), 'drop_off' => \App\Models\Child::timeInputValue($child->drop_off_time ?: \App\Models\Child::DAY_OPENS_AT), 'schedule_days' => $child->scheduleDays(), 'schedule_days_label' => $child->scheduleDaysLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
+    childrenData: @js($children->map(fn($child) => ['id' => $child->id, 'lan' => $child->lan, 'name' => $child->displayName(), 'status' => $child->status, 'first_name' => $child->first_name, 'last_name' => $child->last_name, 'avatar' => $avatarMarkup($child), 'birth_date' => $child->ageLabel(), 'age' => $child->ageInWords(), 'classroom' => $child->classroom, 'sessions' => $child->sessions(), 'automatic_classroom' => $child->automaticClassroom(), 'classroom_override' => $child->classroom_override, 'classroom_override_from' => $child->classroom_override_from?->toDateString(), 'override_stale' => $child->classroomOverrideIsStale(), 'room_fit' => ($fit = $child->roomFit(\Illuminate\Support\Carbon::parse($selectedDate)))['state'], 'room_fit_text' => $fit['text'], 'on_roll' => \App\Services\RoomCounts::isEnrolled($child, $selectedDate), 'schedule_hours' => $child->scheduleLabel(), 'drop_off_label' => \App\Models\Child::timeLabel($child->drop_off_time), 'pick_up_label' => \App\Models\Child::timeLabel($child->pick_up_time), 'drop_off' => \App\Models\Child::timeInputValue($child->drop_off_time ?: \App\Models\Child::DAY_OPENS_AT), 'schedule_days' => $child->scheduleDays(), 'schedule_days_label' => $child->scheduleDaysLabel(), 'cover' => $roomCover[$child->id] ?? null])->values()),
     rooms: @js(\App\Services\ClassroomAssignment::rooms()),
     // Moving a child between rooms changes who can see them, so it is the
     // director's call rather than a teacher's.
@@ -1753,6 +1793,23 @@ function attendanceApp() { return {
     // Everyone the search matches, not just the rows built so far — "showing
     // all 75" has to say 75 while the last of them are still being drawn.
     get filteredCount() { return this.matchingChildren.length; },
+    /*
+     * The line under the sheet, counted by the header's rule (QA retest,
+     * 16 Nov 2026: "Showing all 118 children" under "117 enrolled"). The
+     * rows the day counts (counted(): on the roll that day, or arrived) out
+     * of the header's enrolled, for the room chosen; a search shows "3 of
+     * 117". A row on the week's sheet that is not on that day's roll — a
+     * child starting Wednesday, seen on Monday — is said apart, never
+     * folded into the total.
+     */
+    get footerText() {
+        const shown = this.matchingChildren.filter(child => this.counted(child)).length;
+        const others = this.matchingChildren.length - shown;
+        const total = this.enrolledCount;
+        let text = shown === total ? `Showing all ${total} ${total === 1 ? 'child' : 'children'}` : `Showing ${shown} of ${total} children`;
+        if (others > 0) text += ` · ${others} more on this week's sheet, not enrolled this day`;
+        return text;
+    },
 
     /*
      * The three numbers in the header, and what they are counting.
@@ -1771,12 +1828,22 @@ function attendanceApp() { return {
             ? this.childrenData
             : this.childrenData.filter(child => child.classroom === this.room);
     },
-    get enrolledCount() { return this.scopeChildren.length; },
+    /*
+     * The children the day's numbers count: on the roll that day by the one
+     * definition (App\Services\RoomCounts::isEnrolled — on_roll), plus anyone
+     * who arrived. The sheet lists the whole week's roll, so a child whose
+     * first day is Wednesday is a row on Monday but not one of Monday's
+     * enrolled (QA, 16 Nov 2026: 118 here, 117 on the dashboard and Check-in).
+     */
+    get countChildren() {
+        return this.scopeChildren.filter(child => child.on_roll !== false || this.hasAnyAttendanceForDate(child.id, this.countDate));
+    },
+    get enrolledCount() { return this.countChildren.length; },
     // Counted off the attendance the page was given rather than carried as a
     // running total, so it cannot drift from the sheet below it — and a sign-in
     // updates it by updating the sheet, with nothing to keep in step by hand.
     get presentCount() {
-        return this.scopeChildren.filter(child => this.hasAnyAttendanceForDate(child.id, this.countDate)).length;
+        return this.countChildren.filter(child => this.hasAnyAttendanceForDate(child.id, this.countDate)).length;
     },
     get absentCount() { return this.enrolledCount - this.presentCount; },
 
@@ -1799,14 +1866,36 @@ function attendanceApp() { return {
     isExpectedOn(childId, date) {
         return Object.values(this.schedule?.[childId]?.[date] ?? {}).some(ticked => ticked === true);
     },
-    get expectedCount() {
-        return this.scopeChildren.filter(child => this.isExpectedOn(child.id, this.countDate)).length;
+    /*
+     * Expected, in, absent and still to come, by the rule the server counts
+     * by everywhere else — App\Services\RoomCounts, line for line (QA #2,
+     * 12 Nov 2026). "In" counted children nobody had booked while "still to
+     * come" did not, so School Age read 20 expected, 11 in, 11 still to come.
+     * Now a walk-in is inside "expected", an Absent mark is out of "still to
+     * come", and expected = in + absent + still to come, always.
+     *
+     * And nobody is still to come on a day that is over or in a week that
+     * has been locked (QA #3): those are absences now.
+     */
+    dayIsOver: @js($dayIsOver),
+    get dayCounts() {
+        const date = this.countDate;
+        let expected = 0, inCount = 0, absent = 0;
+        for (const child of this.countChildren) {
+            const mark = this.dayMark(child.id, date);
+            const booked = this.isExpectedOn(child.id, date) && mark !== 'none';
+            const arrived = this.hasAnyAttendanceForDate(child.id, date);
+            const marked = mark === 'absent';
+            if (! booked && ! arrived && ! marked) continue;
+            expected++;
+            if (arrived) inCount++;
+            else if (marked || this.dayIsOver) absent++;
+        }
+        return { expected, in: inCount, absent, stillToCome: Math.max(0, expected - inCount - absent) };
     },
-    get awaitedCount() {
-        return this.scopeChildren.filter(child =>
-            this.isExpectedOn(child.id, this.countDate) && ! this.hasAnyAttendanceForDate(child.id, this.countDate)
-        ).length;
-    },
+    get expectedCount() { return this.dayCounts.expected; },
+    get markedAbsentCount() { return this.dayCounts.absent; },
+    get awaitedCount() { return this.dayCounts.stillToCome; },
 
     /* ---- setting the schedule is a whole-centre job: every child, every room,
             whatever the sign-in view happens to be filtered to ---- */
@@ -1841,7 +1930,12 @@ function attendanceApp() { return {
     // What each room holds, counted off the roll the page was given rather than
     // queried per room. The filter chips carry it, so the size of a room is
     // answered without having to filter to it and read the rows.
-    roomCount(room) { return this.childrenData.filter(child => child.classroom === room).length; },
+    // On the roll that day, or arrived: countChildren's rule, so a chip and
+    // the "enrolled" line over the sheet never disagree (QA retest, 16 Nov
+    // 2026: "All 0/118" beside "117 enrolled").
+    counted(child) { return child.on_roll !== false || this.hasAnyAttendanceForDate(child.id, this.countDate); },
+    roomCount(room) { return this.childrenData.filter(child => child.classroom === room && this.counted(child)).length; },
+    get centreCount() { return this.childrenData.filter(child => this.counted(child)).length; },
 
     /**
      * How many of a room are in, for the "3/6" on its chip.
@@ -2021,7 +2115,21 @@ function attendanceApp() { return {
             ? this.roomAnimal(child.classroom) + ' ' + child.classroom
             : 'Unassigned';
     },
+    /*
+     * The room's mark: ⚠ when the age doesn't fit the room, ✎ when the
+     * room was set by hand and it does (or is one band ahead — moved up
+     * early), nothing otherwise. Both read room_fit, from the one check
+     * (App\Services\ClassroomAssignment::fit — QA, 16 Nov 2026: a
+     * five-month-old in Infant wore a ⚠ because her room had been set by
+     * hand to the room her age gives, while a five-year-old in Infant set
+     * by nobody wore nothing).
+     */
+    roomMark(child) {
+        if (child.room_fit === 'mismatch') return '⚠';
+        return child.classroom_override ? '✎' : '';
+    },
     roomTitle(child) {
+        if (child.room_fit === 'mismatch' && child.room_fit_text) return child.room_fit_text;
         if (! child.classroom_override) {
             return child.automatic_classroom
                 ? 'From date of birth: ' + child.automatic_classroom
@@ -2030,16 +2138,13 @@ function attendanceApp() { return {
         const automatic = child.automatic_classroom || 'no room';
         const from = child.classroom_override_from ? ', from ' + child.classroom_override_from : '';
         return child.override_stale
-            ? 'Set by hand' + from + '. Automatic: ' + automatic + ' — their age has caught up, so this can be cleared.'
+            ? 'Set by hand' + from + '. Automatic: ' + automatic + ' — the same room, so this can be cleared.'
             : 'Set by hand' + from + '. Automatic: ' + automatic + '.';
     },
     roomClass(child) {
+        if (child.room_fit === 'mismatch') return 'font-semibold text-amber-700 dark:text-amber-300';
         if (! child.classroom_override) return 'text-slate-500';
-        // Stale is a different colour again: the override is still in force but
-        // no longer moving the child anywhere, so it is one to clear.
-        return child.override_stale
-            ? 'font-semibold text-amber-700 dark:text-amber-300'
-            : 'font-semibold text-violet-700 dark:text-violet-300';
+        return 'font-semibold text-violet-700 dark:text-violet-300';
     },
     editRoom(child) {
         if (! this.canEditRooms) return;
@@ -2078,6 +2183,8 @@ function attendanceApp() { return {
                 classroom_override: data.classroom_override,
                 classroom_override_from: data.classroom_override_from,
                 override_stale: data.override_stale,
+                room_fit: data.room_fit,
+                room_fit_text: data.room_fit_text,
                 sessions: data.sessions,
             });
 
@@ -2110,7 +2217,7 @@ function attendanceApp() { return {
     async toggleClosure(date) {
         if (!this.canEdit) return;
         const closing = !this.isClosed(date);
-        const reason = closing ? (prompt('Why is the centre closed? (holiday, snow day…)', 'Holiday') || 'Centre closed') : null;
+        const reason = closing ? (prompt('Why is the center closed? (holiday, snow day…)', 'Holiday') || 'Center closed') : null;
 
         try {
             const response = await this.post("{{ route('attendance.schedule.closure') }}", {date, closed: closing, reason});
@@ -2716,7 +2823,7 @@ function attendanceApp() { return {
 
         const state = this.isPresent(child.id, date, session)
             ? this.displayTime(child.id, date, session)
-            : (this.isClosed(date) ? 'centre closed' : (ahead || (this.isScheduled(child.id, date, session) ? 'expected' : 'not attending')));
+            : (this.isClosed(date) ? 'center closed' : (ahead || (this.isScheduled(child.id, date, session) ? 'expected' : 'not attending')));
         const half = session === 'FULL' ? '' : ' ' + this.sessionLabel(session);
 
         return child.name + ' ' + this.dayLabel(date) + half + ': ' + state + (this.canTap(date) ? '' : ', locked');

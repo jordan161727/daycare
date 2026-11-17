@@ -36,11 +36,42 @@
     .fp .tab { font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; border: 0; background: transparent; color: #5f6676; cursor: pointer; min-height: 36px; text-decoration: none; display: inline-flex; align-items: center; }
     .fp .tab.on { background: #1c2130; color: #fff; }
     .fp .muted { color: #5f6676; }
+    .fp .toggle { display: inline-flex; gap: 2px; background: #fff; border: 1px solid #e7e9f0; border-radius: 999px; padding: 2px; }
+    .fp .stat { background: #f7f9fd; border-radius: 12px; padding: 12px; }
+    .fp .stat.lead { background: #f1f6fd; }
+    .fp .tipbox { border: 1px solid #e7e9f0; background: #f7f9fd; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .fp .tipbox.short { border-color: #f9c2cb; background: #fff7f8; }
+    .fp .flash { border: 1px solid #a7e3c4; background: #e3f5ec; color: #15803d; }
+    .fp .ok-text { color: #15803d; } .fp .bad-text { color: #be123c; }
+    /* Dark mode (QA #9, 12 Nov 2026): the client's styles are all light hex,
+       so the heading stayed rgb(28,33,48) on a dark page and the rooms stayed
+       white. The same .dark overrides the children's pages carry
+       (children/partials/mock-style), on the app's slate/night tokens. */
+    .dark .fp { color: #e2e8f0; }
+    .dark .fp .muted, .dark .fp .kv span:first-child { color: #94a3b8; }
+    .dark .fp .room { background: rgb(15 23 42); color: #e2e8f0; border-color: rgb(255 255 255 / .18); }
+    .dark .fp .room:hover { border-color: #5b8fd6; }
+    .dark .fp .room.sel { border-color: #7fb2e5; box-shadow: 0 0 0 3px rgb(91 143 214 / .35); }
+    .dark .fp .room.short { background: rgb(76 5 25); border-color: #f43f5e; }
+    .dark .fp .svc { background: repeating-linear-gradient(135deg, rgb(30 41 59) 0, rgb(30 41 59) 8px, rgb(15 23 42) 8px, rgb(15 23 42) 16px); border-color: rgb(255 255 255 / .1); color: #94a3b8; }
+    .dark .fp .s-come { background: transparent; } .dark .fp .s-free { background: rgb(255 255 255 / .14); }
+    .dark .fp .chip, .dark .fp .mut { background: rgb(30 41 59); color: #cbd5e1; }
+    .dark .fp .ok { background: rgb(16 185 129 / .18); color: #6ee7b7; } .dark .fp .spare { background: rgb(56 189 248 / .18); color: #7dd3fc; } .dark .fp .warn { background: rgb(245 158 11 / .18); color: #fcd34d; }
+    .dark .fp .kv { border-color: rgb(255 255 255 / .08); }
+    .dark .fp .btn { background: rgb(30 41 59); color: #e2e8f0; border-color: rgb(255 255 255 / .15); }
+    .dark .fp .btn.pri { background: #2f6fb0; border-color: #2f6fb0; color: #fff; }
+    .dark .fp .tab { color: #cbd5e1; } .dark .fp .tab.on { background: #fff; color: #1c2130; }
+    .dark .fp .toggle { background: rgb(15 23 42); border-color: rgb(255 255 255 / .1); }
+    .dark .fp .stat { background: rgb(30 41 59); } .dark .fp .stat.lead { background: rgb(27 94 145 / .3); }
+    .dark .fp .tipbox { background: rgb(30 41 59); border-color: rgb(255 255 255 / .1); }
+    .dark .fp .tipbox.short { background: rgb(190 18 60 / .14); border-color: rgb(244 63 94 / .45); }
+    .dark .fp .flash { background: rgb(16 185 129 / .15); border-color: rgb(16 185 129 / .4); color: #6ee7b7; }
+    .dark .fp .ok-text { color: #34d399; } .dark .fp .bad-text { color: #fb7185; }
 </style>
 
-<div class="fp" x-data="floorPlan(@js($rooms->values()->all()), @js($open))" style="display: flex; flex-direction: column; gap: 20px;">
+<div class="fp" x-data="floorPlan(@js($rooms->values()->all()), @js($open), @js($plan['updated']->timezone($tz)->format('g:i A')))" style="display: flex; flex-direction: column; gap: 20px;">
     @if(session('floor'))
-        <div style="display: flex; align-items: center; gap: 10px; border: 1px solid #a7e3c4; background: #e3f5ec; color: #15803d; border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 600;" data-floor-flash><span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>{{ session('floor') }}</div>
+        <div class="flash" style="display: flex; align-items: center; gap: 10px; border-radius: 12px; padding: 10px 14px; font-size: 14px; font-weight: 600;" data-floor-flash><span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>{{ session('floor') }}</div>
     @endif
     <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;">
         <div style="display: flex; flex-direction: column; gap: 4px;">
@@ -51,27 +82,39 @@
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             {{-- Morning is this minute; afternoon is the day as booked at the
                  hour School Age is back, so three o'clock is seen before it comes. --}}
-            <span style="display: inline-flex; gap: 2px; background: #fff; border: 1px solid #e7e9f0; border-radius: 999px; padding: 2px;" data-view-toggle>
+            <span class="toggle" data-view-toggle>
                 <a href="{{ route('floor-plan.index') }}" class="tab {{ $plan['view'] === 'morning' ? 'on' : '' }}" @if($plan['view'] === 'morning') aria-current="page" @endif>Morning</a>
                 <a href="{{ route('floor-plan.index', ['view' => 'afternoon']) }}" class="tab {{ $plan['view'] === 'afternoon' ? 'on' : '' }}" @if($plan['view'] === 'afternoon') aria-current="page" @endif>Afternoon</a>
             </span>
-            <span class="pill ok" style="font-size: 13px; padding: 6px 12px;" data-live-label><span style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></span>Live · updated {{ $plan['updated']->timezone($tz)->format('g:i A') }}</span>
+            {{-- Says so when the screen has lost the connection or has not
+                 redrawn for a while (QA I5), rather than "Live" over old numbers. --}}
+            <span class="pill" :class="online && ! stale ? 'ok' : 'warn'" style="font-size: 13px; padding: 6px 12px;" data-live-label><span style="width: 8px; height: 8px; border-radius: 50%;" :style="{ background: online && ! stale ? '#10b981' : '#f59e0b' }"></span><span x-text="! online ? 'Offline · last updated ' + updated : (stale ? 'Not updating · last updated ' + updated : 'Live · updated ' + updated)">Live · updated {{ $plan['updated']->timezone($tz)->format('g:i A') }}</span></span>
         </div>
     </header>
 
-    {{-- The six counters. --}}
-    <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;" data-floor-counters>
-        @foreach([
-            ['Checked in', $plan['counters']['in'], 'In the building now', ''],
-            ['Checked out · returning', $plan['counters']['returning'], 'At school, back later today', ''],
-            ['Checked out', $plan['counters']['out'], 'Picked up for the day', ''],
-            ['Expected', $plan['counters']['expected'], 'Scheduled, not arrived yet', ''],
-            ['Staff on the floor', $plan['counters']['staff'], 'Clocked in, in a room', ''],
-            ['Rooms below ratio', $short, 'Need another adult', $short ? '#be123c' : '#15803d'],
-        ] as [$title, $value, $note, $colour])
-            <div class="fp-card" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 2px;">
+    {{-- The six counters, for the view the tiles are drawn for (QA #8, 12
+         Nov 2026): the afternoon's cards say what three o'clock holds, in
+         words that say so, rather than this minute's under its tiles. --}}
+    @php($hour = $plan['at']->timezone($tz)->format('g:i A'))
+    <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;" data-floor-counters data-counters-view="{{ $plan['view'] }}">
+        @foreach($plan['view'] === 'afternoon' ? [
+            ['In at '.$hour, $plan['counters']['in'], 'Booked to be in the rooms then', '', 'in'],
+            ['Back from school', $plan['counters']['returning'], 'At school now · counted in at '.$hour, '', 'returning'],
+            ['Checked out', $plan['counters']['out'], 'Picked up for the day', '', 'out'],
+            ['Still to come', $plan['counters']['expected'], 'Not arrived yet · counted in at '.$hour, '', 'expected'],
+            ['Staff on the schedule', $plan['counters']['staff'], 'Rostered in a room at '.$hour, '', 'staff'],
+            ['Rooms below ratio', $short, 'Need another adult at '.$hour, $short ? 'bad' : 'ok', 'short'],
+        ] : [
+            ['Checked in', $plan['counters']['in'], 'In the building now', '', 'in'],
+            ['Checked out · returning', $plan['counters']['returning'], 'At school, back later today', '', 'returning'],
+            ['Checked out', $plan['counters']['out'], 'Picked up for the day', '', 'out'],
+            ['Expected', $plan['counters']['expected'], 'Scheduled, not arrived yet', '', 'expected'],
+            ['Staff on the floor', $plan['counters']['staff'], 'Clocked in, in a room', '', 'staff'],
+            ['Rooms below ratio', $short, 'Need another adult', $short ? 'bad' : 'ok', 'short'],
+        ] as [$title, $value, $note, $tone, $key])
+            <div class="fp-card" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 2px;" data-counter="{{ $key }}">
                 <span style="font-size: 13px; font-weight: 600;">{{ $title }}</span>
-                <span style="font-size: 28px; font-weight: 700; {{ $colour ? 'color: '.$colour.';' : '' }}">{{ $value }}</span>
+                <span class="{{ $tone ? $tone.'-text' : '' }}" style="font-size: 28px; font-weight: 700;" data-counter-value>{{ $value }}</span>
                 <span class="muted" style="font-size: 12px;">{{ $note }}</span>
             </div>
         @endforeach
@@ -124,17 +167,22 @@
                         <span class="pill" :class="pillClass(room.tone)" x-text="room.status"></span>
                     </div>
                     <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
-                        <div style="background: #f1f6fd; border-radius: 12px; padding: 12px;"><div class="muted" style="font-size: 12px;">Checked in</div><div style="font-size: 24px; font-weight: 700;" x-text="room.in"></div></div>
-                        <div style="background: #f7f9fd; border-radius: 12px; padding: 12px;"><div class="muted" style="font-size: 12px;">Expected</div><div style="font-size: 24px; font-weight: 700;" x-text="room.booked"></div></div>
-                        <div style="background: #f7f9fd; border-radius: 12px; padding: 12px;"><div class="muted" style="font-size: 12px;">Checked out · returning</div><div style="font-size: 24px; font-weight: 700;" x-text="room.returning"></div></div>
-                        <div style="background: #f7f9fd; border-radius: 12px; padding: 12px;"><div class="muted" style="font-size: 12px;">Checked out</div><div style="font-size: 24px; font-weight: 700;" x-text="room.out"></div></div>
+                        <div class="stat lead"><div class="muted" style="font-size: 12px;">Checked in</div><div style="font-size: 24px; font-weight: 700;" x-text="room.in"></div></div>
+                        <div class="stat"><div class="muted" style="font-size: 12px;">Expected</div><div style="font-size: 24px; font-weight: 700;" x-text="room.booked"></div></div>
+                        <div class="stat"><div class="muted" style="font-size: 12px;">Checked out · returning</div><div style="font-size: 24px; font-weight: 700;" x-text="room.returning"></div></div>
+                        <div class="stat"><div class="muted" style="font-size: 12px;">Checked out</div><div style="font-size: 24px; font-weight: 700;" x-text="room.out"></div></div>
                     </div>
                     <div style="display: flex; flex-direction: column;">
                         <div class="kv"><span>Staff needed</span><span style="font-weight: 700;" x-text="room.in ? room.needed + ' (' + room.in + ' ÷ ' + room.ratio + ', rounded up)' : '0 — no children in'"></span></div>
                         <div class="kv"><span>Staff in the room</span><span style="font-weight: 700;" x-text="room.staffIn"></span></div>
-                        <div class="kv"><span>Places free</span><span style="font-weight: 700;" x-text="room.free + ' of ' + room.capacity"></span></div>
+                        {{-- Free now: capacity less the children in, never the bookings (QA, 16 Nov 2026). --}}
+                        <div class="kv"><span>Places free</span><span style="font-weight: 700;" x-text="room.placesFree + ' of ' + room.capacity + (room.sharedWith ? ' · shared with ' + room.sharedWith.join(', ') : '')"></span></div>
                         <div class="kv"><span>Enrolled in this room</span><span style="font-weight: 700;" x-text="room.enrolled"></span></div>
                     </div>
+                    {{-- More enrolled or expected than places: warned, never blocked. --}}
+                    <template x-if="room.capacityWarning">
+                        <div class="tipbox short" data-room-capacity-warning><span style="font-size: 13px; line-height: 1.5;" x-text="'⚠ ' + room.capacityWarning + '. Sign-in is not blocked.'"></span></div>
+                    </template>
                     <div style="display: flex; flex-direction: column; gap: 8px;">
                         <span style="font-size: 13px; font-weight: 700;">Teachers</span>
                         <template x-for="s in room.staff" :key="s.id">
@@ -143,7 +191,7 @@
                         <template x-if="! room.staff.length"><span class="muted" style="font-size: 13px;" x-text="room.tone === 'away' ? room.returning + ' checked out · returning at ' + room.returnLabel : 'No staff'"></span></template>
                     </div>
                     <template x-if="room.tip">
-                        <div :style="'border: 1px solid ' + (room.tone === 'short' ? '#f9c2cb' : '#e7e9f0') + '; background: ' + (room.tone === 'short' ? '#fff7f8' : '#f7f9fd') + '; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;'" data-room-tip>
+                        <div class="tipbox" :class="room.tone === 'short' ? 'short' : ''" data-room-tip>
                             <span style="font-size: 13px; line-height: 1.5;" x-text="room.tip.text"></span>
                             {{-- The move is real: it writes a cover on today's roster
                                  (App\Services\FloorCover) and the page comes back with the
@@ -175,8 +223,12 @@
 // come down with the page; a tap only picks one of them. Opens on the room
 // named in the address (the one a move was just made for), else the room
 // that is short, else the first.
-function floorPlan(rooms, open) { return {
+function floorPlan(rooms, open, updated) { return {
     rooms,
+    updated,
+    online: navigator.onLine,
+    stale: false,
+    loadedAt: Date.now(),
     room: rooms.find(r => r.room === open) ?? rooms.find(r => r.tone === 'short') ?? rooms[0] ?? null,
     pick(name) { this.room = this.rooms.find(r => r.room === name) ?? this.room; },
     pillClass(tone) { return { covered: 'ok', short: 'bad', spare: 'spare', away: 'mut', empty: 'mut' }[tone] ?? 'mut'; },
@@ -188,8 +240,17 @@ function floorPlan(rooms, open) { return {
     },
     slug(room) { return room.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); },
     init() {
-        // Live: the page redraws itself every minute while it is on screen.
-        setInterval(() => { if (! document.hidden) window.location.reload(); }, 60000);
+        // Live: the page redraws itself every minute while it is on screen —
+        // but not while offline, where a reload would lose the plan for an
+        // error page. The label says offline, and stale once the numbers are
+        // more than two minutes old (a reload that never came back).
+        window.addEventListener('online', () => { this.online = true; window.location.reload(); });
+        window.addEventListener('offline', () => { this.online = false; });
+        setInterval(() => {
+            this.online = navigator.onLine;
+            this.stale = Date.now() - this.loadedAt > 120000;
+            if (this.online && ! document.hidden) window.location.reload();
+        }, 60000);
     },
 }; }
 </script>

@@ -69,7 +69,7 @@
                     <tr class="hover:bg-slate-50/60 dark:hover:bg-white/5">
                         <td class="px-4 py-3 align-top">
                             <a href="{{ route('teachers.show', $person) }}" class="font-bold hover:text-indigo-600">{{ $person->name }}</a>
-                            <span class="block text-[11px] text-slate-400">{{ $person->employment ?: 'No type' }}</span>
+                            <span class="block text-[11px] text-slate-400">{{ $person->employment ? $person->employmentLabel() : 'No type' }}</span>
                         </td>
 
                         @foreach($types as $type => $label)

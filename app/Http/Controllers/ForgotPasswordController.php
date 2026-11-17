@@ -101,7 +101,7 @@ class ForgotPasswordController extends Controller
         $request->validate([
             'token' => ['required', 'string'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'string', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'string', 'confirmed', Password::defaults()],
         ]);
 
         $status = Passwords::broker()->reset(

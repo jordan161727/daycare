@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Weekly schedule')
+@section('title', 'Schedule')
 @section('content')
 {{--
     The Schedule — Phase 7 of docs/work.md, as Schedule.dc.html draws it.
@@ -196,7 +196,7 @@
             {{-- The day in one line. --}}
             <section class="ch-card" style="padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;" data-day-status>
                 <span style="font-size: 14px; font-weight: 700; margin-right: 4px;" x-text="d ? d.dayName : ''"></span>
-                <span x-show="d && d.closed" class="pill mut">Centre closed · <span x-text="d ? d.closed : ''"></span></span>
+                <span x-show="d && d.closed" class="pill mut">Center closed · <span x-text="d ? d.closed : ''"></span></span>
                 <span x-show="d && d.ok" class="pill ok">Every room at ratio</span>
                 <template x-for="(i, k) in (d ? d.issues : [])" :key="k"><span class="pill" :class="i.cls" x-text="i.text"></span></template>
             </section>
@@ -222,9 +222,13 @@
                                 <span class="lname" x-text="l.name"></span>
                                 <div class="track">
                                     <template x-for="(o, i) in l.offs" :key="i"><span class="offb" :style="pos(o.from, o.to)" x-text="o.label"></span></template>
+                                    {{-- Named for a screen reader by who and when, not by the
+                                         bare "7a → 3p" it shows, and named even before Alpine
+                                         fills it in (QA #17/#33, 12 Nov 2026). --}}
                                     <button type="button" class="bar" :class="(l.float ? 'float ' : '') + (sel === l.id ? 'sel ' : '') + (l.conf ? 'conf ' : '') + (canEdit ? '' : 'still')"
                                             :style="pos(l.from, l.to) + ';background:' + r.fill + ';border-color:' + r.border + ';color:' + r.text"
-                                            :draggable="canEdit" @dragstart="dragStart($event, {kind: 'move', id: l.id, room: r.key})" @dragend="over = null" @click="select(l.id)" :title="l.title" x-text="l.label"></button>
+                                            :draggable="canEdit" @dragstart="dragStart($event, {kind: 'move', id: l.id, room: r.key})" @dragend="over = null" @click="select(l.id)" :title="l.title"
+                                            aria-label="Shift" :aria-label="'Shift: ' + l.name + ', ' + r.key + ' ' + l.label.replace(' → ', ' to ')" x-text="l.label">Shift</button>
                                 </div>
                             </div>
                         </template>
@@ -259,7 +263,11 @@
                     </template>
                 </div>
                 <div x-show="canEdit && selShift()" x-cloak style="border-top: 1px solid #f0f1f5; padding-top: 10px; display: flex; flex-direction: column; gap: 8px;" data-time-off>
-                    <span style="font-size: 13px; font-weight: 700;">Time off for <span x-text="selShift() ? selShift().name : ''"></span> on <span x-text="d ? d.dayShort : ''"></span></span>
+                    {{-- Whole sentences from x-text, with plain words as the
+                         server's text, so no line ever reads with a hole where
+                         the name goes — "All of ’s time off" (QA #19, 12 Nov
+                         2026). With no name the link drops out. --}}
+                    <span style="font-size: 13px; font-weight: 700;" x-text="selShift() && selShift().name ? 'Time off for ' + selShift().name + (d ? ' on ' + d.dayShort : '') : 'Time off'">Time off</span>
                     <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                         <template x-for="k in [['all', 'Out all day'], ['until', 'Out until…'], ['leave', 'Leaving at…']]" :key="k[0]">
                             <button type="button" class="tchip" :class="to.kind === k[0] ? 'on' : ''" @click="to.kind = k[0]" x-text="k[1]"></button>
@@ -275,7 +283,8 @@
                         <button type="button" class="btn pri" style="min-height: 32px; padding: 5px 12px;" :disabled="busy" @click="saveTimeOff()">Save</button>
                     </div>
                     <p x-show="toError" x-cloak style="margin: 0; font-size: 12.5px; color: #be123c;" x-text="toError"></p>
-                    <a :href="selShift() ? urls.staff + '/' + selShift().user_id + '?tab=off' : urls.staff" style="font-size: 12.5px; font-weight: 600;">All of <span x-text="selShift() ? selShift().name : ''"></span>’s time off → Staff</a>
+                    <a x-show="selShift() && selShift().name" :href="selShift() ? urls.staff + '/' + selShift().user_id + '?tab=off' : urls.staff" style="font-size: 12.5px; font-weight: 600;" data-all-time-off
+                       x-text="selShift() && selShift().name ? 'All of ' + selShift().name + '’s time off → Staff' : ''">Their time off → Staff</a>
                 </div>
             </section>
 

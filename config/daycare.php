@@ -212,6 +212,17 @@ return [
         'School Age' => 20,
     ],
 
+    /*
+    | Rooms that share one physical space: room => the room whose space it
+    | uses. Capacity is checked for the space as a whole, against the host
+    | room's capacity; each class keeps its own ratio for staffing. A saved
+    | Setting rooms.<room>.shares_with wins over this (CentreSettings); a
+    | value that is not a room ("none") means a room of its own.
+    */
+    'shared_rooms' => [
+        'School Age' => 'UPK-4',
+    ],
+
     'room_ages' => [
         'Infant' => '6 wk–18 mo',
         'Transition' => '19–24 mo',
@@ -326,7 +337,7 @@ return [
         'leave_codes' => [
             'PTO' => 'Paid time off',
             'SICK' => 'Sick leave',
-            'HOLIDAY' => 'Centre holiday',
+            'HOLIDAY' => 'Center holiday',
             'UNPAID' => 'Unpaid absence',
         ],
 

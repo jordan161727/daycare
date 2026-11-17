@@ -849,7 +849,7 @@ class StaffSchedule
                 $this->warnings[] = match ($type) {
                     'PREFERRED_DAY_OFF' => "{$person->name} prefers ".implode(', ', array_unique($days))." off but is scheduled then. Mark the rule HARD to enforce it.",
                     'PREFERRED_START' => "{$person->name}'s preferred start time was not met on {$when}.",
-                    default => "{$person->name}: {$type} not honoured on {$when}.",
+                    default => "{$person->name}: {$type} not honored on {$when}.",
                 };
             }
         }

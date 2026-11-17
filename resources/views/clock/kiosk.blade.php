@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Staff time clock &middot; {{ config('app.name') }}</title>
+    <title>Staff time clock — {{ $companyName }}</title>
     @include('layouts.favicon')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
@@ -82,22 +82,23 @@
                     <h1 class="text-[22px] font-bold" x-text="greeting"></h1>
                     {{-- Has to match what the screen will accept: with the
                          scanner off, "Scan your card" is an instruction that fails. --}}
-                    <p class="text-center text-sm text-[#5f6676]">{{ $scanner ? 'Scan your card or key your 4-digit PIN' : 'Key your 4-digit PIN' }}</p>
+                    <p class="text-center text-sm text-[#5f6676]">{{ $scanner ? 'Scan your card or key your '.$pinLength.'-digit PIN' : 'Key your '.$pinLength.'-digit PIN' }}</p>
 
                     <form @submit.prevent="identify()" autocomplete="off" class="flex w-full flex-col items-center gap-3.5">
                         {{-- One field for both, out of sight: a scanner is a
                              keyboard that types fast and presses Enter, so it
-                             lands here and Enter submits; four keyed digits
-                             submit on their own. The dots say how many are in.
+                             lands here and Enter submits; keyed digits submit on
+                             their own at config('kiosk.pin_length') (QA K1,
+                             16 Nov 2026). The dots say how many are in.
                              inputmode none keeps the iPad's own keyboard away. --}}
-                        <input x-ref="entry" x-model="entry" type="text" inputmode="none"
+                        <input x-ref="entry" x-model="entry" @input="armIdle()" type="text" inputmode="none"
                                name="kiosk-entry" autocomplete="off" autocorrect="off" spellcheck="false"
                                data-1p-ignore data-lpignore="true" data-form-type="other"
                                aria-label="Scan your card or key your PIN"
                                class="pointer-events-none absolute h-px w-px opacity-0">
 
                         <div class="flex gap-3" aria-hidden="true" data-pin-dots>
-                            <template x-for="i in 4" :key="i">
+                            <template x-for="i in pinLength" :key="i">
                                 <span class="h-[15px] w-[15px] rounded-full border-2" :class="entry.length >= i ? 'border-[#1b5e91] bg-[#1b5e91]' : 'border-[#9fb0d6]'"></span>
                             </template>
                         </div>
@@ -108,12 +109,12 @@
                                         class="h-14 rounded-[14px] border border-[#d5dbea] bg-white text-[22px] font-semibold text-[#1c2130] transition active:bg-[#eef1fb]"
                                         x-text="key"></button>
                             </template>
-                            <button type="button" @click="entry = ''"
+                            <button type="button" @click="entry = ''; armIdle()"
                                     class="h-14 rounded-[14px] border border-[#d5dbea] bg-[#f5f7fc] text-sm font-semibold text-[#5f6676] transition active:bg-[#eef1fb]">Clear</button>
                             <button type="button" @click="press('0')"
                                     class="h-14 rounded-[14px] border border-[#d5dbea] bg-white text-[22px] font-semibold text-[#1c2130] transition active:bg-[#eef1fb]">0</button>
                             {{-- ⌫ takes one digit back (QA spec A3, 28 Oct 2026). --}}
-                            <button type="button" @click="entry = entry.slice(0, -1)" aria-label="Delete one digit" data-key-back
+                            <button type="button" @click="entry = entry.slice(0, -1); armIdle()" aria-label="Delete one digit" data-key-back
                                     class="h-14 rounded-[14px] border border-[#d5dbea] bg-[#f5f7fc] text-sm font-semibold text-[#5f6676] transition active:bg-[#eef1fb]">⌫</button>
                         </div>
                     </form>
@@ -317,17 +318,47 @@ function staffClock() { return {
     mode: 'in',     // why the picker is open: a clock-in, or somewhere else after a break
     now: '',
     today: '',
-    greeting: 'Good morning',   // by the centre's hour, set in tick()
+    greeting: 'Good morning',   // by the center's hour, set in tick()
     timer: null,
+    idle: null,
+
+    // From config/kiosk.php, not written in (QA K1 and K3, 16 Nov 2026):
+    // the staff PIN's length — the dots, the auto-submit, and the line that
+    // tells a keyed PIN from a scanned card — and how long a half-typed PIN
+    // is left on screen.
+    pinLength: @js($pinLength),
+    idleSeconds: @js($idleSeconds),
 
     init() {
         this.tick();
         setInterval(() => this.tick(), 10000);
         this.holdScreenAwake();
+
+        // Switched away from, or put to sleep, mid-PIN: back to empty dots.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') this.clearHalfTyped();
+        });
+    },
+
+    /*
+     * QA K3, 16 Nov 2026: a half-typed PIN is wiped after idleSeconds with no
+     * key pressed, so the next person in the queue does not start from the
+     * last one's first digits. Every press restarts the count.
+     */
+    armIdle() {
+        clearTimeout(this.idle);
+        if (this.entry === '') return;
+        this.idle = setTimeout(() => this.clearHalfTyped(), this.idleSeconds * 1000);
+    },
+
+    clearHalfTyped() {
+        clearTimeout(this.idle);
+        if (this.staff || this.done || this.sending) return;
+        this.entry = '';
     },
 
     /**
-     * Keep the tablet's screen on, unless the centre has said not to.
+     * Keep the tablet's screen on, unless the center has said not to.
      *
      * A kiosk that has gone to sleep at shift change is a queue at the door
      * while somebody hunts for the power button. The lock is dropped by the
@@ -353,7 +384,7 @@ function staffClock() { return {
     },
 
     tick() {
-        // In the centre's time, not the device's: an iPad left on another
+        // In the center's time, not the device's: an iPad left on another
         // zone showed 3:58 AM Wednesday over a punch stamped 3:58 PM Tuesday.
         const at = new Date();
         const zone = @js(config('app.timezone'));
@@ -369,10 +400,11 @@ function staffClock() { return {
 
     press(key) {
         this.entry += key;
+        this.armIdle();
 
-        // Four digits is a whole PIN, so the keypad does not also make somebody
-        // reach for Enter.
-        if (this.entry.length === 4) this.identify();
+        // pinLength digits is a whole PIN, so the keypad does not also make
+        // somebody reach for Enter.
+        if (this.entry.length === this.pinLength) this.identify();
     },
 
     focusEntry() {
@@ -386,14 +418,16 @@ function staffClock() { return {
     async identify() {
         const value = this.entry.trim();
 
-        if (value.length < 4 || this.sending) return;
+        if (value.length < this.pinLength || this.sending) return;
 
+        clearTimeout(this.idle);
         this.sending = true;
         this.problem = null;
 
         try {
-            // Four digits is a PIN; anything longer came off a scanner.
-            const body = /^\d{4}$/.test(value) ? { pin: value } : { card: value };
+            // A whole PIN of digits is a PIN; anything longer came off a scanner.
+            const isPin = value.length === this.pinLength && /^[0-9]+$/.test(value);
+            const body = isPin ? { pin: value } : { card: value };
             const response = await window.postJson(@js(route('clock.kiosk.identify')), body);
             const data = await response.json();
 
@@ -500,6 +534,7 @@ function staffClock() { return {
 
     reset() {
         clearTimeout(this.timer);
+        clearTimeout(this.idle);
         this.staff = null;
         this.ticket = null;
         this.done = null;
@@ -514,12 +549,11 @@ function staffClock() { return {
            somebody at a lobby screen should not be able to learn from the
            wording whether a number is in use.
 
-           kind decides the colour: amber to try again, rose to go and ask
+           kind decides the color: amber to try again, rose to go and ask
            somebody — the same two tones the door kiosk uses. */
         return {
-            not_found: { kind: 'soft', title: 'Not recognised', detail: 'Try again, or ask the office.' },
-            locked:    { kind: 'soft', title: 'Not recognised', detail: 'Try again shortly, or ask the office.' },
-            ambiguous: { kind: 'bad',  title: 'Ask the office',  detail: 'Two people share that PIN — scan your card instead.' },
+            not_found: { kind: 'soft', title: 'Not recognized', detail: 'Try again, or ask the office.' },
+            locked:    { kind: 'soft', title: 'Not recognized', detail: 'Try again shortly, or ask the office.' },
             expired:   { kind: 'soft', title: 'That took too long', detail: 'Scan again to carry on.' },
             stale:     { kind: 'soft', title: 'Something changed', detail: 'Your day moved on — here it is again.' },
             unpaired:  { kind: 'bad',  title: 'Screen not set up', detail: 'An administrator needs to pair this device.' },

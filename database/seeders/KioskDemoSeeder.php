@@ -39,16 +39,16 @@ class KioskDemoSeeder extends Seeder
         $daniel = $this->guardian('Daniel Okonkwo', 'Uncle', '573164', '2290');
         $daniel->children()->sync([$children[2]->id => ['can_collect' => false]]);
 
-        // Two families who chose the same six digits. The kiosk cannot tell them
-        // apart from the PIN alone and asks for the last four of a phone number:
-        // 5581 is Grace, 9032 is Marcus.
+        // Grace and Marcus each have their own PIN: since QA K2 (16 Nov 2026)
+        // no two people may share one, so the door never has to ask which
+        // family is standing there.
         $grace = $this->guardian('Grace Mbeki', 'Mother', '246810', '5581');
         $grace->children()->sync([$children[3]->id => ['can_collect' => true]]);
 
-        $marcus = $this->guardian('Marcus Reid', 'Father', '246810', '9032');
+        $marcus = $this->guardian('Marcus Reid', 'Father', '135790', '9032');
         $marcus->children()->sync([$children[4]->id => ['can_collect' => true]]);
 
-        $this->command?->info('4 guardians seeded. PINs: 481902 (Amira), 573164 (Daniel, cannot collect), 246810 (Grace 5581 / Marcus 9032).');
+        $this->command?->info('4 guardians seeded. PINs: 481902 (Amira), 573164 (Daniel, cannot collect), 246810 (Grace), 135790 (Marcus).');
         $this->command?->info('Set DAYCARE_KIOSK=true in .env, then open /kiosk.');
     }
 

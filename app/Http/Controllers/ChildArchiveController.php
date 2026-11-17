@@ -49,6 +49,11 @@ class ChildArchiveController extends Controller
      */
     public function unarchive(Request $request, Child $child)
     {
+        // A stale tab: somebody already restored them (and perhaps re-enrolled
+        // them since). Answering "back as Inactive" would report a status the
+        // record does not have.
+        abort_unless($child->isArchived(), 422, $child->first_name.' is not archived — the record is '.(Child::STATUS_LABELS[$child->status] ?? $child->status).'. Reload the page.');
+
         $restorePrevious = $request->input('to') === 'previous';
 
         $child->unarchive($restorePrevious);

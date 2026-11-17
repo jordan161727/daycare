@@ -55,7 +55,7 @@ class AttendanceSheet
         $closed = ClosureDay::betweenDates($dates->first(), $dates->last())
             ->get()
             ->keyBy(fn ($day) => $day->closed_on->toDateString())
-            ->map(fn ($day) => $day->reason ?: 'Centre closed')
+            ->map(fn ($day) => $day->reason ?: 'Center closed')
             ->all();
 
         $schedule = [];
@@ -152,7 +152,7 @@ class AttendanceSheet
         $closed = ClosureDay::betweenDates($month, $lastDay)
             ->get()
             ->keyBy(fn ($day) => $day->closed_on->toDateString())
-            ->map(fn ($day) => $day->reason ?: 'Centre closed')
+            ->map(fn ($day) => $day->reason ?: 'Center closed')
             ->all();
 
         // One query for the month rather than one per week.

@@ -76,6 +76,12 @@ class MessageController extends Controller
             return response()->json(['message' => 'This conversation cannot be replied to.'], 422);
         }
 
+        // The child has left (or is archived) since the conversation started:
+        // the family is no longer texted, in an old thread or a new one.
+        if (! $this->messaging->canMessage($thread->child)) {
+            return response()->json(['message' => $thread->child->first_name.' is no longer enrolled, so the family is not texted.'], 422);
+        }
+
         $data = $request->validate([
             'body' => ['nullable', 'string', 'max:1600', 'required_without:media'],
             'media' => ['nullable', 'array', 'max:6'],
@@ -113,6 +119,9 @@ class MessageController extends Controller
             $child = Child::visibleTo($user)->find($data['child_id']);
             if (! $child) {
                 return response()->json(['message' => 'That child is not one you can message.'], 422);
+            }
+            if (! $this->messaging->canMessage($child)) {
+                return response()->json(['message' => $child->first_name.' is no longer enrolled, so the family is not texted.'], 422);
             }
 
             $message = $this->messaging->sendToFamily($child, $data['kind'] ?? MessageThread::ROOM, $body, $media, $user);
@@ -164,12 +173,20 @@ class MessageController extends Controller
     /** The family picker: children by name, with who would get the text. */
     public function search(Request $request)
     {
-        $q = trim((string) $request->query('q'));
+        // Word by word, each against the child's first and last name and the
+        // family's names, so "Ava Smith" finds Ava Smith — the whole phrase
+        // against one column at a time never could (QA #24, 12 Nov 2026).
+        $words = preg_split('/\s+/', trim((string) $request->query('q')), -1, PREG_SPLIT_NO_EMPTY);
 
         $children = Child::visibleTo($request->user())
             ->where('status', 'Active')
-            ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('first_name', 'like', "%{$q}%")->orWhere('last_name', 'like', "%{$q}%")
-                ->orWhereHas('personLinks.person', fn ($p) => $p->where('name', 'like', "%{$q}%"))))
+            ->where(function ($query) use ($words) {
+                foreach (array_slice($words, 0, 5) as $word) {
+                    $like = '%'.$word.'%';
+                    $query->where(fn ($w) => $w->where('first_name', 'like', $like)->orWhere('last_name', 'like', $like)
+                        ->orWhereHas('personLinks.person', fn ($p) => $p->where('name', 'like', $like)));
+                }
+            })
             ->orderBy('first_name')->orderBy('last_name')
             ->limit(12)
             ->get();

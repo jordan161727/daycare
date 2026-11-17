@@ -15,6 +15,7 @@ use Tests\TestCase;
  */
 class ChildLifecycleTest extends TestCase
 {
+    use \Tests\Concerns\MakesChildrenReadyForActive;
     use RefreshDatabase;
 
     private User $admin;
@@ -28,7 +29,7 @@ class ChildLifecycleTest extends TestCase
 
     public function test_a_pending_child_is_started_from_a_first_day(): void
     {
-        $child = $this->child(['status' => 'Pending']);
+        $child = $this->readyForActive($this->child(['status' => 'Pending']));
 
         $this->actingAs($this->admin)->post(route('children.start', $child), ['first_day' => '2026-10-19'])
             ->assertRedirect(route('children.show', $child));
@@ -43,7 +44,7 @@ class ChildLifecycleTest extends TestCase
     /** A first day still to come starts on its own that morning. */
     public function test_a_first_day_ahead_waits_for_the_nightly_command(): void
     {
-        $child = $this->child(['status' => 'Pending']);
+        $child = $this->readyForActive($this->child(['status' => 'Pending']));
 
         $this->actingAs($this->admin)->post(route('children.start', $child), ['first_day' => '2026-11-02'])->assertRedirect();
 
@@ -100,7 +101,7 @@ class ChildLifecycleTest extends TestCase
     {
         $child = $this->child();
 
-        $this->actingAs($this->admin)->post(route('children.withdraw', $child), ['last_day' => '2026-10-23', 'reason' => 'Changed provider'])->assertRedirect();
+        $this->actingAs($this->admin)->post(route('children.withdraw', $child), ['last_day' => '2026-10-23', 'reason' => 'Changed provider', 'could_return' => 'Not sure', 'note' => 'Two weeks notice'])->assertRedirect();
 
         $this->assertSame('Active', $child->fresh()->status, 'still here until Friday is over');
         $this->actingAs($this->admin)->get(route('children.show', $child))->assertOk()->assertSee('data-banner="leaving"', false);
@@ -112,7 +113,7 @@ class ChildLifecycleTest extends TestCase
 
     public function test_a_withdrawn_child_is_re_enrolled_with_the_same_lan(): void
     {
-        $child = $this->child(['status' => 'Inactive', 'withdrawn_on' => '2026-08-28', 'withdrawal_reason' => 'Family choice']);
+        $child = $this->readyForActive($this->child(['status' => 'Inactive', 'withdrawn_on' => '2026-08-28', 'withdrawal_reason' => 'Family choice']));
 
         $this->actingAs($this->admin)->post(route('children.reenroll', $child))->assertRedirect();
 

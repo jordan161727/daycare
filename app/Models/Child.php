@@ -45,6 +45,7 @@ class Child extends Model
         'schedule_days' => 'array',
         'alerts' => 'array',
         'health' => 'array',
+        'enrollment_gaps' => 'array',
         'enrollment_note_at' => 'datetime',
         'mother_ssn' => 'encrypted',
         'father_ssn' => 'encrypted',
@@ -109,7 +110,21 @@ class Child extends Model
                 $child->classroom_override = $child->classroom;
             }
 
-            $child->classroom = $child->classroomOn();
+            // A child who has left keeps the room they left from: it is the
+            // "Last room" on the Withdrawn tab and what the old weeks were
+            // reported under. Recomputing it would let the age rule move a
+            // withdrawn child on their birthday the next time anybody saved
+            // the record. The room is worked out again when they come back
+            // (the status changes), or when someone sets one by hand.
+            $left = in_array($child->status, ['Inactive', self::ARCHIVED], true);
+            $frozen = $child->exists && $left
+                && in_array($child->getOriginal('status'), ['Inactive', self::ARCHIVED], true)
+                && filled($child->getOriginal('classroom'))
+                && ! $child->isDirty(['classroom', 'classroom_override', 'classroom_override_from']);
+
+            if (! $frozen) {
+                $child->classroom = $child->classroomOn();
+            }
 
             // The footer's "last change by": whoever is signed in, when
             // anybody is. A seeder or the nightly room sync leaves it as it was.
@@ -151,7 +166,13 @@ class Child extends Model
              * leave the same line.
              */
             if ($child->wasChanged('classroom') && filled($child->getOriginal('classroom')) && filled($child->classroom)) {
-                $child->recordEvent('room', $child->getOriginal('classroom').' → '.$child->classroom, $child->roomChangeNote);
+                $line = $child->recordEvent('room', $child->getOriginal('classroom').' → '.$child->classroom, $child->roomChangeNote);
+
+                // A move dated back is dated back in the history too (QA C7),
+                // so the line and the room-on-a-date reads agree with it.
+                if ($child->roomChangeAt && $child->roomChangeAt->lt(Carbon::today())) {
+                    $line->forceFill(['created_at' => $child->roomChangeAt->copy()->startOfDay()])->saveQuietly();
+                }
             }
 
             if ($child->wasChanged(['schedule_days', 'drop_off_time', 'pick_up_time'])) {
@@ -160,12 +181,35 @@ class Child extends Model
 
             if ($child->wasChanged('dss_case_no') && blank($child->getOriginal('dss_case_no')) && filled($child->dss_case_no)) {
                 $child->recordEvent('subsidy', 'Subsidy started', 'DSS case '.$child->dss_case_no.(filled($child->dss_cin) ? ' · CIN '.$child->dss_cin : ''));
+            } elseif ($child->wasChanged('dss_case_no') && filled($child->getOriginal('dss_case_no')) && filled($child->dss_case_no)) {
+                // A new case number, and the subsidy ending, leave their lines too (QA F2).
+                $child->recordEvent('subsidy', 'Subsidy case changed', 'DSS case '.$child->getOriginal('dss_case_no').' → '.$child->dss_case_no);
+            } elseif ($child->wasChanged('dss_case_no') && filled($child->getOriginal('dss_case_no')) && blank($child->dss_case_no)) {
+                $child->recordEvent('subsidy', 'Subsidy ended', 'DSS case '.$child->getOriginal('dss_case_no').' removed');
             }
         });
     }
 
+    /** The DSS case number: letters, digits and dashes (QA C9). */
+    public const DSS_CASE_NO_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9-]{2,19}$/';
+
+    /** The child's CIN as New York issues it: two letters, five digits, a letter — AB12345C. */
+    public const DSS_CIN_PATTERN = '/^[A-Za-z]{2}\d{5}[A-Za-z]$/';
+
+    /** @return array<string, string> */
+    public static function dssMessages(): array
+    {
+        return [
+            'dss_case_no.regex' => 'A DSS case number is letters and digits only, like S1177706D.',
+            'dss_cin.regex' => 'A DSS CIN is two letters, five digits and a letter, like AB12345C.',
+        ];
+    }
+
     /** Why a room was set by hand, carried from the form to the history line. Not a column. */
     public ?string $roomChangeNote = null;
+
+    /** The day a room set by hand starts from, when that is in the past. Not a column. */
+    public ?Carbon $roomChangeAt = null;
 
     /**
      * One line of history that is not a status change: a room move, a
@@ -297,21 +341,34 @@ class Child extends Model
         return $this->documents->firstWhere('kind', $kind);
     }
 
+    /**
+     * A signed photo consent that is still in date. An expired one is not a
+     * signed one: the Records-to-finish chip, the record's badge and the
+     * "no photos" mark on messaging all read this.
+     */
     public function photoConsentOnFile(): bool
     {
-        return $this->document('photo_consent') !== null;
+        $consent = $this->document('photo_consent');
+
+        return $consent !== null
+            && ($consent->expires_on === null || $consent->expires_on->gte(Carbon::today()));
     }
 
-    /** The guardian link, first by call order. Reads the loaded personLinks. */
+    /**
+     * The guardian link, first by call order. Reads the loaded personLinks.
+     * A restricted person (a court order, most often) is never the guardian
+     * the roll offers to ring, whatever the tick says.
+     */
     public function guardianLink(): ?ChildPerson
     {
-        return $this->personLinks->filter(fn (ChildPerson $link) => $link->is_guardian)
+        return $this->personLinks->filter(fn (ChildPerson $link) => $link->is_guardian && blank($link->restriction))
             ->sortBy(fn (ChildPerson $link) => $link->priority ?? 99)->first();
     }
 
+    /** Somebody unrestricted to ring. A restricted person does not count. */
     public function hasEmergencyContact(): bool
     {
-        return $this->personLinks->contains(fn (ChildPerson $link) => $link->is_emergency);
+        return $this->personLinks->contains(fn (ChildPerson $link) => $link->is_emergency && blank($link->restriction));
     }
 
     /**
@@ -337,11 +394,210 @@ class Child extends Model
         if (! $this->photoConsentOnFile()) {
             $gaps['photo'] = self::GAPS['photo'];
         }
-        if ($this->scheduleLabel() === null) {
+        if (! $this->hoursAgreed()) {
             $gaps['hours'] = self::GAPS['hours'];
         }
 
         return $gaps;
+    }
+
+    /** What a child must have on file before they can be made Active (tester report, Nov 2026). */
+    public const ACTIVE_REQUIRES = [
+        'birth_date' => 'a date of birth',
+        'guardian' => 'a guardian',
+        'emergency' => 'an emergency contact',
+    ];
+
+    /**
+     * What this record still lacks before it may be marked Active, keyed as
+     * ACTIVE_REQUIRES. Reads personLinks, so a record on file is asked about
+     * its people; a new one (no links yet) passes its own answers instead.
+     *
+     * @param  array{birth_date?: bool, guardian?: bool, emergency?: bool}  $has  facts already known, e.g. from the Add form
+     * @return array<string, string>
+     */
+    public function missingForActive(array $has = []): array
+    {
+        $has += [
+            'birth_date' => $this->birthDate() !== null,
+            'guardian' => $this->exists && $this->guardianLink() !== null,
+            'emergency' => $this->exists && $this->hasEmergencyContact(),
+        ];
+
+        return array_filter(self::ACTIVE_REQUIRES, fn ($label, $key) => ! $has[$key], ARRAY_FILTER_USE_BOTH);
+    }
+
+    /** "Add a date of birth and an emergency contact before marking Ava Active." */
+    public static function activeRequirementMessage(array $missing, ?string $firstName = null): string
+    {
+        $items = array_values($missing);
+        $list = count($items) > 1
+            ? implode(', ', array_slice($items, 0, -1)).' and '.end($items)
+            : ($items[0] ?? '');
+
+        return 'Add '.$list.' before marking '.(filled($firstName) ? trim($firstName) : 'this child').' Active.';
+    }
+
+    /**
+     * What the Children page's search box looks through for this child,
+     * lower-cased: the name both ways round, the nickname, the room, the LAN
+     * and every unrestricted guardian's name. Reads personLinks.person.
+     */
+    public function rosterSearchText(): string
+    {
+        $parents = $this->personLinks
+            ->filter(fn (ChildPerson $link) => $link->is_guardian && blank($link->restriction))
+            ->sortBy(fn (ChildPerson $link) => $link->priority ?? 99)
+            ->map(fn (ChildPerson $link) => $link->person?->name)
+            ->filter()
+            ->implode(' ');
+
+        return mb_strtolower($this->first_name.' '.$this->last_name.' '.$this->displayName('last_first').' '.$this->nickname.' '.$this->classroom.' '.$this->lan.' '.$parents);
+    }
+
+    /**
+     * A child already on file who looks like this one (tester report, Nov
+     * 2026): the same first and last name, ignoring case and spaces, and the
+     * same birthday — read from either date column. A record on either side
+     * with no birthday at all still matches by name, since nothing then says
+     * they differ; a different birthday on both never does.
+     *
+     * Shared by the Add form, the scanned-form import (which saves through
+     * it) and the spreadsheet import.
+     */
+    public static function findDuplicate(?string $firstName, ?string $lastName, ?string $birthDate = null, ?int $except = null): ?self
+    {
+        return self::duplicatesQuery($firstName, $lastName, $birthDate, $except)?->first();
+    }
+
+    /**
+     * Every child on file that findDuplicate would match, oldest first, in
+     * every status — the Add form's live check lists them (QA, Nov 2026).
+     *
+     * @return \Illuminate\Support\Collection<int, self>
+     */
+    public static function findDuplicates(?string $firstName, ?string $lastName, ?string $birthDate = null, ?int $except = null, ?int $limit = null): \Illuminate\Support\Collection
+    {
+        $query = self::duplicatesQuery($firstName, $lastName, $birthDate, $except);
+
+        return $query ? $query->when($limit !== null, fn ($query) => $query->limit($limit))->get() : collect();
+    }
+
+    /** The match itself, or null when there is no name to match on. */
+    public static function duplicatesQuery(?string $firstName, ?string $lastName, ?string $birthDate = null, ?int $except = null): ?\Illuminate\Database\Eloquent\Builder
+    {
+        $key = fn (?string $value) => str_replace(' ', '', mb_strtolower(trim((string) $value)));
+
+        if ($key($firstName) === '' || $key($lastName) === '') {
+            return null;
+        }
+
+        $squash = fn (string $column) => "REPLACE(LOWER(TRIM({$column})), ' ', '') = ?";
+
+        return self::query()
+            ->whereRaw($squash('first_name'), [$key($firstName)])
+            ->whereRaw($squash('last_name'), [$key($lastName)])
+            ->when($except !== null, fn ($query) => $query->whereKeyNot($except))
+            ->when(filled($birthDate), fn ($query) => $query->where(fn ($query) => $query
+                ->whereDate('birth_date', $birthDate)
+                ->orWhere(fn ($query) => $query->whereNull('birth_date')->whereDate('dob', $birthDate))
+                ->orWhere(fn ($query) => $query->whereNull('birth_date')->whereNull('dob'))))
+            ->orderBy('id');
+    }
+
+    /** "A child with this name and birthday already exists: LAN 1050 · Ada Lovelace · Infant · Active · born Mar 2, 2024." */
+    public function duplicateSummary(?string $birthDate = null): string
+    {
+        $born = $this->birthDate();
+
+        return sprintf(
+            'A child with %s already exists: LAN %s · %s %s · %s · %s%s.',
+            filled($birthDate) && $born !== null ? 'this name and birthday' : 'this name',
+            $this->lan,
+            $this->first_name,
+            $this->last_name,
+            $this->classroom ?: 'no room yet',
+            self::statusLabel($this->status),
+            $born ? ' · born '.$born->format('M j, Y') : ' · no date of birth on file',
+        );
+    }
+
+    /**
+     * The drop-off and pick-up rules, one copy for the edit form, the Add
+     * form and the record's Overview card (QA C2; second QA brief, Nov 2026):
+     * nothing before DAY_OPENS_AT or after DAY_CLOSES_AT, and pick-up after
+     * drop-off. Hours inside those but outside the centre's own opening
+     * hours are allowed and flagged — see hoursOutsideOpening.
+     */
+    public static function scheduleTimeRules(): array
+    {
+        return [
+            'drop_off_time' => ['nullable', 'date_format:H:i', 'after_or_equal:'.self::DAY_OPENS_AT, 'before_or_equal:'.self::DAY_CLOSES_AT],
+            'pick_up_time' => ['nullable', 'date_format:H:i', 'after_or_equal:'.self::DAY_OPENS_AT, 'before_or_equal:'.self::DAY_CLOSES_AT, 'after:drop_off_time'],
+        ];
+    }
+
+    /** The same words wherever those rules refuse a time. */
+    public static function scheduleTimeMessages(): array
+    {
+        $opens = self::timeLabel(self::DAY_OPENS_AT);
+        $closes = self::timeLabel(self::DAY_CLOSES_AT);
+
+        return [
+            'drop_off_time.after_or_equal' => "Drop-off can't be before {$opens} — the earliest the center takes a child.",
+            'drop_off_time.before_or_equal' => "Drop-off can't be after {$closes}.",
+            'pick_up_time.after_or_equal' => "Pick-up can't be before {$opens}.",
+            'pick_up_time.before_or_equal' => "Pick-up can't be after {$closes} — the latest the center keeps a child.",
+            'pick_up_time.after' => 'Pick-up has to be after drop-off.',
+        ];
+    }
+
+    /**
+     * Hours that fall outside when the centre — or the child's room, where
+     * Settings › Rooms & hours gives it its own — is open, as a sentence, or
+     * null when they fit. Five duplicate records carried 7:00 AM – 8:00 PM
+     * against a centre that closes at 6 (second QA brief, Nov 2026). Said on
+     * save by the edit form, the Add form and the Overview card alike.
+     */
+    public static function hoursOutsideOpening(?string $dropOff, ?string $pickUp, ?string $room = null): ?string
+    {
+        if (blank($dropOff) && blank($pickUp)) {
+            return null;
+        }
+
+        $settings = app(\App\Services\CentreSettings::class);
+        $schedule = filled($room) ? (\App\Models\RoomSchedule::byRoom()[$room] ?? null) : null;
+        $opens = substr((string) ($schedule?->opens_at ?: $settings->get('centre_opens')), 0, 5);
+        $closes = substr((string) ($schedule?->closes_at ?: $settings->get('centre_closes')), 0, 5);
+        $hm = fn (?string $time) => blank($time) ? null : substr(Carbon::parse($time)->format('H:i'), 0, 5);
+
+        $early = $hm($dropOff) !== null && $hm($dropOff) < $opens;
+        $late = $hm($pickUp) !== null && $hm($pickUp) > $closes;
+
+        if (! $early && ! $late) {
+            return null;
+        }
+
+        $where = $schedule ? $room.' is open' : 'the center is open';
+
+        return 'Hours '.trim((self::timeLabel($dropOff) ?? '…').' – '.(self::timeLabel($pickUp) ?? '…'))
+            .' fall outside when '.$where.' ('.self::timeLabel($opens).' – '.self::timeLabel($closes).'). Check the times.';
+    }
+
+    /**
+     * Whether the child's week has been agreed: the days they come and the
+     * hours of the day, both.
+     *
+     * QA #31, 12 Nov 2026: a new record opens on the usual 7:30 to 6
+     * (DEFAULT_DROP_OFF / DEFAULT_PICK_UP), so a child added with no days
+     * ticked had times on file and was never counted under "Hours not
+     * agreed" — while the roll showed a week of grey days. Times alone are
+     * not an agreement, so the badge, the Record column and the roll's
+     * Schedule column all ask this one question.
+     */
+    public function hoursAgreed(): bool
+    {
+        return $this->scheduleLabel() !== null && (bool) $this->scheduleDays();
     }
 
     /** How much of the record is filled in, as the header's bar shows it. */
@@ -357,7 +613,8 @@ class Child extends Model
             $this->hasEmergencyContact(),
             ! $this->immunizationsDue(),
             $this->photoConsentOnFile(),
-            $this->document('medical_statement') !== null,
+            // An expired statement is one to renew, not one on file (QA E7).
+            ($medical = $this->document('medical_statement')) !== null && ! ($medical->expires_on && $medical->expires_on->lt(Carbon::today())),
         ];
 
         return (int) round(count(array_filter($checks)) / count($checks) * 100);
@@ -381,6 +638,41 @@ class Child extends Model
             'to_status' => $to,
             'changed_by' => auth()->id(),
         ]);
+    }
+
+    /**
+     * What people type into Nickname to mean "there isn't one".
+     *
+     * QA #20, 12 Nov 2026: "N/A" was saved and shown on the roll as
+     * "Mia (N/A)", as if it were what she is called. Compared trimmed and
+     * without regard to case.
+     */
+    public const NO_NICKNAME = ['', 'n/a', 'na', 'none', '-', '—', '–'];
+
+    /** A nickname, or null when what was typed means "none" (see NO_NICKNAME). */
+    public static function cleanNickname(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return in_array(mb_strtolower($value), self::NO_NICKNAME, true) ? null : $value;
+    }
+
+    /**
+     * Read and written through cleanNickname, so every save — the Add form,
+     * the edit form, the record's Overview card, an import — stores null for
+     * "N/A", and a record saved before this reads as having no nickname
+     * rather than showing the placeholder on every screen.
+     */
+    protected function nickname(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::make(
+            get: fn ($value) => self::cleanNickname($value),
+            set: fn ($value) => self::cleanNickname($value),
+        );
     }
 
     public function getFullNameAttribute()
@@ -566,11 +858,66 @@ class Child extends Model
      * is a matter of fact, slate is a remark.
      */
     public const ALERT_TYPES = [
-        'court' => ['label' => 'Court Order', 'example' => 'No pickup by Jordan Key', 'classes' => 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200'],
-        'allergy' => ['label' => 'Allergy', 'example' => 'Banana — swells, no epi-pen', 'classes' => 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-100'],
-        'medical' => ['label' => 'Medical', 'example' => 'Inhaler in office', 'classes' => 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-100'],
+        // The example is a placeholder only; a real-looking name here read as
+        // a real order when it turned up on records (QA, 16 Nov 2026).
+        'court' => ['label' => 'Court Order', 'example' => 'No pickup by (name on the order)', 'classes' => 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-200'],
+        'allergy' => ['label' => 'Allergy', 'example' => 'Banana — swells, no epi-pen', 'classes' => 'bg-orange-100 text-orange-900 dark:bg-orange-500/20 dark:text-orange-100'],
+        'medical' => ['label' => 'Medical', 'example' => 'Asthma — inhaler in office', 'classes' => 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-100'],
+        'medication' => ['label' => 'Medication', 'example' => 'Amoxicillin 5 ml at noon until Friday', 'classes' => 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-100'],
         'note' => ['label' => 'Note', 'example' => 'Leaves early on Tuesdays', 'classes' => 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'],
     ];
+
+    /**
+     * The health alerts: drawn in their own colour with their own icon, apart
+     * from a court order and well apart from an everyday note (QA, 16 Nov
+     * 2026: "Peanuts" looked the same as "Leaves early on Tuesdays").
+     */
+    public const HEALTH_ALERT_TYPES = ['allergy', 'medical', 'medication'];
+
+    /** One small icon per kind (24-unit stroke paths), drawn by <x-child-alert>. */
+    public const ALERT_ICONS = [
+        'allergy' => '<path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+        'medical' => '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
+        'medication' => '<path d="M10.5 20.5a4.95 4.95 0 0 1-7-7l10-10a4.95 4.95 0 0 1 7 7z"/><path d="m8.5 8.5 7 7"/>',
+        'court' => '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+        'note' => '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4m0-4h.01"/>',
+    ];
+
+    /** The whole icon as markup, for a page drawing chips in Alpine (x-html). */
+    public static function alertIcon(string $type): string
+    {
+        $paths = self::ALERT_ICONS[$type] ?? self::ALERT_ICONS['note'];
+
+        return '<svg class="na-alert-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'.$paths.'</svg>';
+    }
+
+    /**
+     * One alert as a screen drawn in Alpine needs it: the words, the kind
+     * (which picks the colour), whether it is severe, and the icon.
+     *
+     * @param  array<string, mixed>  $alert  one row of alertList()
+     */
+    public static function alertForScreen(array $alert): array
+    {
+        return [
+            'type' => $alert['type'],
+            'label' => $alert['label'],
+            'text' => $alert['text'],
+            'severity' => $alert['severity'] ?? null,
+            'severe' => strtolower((string) ($alert['severity'] ?? '')) === 'severe',
+            'health' => in_array($alert['type'], self::HEALTH_ALERT_TYPES, true),
+            'icon' => self::alertIcon($alert['type']),
+        ];
+    }
+
+    /** The record's alerts for an Alpine screen, health ones first, severe first among them. */
+    public function alertsForScreen(): array
+    {
+        return array_values(collect($this->alertList())
+            ->sortBy(fn (array $a) => [in_array($a['type'], self::HEALTH_ALERT_TYPES, true) || $a['type'] === 'court' ? 0 : 1, strtolower((string) ($a['severity'] ?? '')) === 'severe' ? 0 : 1, $a['index']])
+            ->map(fn (array $a) => self::alertForScreen($a))
+            ->all());
+    }
 
     /**
      * The alerts on this record, as the page wants to draw them.
@@ -590,7 +937,7 @@ class Child extends Model
     {
         $out = [];
 
-        foreach ($this->alerts ?? [] as $alert) {
+        foreach (array_values($this->alerts ?? []) as $index => $alert) {
             $text = trim((string) ($alert['text'] ?? ''));
 
             if ($text === '') {
@@ -611,10 +958,22 @@ class Child extends Model
                 'reaction' => $alert['reaction'] ?? null,
                 'action' => $alert['action'] ?? null,
                 'plan_on' => $alert['plan_on'] ?? null,
+                // Where it sits in the stored list, and what it says, so a
+                // Remove or Edit from a page drawn before somebody else's
+                // change finds this alert and not whichever one has moved
+                // into its place (QA E4).
+                'index' => $index,
+                'key' => self::alertKey($alert),
             ];
         }
 
         return $out;
+    }
+
+    /** A short fingerprint of one stored alert, as the record page posts it back. */
+    public static function alertKey(mixed $alert): string
+    {
+        return substr(sha1(json_encode($alert)), 0, 12);
     }
 
     public const WEEKDAYS = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri'];
@@ -855,6 +1214,19 @@ class Child extends Model
         return $automatic !== null && $override !== null && $automatic >= $override;
     }
 
+    /**
+     * Whether this child's age fits the room they are in: ok, placed (set
+     * by hand, one band ahead — a soft ✎), mismatch (⚠) or unknown. The
+     * one check every age-against-room mark reads; see
+     * ClassroomAssignment::fit.
+     *
+     * @return array{state: string, text: ?string, automatic: ?string}
+     */
+    public function roomFit(?Carbon $asOf = null): array
+    {
+        return ClassroomAssignment::fit($this, $asOf);
+    }
+
     public function scheduleSlots()
     {
         return $this->hasMany(ScheduleSlot::class);
@@ -1034,12 +1406,51 @@ class Child extends Model
             ->orderBy('classroom', $direction);
     }
 
+    /**
+     * The children a status tab lists, by the one rule every count uses
+     * (App\Services\RoomCounts::isEnrolled) — QA retest, 16 Nov 2026: Pharaoh
+     * Lumpkins was Active with a last day of Nov 6, so the Children page
+     * counted him (Active 118, PreK 14) and every other page did not (117).
+     *
+     *   Active    status Active, started (no first day, or on/before today)
+     *             and not past the last day (none, or on/after today) — so the
+     *             Active tab is exactly "enrolled today".
+     *   Pending   status Pending, or Active with a first day still to come.
+     *   Inactive  (Withdrawn) status Inactive, or Active past their last day
+     *             — the nightly children:sync-enrollments moves them; until it
+     *             has, they are listed with the leavers, flagged.
+     *
+     * Any other status (Archived) is the column as it stands.
+     */
+    public function scopeInStatusTab($query, string $status, ?string $today = null)
+    {
+        $today ??= now(config('app.timezone'))->toDateString();
+        $started = fn ($q) => $q->whereNull('enrolled_on')->orWhereDate('enrolled_on', '<=', $today);
+        $notLeft = fn ($q) => $q->whereNull('withdrawn_on')->orWhereDate('withdrawn_on', '>=', $today);
+
+        return match ($status) {
+            'Active' => $query->where('status', 'Active')->where($started)->where($notLeft),
+            'Pending' => $query->where(fn ($q) => $q->where('status', 'Pending')
+                ->orWhere(fn ($q) => $q->where('status', 'Active')->whereDate('enrolled_on', '>', $today)->where($notLeft))),
+            'Inactive' => $query->where(fn ($q) => $q->where('status', 'Inactive')
+                ->orWhere(fn ($q) => $q->where('status', 'Active')->whereDate('withdrawn_on', '<', $today))),
+            default => $query->where('status', $status),
+        };
+    }
+
     public function scopeOnRollDuring($query, string $weekStart, string $weekEnd)
     {
         // An archived child is off the sheet too, whichever week is open: the
         // week they attended would otherwise keep listing them.
+        //
+        // Active is not enough on its own: the dates have to touch the week
+        // too (QA retest, 16 Nov 2026 — an Active child whose last day was
+        // Nov 6 was a row on the week of Nov 16, "Showing all 118" under
+        // "117 enrolled"). Anybody who attended that week is still listed.
         return $query->notArchived()->where(function ($outer) use ($weekStart, $weekEnd) {
-            $outer->where('status', 'Active')
+            $outer->where(fn ($active) => $active->where('status', 'Active')
+                ->where(fn ($q) => $q->whereNull('enrolled_on')->orWhereDate('enrolled_on', '<=', $weekEnd))
+                ->where(fn ($q) => $q->whereNull('withdrawn_on')->orWhereDate('withdrawn_on', '>=', $weekStart)))
                 ->orWhereHas('attendances', fn ($a) => $a->whereBetween('attendance_date', [$weekStart, $weekEnd]))
                 ->orWhere(function ($left) use ($weekStart, $weekEnd) {
                     $left->whereNotNull('withdrawn_on')
@@ -1057,6 +1468,13 @@ class Child extends Model
     {
         if ($this->enrolled_on && $date < $this->enrolled_on->toDateString()) {
             return false;
+        }
+
+        // The time away between a last day and a re-enrollment (see Enrollment::reenroll).
+        foreach ((array) ($this->enrollment_gaps ?? []) as $gap) {
+            if (isset($gap['from'], $gap['to']) && $date >= $gap['from'] && $date <= $gap['to']) {
+                return false;
+            }
         }
 
         return ! ($this->withdrawn_on && $date > $this->withdrawn_on->toDateString());
@@ -1130,7 +1548,10 @@ class Child extends Model
             return $query;
         }
 
-        $classrooms = $user->assignedClassrooms();
+        // Only a teacher reads children by room. Any other role — a stray
+        // "parent" account, a typo — holds no room and sees nobody, rather
+        // than whatever its classroom column happens to say.
+        $classrooms = $user->role === 'teacher' ? $user->assignedClassrooms() : [];
 
         if (empty($classrooms)) {
             return $query->whereRaw('0 = 1');

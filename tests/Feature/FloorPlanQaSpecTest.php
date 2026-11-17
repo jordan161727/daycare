@@ -236,7 +236,7 @@ class FloorPlanQaSpecTest extends TestCase
         $html = $this->page()->getContent();
         $chip = fn (string $room, string $name) => preg_match('/<span class="dot ([a-z-]+)"><\/span>'.preg_quote($name, '/').'</', $this->roomHtml($html, $room), $m) ? $m[1] : null;
 
-        $this->assertSame('d-in', $chip('Toddler', 'Mary'));
+        $this->assertSame('d-in', $chip('Toddler', 'Mary Jo'));
         $this->assertSame('d-late', $chip('Toddler', 'Sultana'), 'Sultana red after 9:30');
         $this->assertSame('d-due', $chip('PreK', 'Pat'));
         $this->assertSame('d-due', $chip('School Age', 'Amanda'));
@@ -247,7 +247,7 @@ class FloorPlanQaSpecTest extends TestCase
     {
         // Observation for the report: late here has no grace period.
         $this->travelTo(Carbon::parse(self::DAY.' 09:30:00', $this->tz));
-        $s = collect($this->rooms()['Toddler']['staff'])->firstWhere('name', 'Sultana');
+        $s = collect($this->rooms()['Toddler']['staff'])->firstWhere('first', 'Sultana');
         $this->assertSame('late', $s['status'], 'at 9:30 exactly');
     }
 
@@ -309,7 +309,7 @@ class FloorPlanQaSpecTest extends TestCase
         $this->assertSame(['in' => 10, 'booked' => 0, 'returning' => 0, 'out' => 0], ['in' => $r['in'], 'booked' => $r['booked'], 'returning' => $r['returning'], 'out' => $r['out']]);
         $this->assertSame(['needed' => 2, 'staffIn' => 1, 'free' => 0, 'capacity' => 10, 'enrolled' => 11], ['needed' => $r['needed'], 'staffIn' => $r['staffIn'], 'free' => $r['free'], 'capacity' => $r['capacity'], 'enrolled' => $r['enrolled']]);
 
-        $staff = collect($r['staff'])->keyBy('name');
+        $staff = collect($r['staff'])->keyBy('first');
         $this->assertSame(['in', '7:29 AM'], [$staff['Mary']['status'], $staff['Mary']['in']]);
         $this->assertSame(['late', '9:30'], [$staff['Sultana']['status'], $staff['Sultana']['due']]);
 
@@ -403,7 +403,7 @@ class FloorPlanQaSpecTest extends TestCase
 
         $p = $this->plan();
         $r = collect($p['rooms'])->keyBy('room');
-        $laq = collect($r['Toddler']['staff'])->firstWhere('name', 'LaQuora');
+        $laq = collect($r['Toddler']['staff'])->firstWhere('first', 'LaQuora');
         $this->assertNotNull($laq, 'LaQuora in Toddler');
         $this->assertTrue($laq['moved']);
         $this->assertSame(['Covered', 'Covered'], [$r['Toddler']['status'], $r['PreK']['status']]);
@@ -420,8 +420,8 @@ class FloorPlanQaSpecTest extends TestCase
         app(TimeClock::class)->punch(user: $this->t['Sultana'], type: TimePunch::IN, at: now());
 
         $r = $this->rooms();
-        $this->assertNotNull(collect($r['PreK']['staff'])->firstWhere('name', 'LaQuora'), 'LaQuora back in PreK');
-        $this->assertNull(collect($r['Toddler']['staff'])->firstWhere('name', 'LaQuora'));
+        $this->assertNotNull(collect($r['PreK']['staff'])->firstWhere('first', 'LaQuora'), 'LaQuora back in PreK');
+        $this->assertNull(collect($r['Toddler']['staff'])->firstWhere('first', 'LaQuora'));
         $this->assertSame(['Covered', '1 spare'], [$r['Toddler']['status'], $r['PreK']['status']]);
     }
 

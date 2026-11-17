@@ -296,8 +296,8 @@ class ChildScheduleTest extends TestCase
             ->assertOk()
             ->assertSee('name="drop_off_time" value="07:30"', false)
             ->assertSee('name="pick_up_time" value="18:00"', false)
-            ->assertSee('The centre opens at 7:00 AM.')
-            ->assertSee('The centre closes at 8:00 PM.');
+            ->assertSee('The center opens at 7:00 AM.')
+            ->assertSee('The center closes at 8:00 PM.');
     }
 
     public function test_the_edit_form_keeps_the_times_already_agreed(): void

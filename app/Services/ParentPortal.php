@@ -212,6 +212,7 @@ class ParentPortal
         return DB::table('messages as m')
             ->leftJoin('parent_thread_reads as r', fn ($j) => $j->on('r.thread_id', '=', 'm.thread_id')->where('r.person_id', '=', $person->id))
             ->whereIn('m.thread_id', $threadIds)
+            ->whereNull('m.archived_at')
             ->whereRaw('m.id > coalesce(r.last_message_id, 0)')
             ->where(fn ($q) => $q->where('m.direction', Message::OUT)->orWhere('m.person_id', '!=', $person->id))
             ->groupBy('m.thread_id')

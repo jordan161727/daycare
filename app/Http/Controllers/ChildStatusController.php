@@ -24,6 +24,10 @@ class ChildStatusController extends Controller
 
         $data = $request->validate(['first_day' => ['required', 'date']]);
 
+        if ($refused = $this->incompleteForActive($child)) {
+            return $refused;
+        }
+
         $this->enrollment->start($child, Carbon::parse($data['first_day']), $request->user());
 
         $first = Carbon::parse($data['first_day']);
@@ -53,11 +57,21 @@ class ChildStatusController extends Controller
     {
         abort_unless($child->status === 'Active', 422, 'Only an active child can be withdrawn.');
 
+        // Already leaving: a second Withdraw from a tab opened before the first
+        // would quietly replace the last day, reason and note the office gave.
+        abort_if($child->withdrawn_on !== null, 422, $child->first_name.' is already withdrawing — last day '.$child->withdrawn_on?->format('M j, Y').'.');
+
+        // Every field is required (client test plan): the last day, the
+        // reason, whether they could come back and the note all go on the DSS
+        // page and the enrollment history. The last day cannot come before the
+        // first.
         $data = $request->validate([
-            'last_day' => ['required', 'date'],
+            'last_day' => array_filter(['required', 'date', $child->enrolled_on ? 'after_or_equal:'.$child->enrolled_on->toDateString() : null]),
             'reason' => ['required', Rule::in(Child::WITHDRAWAL_REASONS)],
-            'could_return' => ['nullable', Rule::in(Child::COULD_RETURN)],
-            'note' => ['nullable', 'string', 'max:500'],
+            'could_return' => ['required', Rule::in(Child::COULD_RETURN)],
+            'note' => ['required', 'string', 'max:500'],
+        ], [
+            'last_day.after_or_equal' => 'The last day cannot be before the first day ('.$child->enrolled_on?->format('M j, Y').').',
         ]);
 
         $last = Carbon::parse($data['last_day']);
@@ -74,8 +88,33 @@ class ChildStatusController extends Controller
     {
         abort_unless($child->isWithdrawn(), 422, 'Only a withdrawn child can be re-enrolled.');
 
+        if ($refused = $this->incompleteForActive($child)) {
+            return $refused;
+        }
+
         $this->enrollment->reenroll($child);
 
         return redirect()->route('children.show', $child)->with('success', $child->first_name.' is back on the roll with the same LAN and family.');
+    }
+
+    /**
+     * Start and Re-enroll both make the child Active, so both need what
+     * Active needs: a date of birth, a guardian and an emergency contact
+     * (Child::ACTIVE_REQUIRES). Refused back to the record, which shows the
+     * message at the top, naming exactly what is missing. A future first day
+     * is refused too — the nightly command would otherwise make an
+     * incomplete record Active on its own.
+     */
+    private function incompleteForActive(Child $child)
+    {
+        $missing = $child->loadMissing('personLinks')->missingForActive();
+
+        if ($missing === []) {
+            return null;
+        }
+
+        return redirect()->route('children.show', $child)
+            ->withErrors(['status' => Child::activeRequirementMessage($missing, $child->first_name)])
+            ->withInput();
     }
 }

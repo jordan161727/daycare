@@ -114,7 +114,7 @@ class StaffRuleController extends Controller
         if (in_array($rule['rule_type'], StaffRule::ROOM_VALUED, true)
             && filled($rule['value_text'])
             && ! in_array($rule['value_text'], ClassroomAssignment::rooms(), true)) {
-            $errors['value_text'] = ['Pick one of the centre’s rooms.'];
+            $errors['value_text'] = ['Pick one of the center’s rooms.'];
         }
 
         if (in_array($rule['rule_type'], StaffRule::STAFF_VALUED, true) && filled($rule['value_text'])) {

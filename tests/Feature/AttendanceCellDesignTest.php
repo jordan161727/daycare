@@ -259,7 +259,7 @@ class AttendanceCellDesignTest extends TestCase
         // header's closure chip uses.
         $this->assertStringContainsString("if (this.isClosed(date)) return '—';", $html);
         $this->assertStringContainsString("classes.push('att-closed')", $html);
-        $this->assertStringContainsString('centre closed', $html);
+        $this->assertStringContainsString('center closed', $html);
 
         // The whole column reads as one shut block — painted from Alpine, since
         // a day is closed and reopened without the page reloading.

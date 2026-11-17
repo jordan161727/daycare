@@ -95,7 +95,7 @@ class ChildLanTest extends TestCase
             'lan' => '10004',
             'first_name' => 'Grace',
             'last_name' => 'Hopper',
-            'status' => 'Active',
+            'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother',
         ])->assertRedirect()->assertSessionHasNoErrors();
 
         $this->assertSame('10005', Child::firstWhere('first_name', 'Grace')->lan);

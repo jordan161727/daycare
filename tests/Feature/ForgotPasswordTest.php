@@ -125,11 +125,11 @@ class ForgotPasswordTest extends TestCase
 
         $this->post(route('password.store'), [
             'token' => $token, 'email' => 'bea@example.com',
-            'password' => 'NewPass123', 'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword1234', 'password_confirmation' => 'NewPassword1234',
         ])->assertRedirect(route('login'))->assertSessionHas('success');
 
         $fresh = $this->teacher->fresh();
-        $this->assertTrue(Hash::check('NewPass123', $fresh->password));
+        $this->assertTrue(Hash::check('NewPassword1234', $fresh->password));
         $this->assertFalse($fresh->mustChangePassword());
         $this->assertNull($fresh->temp_password_expires_at);
         $this->assertSame('Email link', LoginEvent::where('outcome', LoginEvent::PASSWORD_RESET)->sole()->source());
@@ -137,12 +137,12 @@ class ForgotPasswordTest extends TestCase
         // Used once: the same link does nothing the second time.
         $this->post(route('password.store'), [
             'token' => $token, 'email' => 'bea@example.com',
-            'password' => 'Another123', 'password_confirmation' => 'Another123',
+            'password' => 'AnotherPass1234', 'password_confirmation' => 'AnotherPass1234',
         ])->assertSessionHasErrors('email');
-        $this->assertTrue(Hash::check('NewPass123', $this->teacher->fresh()->password));
+        $this->assertTrue(Hash::check('NewPassword1234', $this->teacher->fresh()->password));
 
         // And the new password signs in.
-        $this->post(route('login.store'), ['email' => 'bea@example.com', 'password' => 'NewPass123']);
+        $this->post(route('login.store'), ['email' => 'bea@example.com', 'password' => 'NewPassword1234']);
         $this->assertAuthenticatedAs($this->teacher->fresh());
     }
 
@@ -153,12 +153,12 @@ class ForgotPasswordTest extends TestCase
 
         $this->post(route('password.store'), [
             'token' => $token, 'email' => 'bea@example.com',
-            'password' => 'NewPass123', 'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword1234', 'password_confirmation' => 'NewPassword1234',
         ])->assertSessionHasErrors(['email' => 'That link has expired or was already used. Ask for a new one below.']);
 
         $this->post(route('password.store'), [
             'token' => str_repeat('a', 64), 'email' => 'bea@example.com',
-            'password' => 'NewPass123', 'password_confirmation' => 'NewPass123',
+            'password' => 'NewPassword1234', 'password_confirmation' => 'NewPassword1234',
         ])->assertSessionHasErrors('email');
 
         $this->assertTrue(Hash::check('old-password-1', $this->teacher->fresh()->password));

@@ -46,8 +46,8 @@
 
             <div>
                 <label for="password" class="mb-2 block text-sm font-semibold">New password</label>
-                <input id="password" name="password" type="password" required autocomplete="new-password" class="w-full rounded-xl border-0 bg-slate-100 px-4 py-3 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500">
-                <p class="mt-1 text-xs text-slate-500">At least 8 characters, with letters and numbers.</p>
+                <input id="password" name="password" type="password" required minlength="12" autocomplete="new-password" class="w-full rounded-xl border-0 bg-slate-100 px-4 py-3 ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500">
+                <p class="mt-1 text-xs text-slate-500">At least 12 characters, with letters and numbers.</p>
                 <x-input-error :messages="$errors->get('password')" />
             </div>
 

@@ -26,8 +26,8 @@ class FloorPlan
 
     public function for(User $user, string $view = 'morning', ?Carbon $now = null): array
     {
-        $now = $now ?? now();
         $timezone = config('app.timezone');
+        $now = ($now ?? now())->copy()->timezone($timezone);
         $today = $now->toDateString();
         $afternoon = $view === 'afternoon';
 
@@ -37,9 +37,12 @@ class FloorPlan
             ? Carbon::parse($today.' '.$this->centre->get('school_age_returns'), $timezone)
             : $now->copy();
 
-        $day = $this->snapshot->for($user, $now);
-        $roll = Child::visibleTo($user)->where('status', 'Active')->get()
-            ->filter(fn (Child $child) => $child->isEnrolledOn($today))->values();
+        // The whole building for everyone (QA J1): the plan shows counts, not
+        // names, and a teacher's own rooms alone made the others read empty
+        // while their staff stood in them.
+        $day = $this->snapshot->for($user, $now, wholeBuilding: true);
+        $roll = Child::query()->where('status', 'Active')->get()
+            ->filter(fn (Child $child) => RoomCounts::isEnrolled($child, $today))->values();
         $planned = ScheduleSlot::whereDate('slot_date', $today)->where('is_scheduled', true)
             ->whereIn('child_id', $roll->pluck('id'))->get()->groupBy('child_id');
 
@@ -56,12 +59,25 @@ class FloorPlan
             $in = $afternoon
                 ? $children->filter(fn (Child $c) => in_array($state($c), ['in', 'returning', 'expected'], true))->count()
                 : $children->filter(fn (Child $c) => $state($c) === 'in')->count();
-            // Booked and not in yet. A child an hour overdue is off the room's
-            // seats, as the client's plan has it — they are on the dashboard's
-            // Absent card instead.
-            $booked = $children->filter(fn (Child $c) => $state($c) === 'expected')->count();
+            // Booked and not in yet — RoomCounts' "still to come", the same
+            // figure the dashboard and the register show (QA #2, 12 Nov 2026).
+            // A child an hour overdue is off the room's seats, as the client's
+            // plan has it — they are on the dashboard's Absent card instead.
+            // The afternoon already counts them in, so it seats them once:
+            // counting them again here put them on two seats and took two
+            // places off "free".
+            $booked = $afternoon ? 0 : RoomCounts::tally($children->map(fn (Child $c) => RoomCounts::child(
+                booked: $state($c) !== 'none',
+                arrived: in_array($state($c), ['in', 'returning', 'out'], true),
+                absent: $state($c) === 'absent',
+            )))['still_to_come'];
+            $expectedHere = RoomCounts::tally($children->map(fn (Child $c) => RoomCounts::child(
+                booked: $state($c) !== 'none',
+                arrived: in_array($state($c), ['in', 'returning', 'out'], true),
+                absent: $state($c) === 'absent',
+            )))['expected'];
             $returning = $children->filter(fn (Child $c) => $state($c) === 'returning');
-            $out = $children->filter(fn (Child $c) => $state($c) === 'out')->count();
+            $out =$children->filter(fn (Child $c) => $state($c) === 'out')->count();
 
             $here = $staff->filter(fn (array $s) => $s['room'] === $room && $s['status'] === 'in')->values();
             $ratio = $this->centre->ratio($room);
@@ -93,7 +109,21 @@ class FloorPlan
                 'returning' => $returning->count(),
                 'returnLabel' => $returnLabel,
                 'enrolled' => $children->count(),
+                // The seats on the map not spoken for: capacity less in and
+                // booked-not-in-yet (the client's plan, FloorPlanQaSpecTest C4).
                 'free' => max(0, $capacity - $in - $booked),
+                // Places free in the room right now: capacity less the
+                // children in it, never the bookings (QA, 16 Nov 2026: an
+                // empty Infant room read "Places free 0 of 8" because eleven
+                // were booked). The panel's "Places free" line reads this.
+                'placesFree' => max(0, $capacity - $in),
+                // Expected today, by the one rule (RoomCounts).
+                'expected' => $expectedHere,
+                // More enrolled, or more expected, than the room has places:
+                // warned, never blocked (QA, 16 Nov 2026).
+                'capacityWarning' => RoomCounts::capacityWarning($capacity, $children->count(), $expectedHere),
+                // More children in than the room is licensed for (QA B4): flagged, not blocked at the door.
+                'overCapacity' => $capacity > 0 && $in > $capacity,
                 'nyMax' => $this->centre->nyMaxGroup($room),
                 'needed' => $needed,
                 'staffIn' => $here->count(),
@@ -104,25 +134,80 @@ class FloorPlan
             ];
         }
 
+        // Places by physical space (QA retest, 16 Nov 2026): rooms that share
+        // one — UPK-4 and School Age — are checked together against the
+        // space's places, so both panels carry the same combined warning and
+        // the same places free. Ratios and staffing stay per class.
+        $capacityWarnings = RoomCounts::capacityWarnings($rooms, $this->centre);
+        foreach ($rooms as $room => $detail) {
+            $space = $this->centre->space($room);
+            if (count($space) < 2) {
+                continue;
+            }
+            $places = $this->centre->spaceCapacity($room);
+            $inSpace = array_sum(array_map(fn (string $r) => (int) ($rooms[$r]['in'] ?? 0), $space));
+            $rooms[$room]['capacityWarning'] = $capacityWarnings[$room];
+            $rooms[$room]['placesFree'] = max(0, $places - $inSpace);
+            $rooms[$room]['overCapacity'] = $places > 0 && $inSpace > $places;
+            $rooms[$room]['sharedWith'] = array_values(array_diff($space, [$room]));
+            // One capacity line for the space, on its first room's card; the
+            // other cards point to it (QA retest: each read "cap 20 · ⚠ Over-booked").
+            $rooms[$room]['space'] = [
+                'label' => $this->centre->spaceLabel($room),
+                'in' => $inSpace,
+                'capacity' => $places,
+                'first' => $space[0] === $room,
+            ];
+        }
+
+        // Who covers whom: each spare adult is offered to one short room only
+        // (QA F4 — one spare teacher used to be offered to every short room),
+        // the biggest shortfall first, and a room gives no more than it has
+        // spare. The adult to borrow is the later arrival — the room's opener
+        // stays with it.
+        $spareLeft = collect($rooms)->filter(fn (array $r) => $r['tone'] === 'spare')
+            ->map(fn (array $r) => $r['staffIn'] - $r['needed'])->all();
+        $taken = [];
+        $offers = [];
+        $order = array_keys($rooms);
+        $short = collect($rooms)->filter(fn (array $r) => $r['tone'] === 'short')
+            ->sortBy([fn ($a, $b) => ($b['needed'] - $b['staffIn']) <=> ($a['needed'] - $a['staffIn']),
+                fn ($a, $b) => array_search($a['room'], $order, true) <=> array_search($b['room'], $order, true)]);
+        foreach ($short as $detail) {
+            $room = $detail['room'];
+            foreach ($spareLeft as $from => $left) {
+                if ($left < 1 || $from === $room) {
+                    continue;
+                }
+                $pick = collect($rooms[$from]['staff'])
+                    ->filter(fn (array $s) => $s['status'] === 'in' && ! $s['moved'] && ! in_array($s['id'], $taken, true))
+                    ->sortBy('in_at')->last();
+                if ($pick) {
+                    $offers[$room] = [$rooms[$from], $pick];
+                    $taken[] = $pick['id'];
+                    $spareLeft[$from]--;
+                    break;
+                }
+            }
+        }
+
         // Tips: for a short room, an adult to borrow from a room with one
         // to spare; for School Age, what three o'clock will take.
         foreach ($rooms as $room => &$detail) {
             if ($detail['tone'] === 'short') {
                 $late = collect($detail['staff'])->first(fn (array $s) => $s['status'] === 'late');
-                $donor = collect($rooms)->first(fn (array $r) => $r['tone'] === 'spare' && $r['room'] !== $room);
-                // The adult to borrow is the later arrival — the room's opener stays with it.
-                $spareStaff = $donor ? collect($donor['staff'])->filter(fn (array $s) => $s['status'] === 'in' && ! $s['moved'])->sortBy('in_at')->last() : null;
+                [$donor, $spareStaff] = $offers[$room] ?? [null, null];
                 $parts = [];
                 $parts[] = "{$detail['in']} ".strtolower(Str::plural($this->childWord($room), $detail['in']))." need {$detail['needed']} staff at 1:{$detail['ratio']}.";
                 if ($late) {
-                    $parts[] = "{$late['name']} was due {$late['due']} and hasn't clocked in.";
+                    $parts[] = "{$late['first']} was due {$late['due']} and hasn't clocked in.";
                 }
                 if ($donor && $spareStaff) {
-                    $parts[] = "{$donor['room']} has {$donor['in']} children and {$donor['staffIn']} staff, so {$spareStaff['name']} is free to cover.";
+                    $parts[] = "{$donor['room']} has {$donor['in']} children and {$donor['staffIn']} staff, so {$spareStaff['first']} is free to cover.";
                     // The button is a real move (App\Services\FloorCover): who goes, where, and who they stand in for.
                     $detail['tip'] = [
                         'text' => implode(' ', $parts),
-                        'action' => "Move {$spareStaff['name']} to {$room}".($late ? " until {$late['name']} arrives" : ''),
+                        'action' => "Move {$spareStaff['first']} to {$room}".($late ? " until {$late['first']} arrives" : ''),
                         'move' => ['user_id' => $spareStaff['id'], 'to' => $room, 'for' => $late['id'] ?? null],
                     ];
                 } else {
@@ -137,6 +222,13 @@ class FloorPlan
                 // 18 NYCRR 418-1.8: above the group cap the room runs as two groups.
                 $detail['tip'] = ['text' => "Capacity on the plan is {$detail['capacity']}, but New York caps a group of this age at {$detail['nyMax']}. Above {$detail['nyMax']} the room needs to run as two groups.", 'action' => null];
             }
+
+            if ($detail['overCapacity']) {
+                $over = "Over capacity: {$detail['in']} in a room licensed for {$detail['capacity']}.";
+                $detail['tip'] = $detail['tip']
+                    ? ['text' => $over.' '.$detail['tip']['text']] + $detail['tip']
+                    : ['text' => $over, 'action' => null];
+            }
         }
         unset($detail);
 
@@ -144,12 +236,19 @@ class FloorPlan
             'view' => $afternoon ? 'afternoon' : 'morning',
             'at' => $at,
             'updated' => $now,
+            // The cards follow the view the tiles are drawn for (QA #8, 12 Nov
+            // 2026): they used to be read off this minute whichever tab was
+            // pressed, so the afternoon's tiles sat under the morning's cards.
+            // "In" is the rooms added up — live in the morning, as booked at
+            // three in the afternoon — and the rest say who that includes.
             'counters' => [
-                'in' => $day['in'],
+                'in' => collect($rooms)->sum('in'),
                 'returning' => $day['returning'],
                 'out' => $day['out'],
                 'expected' => $day['expected'],
-                'staff' => $staff->where('status', 'in')->count(),
+                // Clocked in and in a room (QA A3): someone clocked in with no
+                // room is not on the floor, so the card is the rooms added up.
+                'staff' => collect($rooms)->sum('staffIn'),
                 'short' => collect($rooms)->where('tone', 'short')->count(),
             ],
             'rooms' => array_values($rooms),
@@ -188,7 +287,10 @@ class FloorPlan
 
             return [
                 'id' => $user->id,
-                'name' => explode(' ', trim($user->name))[0],
+                // The name as the staff record has it (QA E1, 16 Nov 2026):
+                // "Mary Jo" is not "Mary". The tips still say first names.
+                'name' => trim(preg_replace('/\s+/', ' ', $user->name)),
+                'first' => explode(' ', trim($user->name))[0],
                 'room' => $room,
                 'home' => $user->classroom,
                 'moved' => $shift !== null && $shift->classroom && $user->classroom && $shift->classroom !== $user->classroom,

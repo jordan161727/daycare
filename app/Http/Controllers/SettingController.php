@@ -21,8 +21,23 @@ use Illuminate\Validation\Rule;
  * somebody leaves, the devices are opened when a tablet is replaced, and the
  * login history is opened when something looks wrong.
  */
-class SettingController extends Controller
+class SettingController extends Controller implements \Illuminate\Routing\Controllers\HasMiddleware
 {
+    /**
+     * The owner's alone (client test plan, roles): the route group lets any
+     * admin in, and an office admin is an admin. See User::isOwner.
+     */
+    public static function middleware(): array
+    {
+        return [
+            function (Request $request, \Closure $next) {
+                abort_unless($request->user()?->isOwner(), 403);
+
+                return $next($request);
+            },
+        ];
+    }
+
     /**
      * How the centre records attendance.
      *
@@ -142,9 +157,24 @@ class SettingController extends Controller
             // room per code, and never a code that is also somebody's PIN —
             // a PIN keyed at the gear must not move the tablet, and a code
             // keyed at the door must not clock anybody in.
-            'rooms.*.tablet_code' => ['nullable', 'digits:4', 'distinct', function ($attribute, $value, $fail) {
+            //
+            // The length is config('kiosk.room_code_length') (QA K1, 16 Nov
+            // 2026). And one room per code holds across the whole centre, not
+            // only across the rows posted: 'distinct' compares the request
+            // with itself, so a save carrying only PreK could otherwise give
+            // it the code Toddler already has (QA K4, 16 Nov 2026).
+            'rooms.*.tablet_code' => ['nullable', 'digits:'.(int) config('kiosk.room_code_length'), 'distinct', function ($attribute, $value, $fail) use ($request) {
                 if (filled($value) && User::kioskPinTaken((string) $value)) {
                     $fail('A room code cannot be the same as a staff PIN.');
+
+                    return;
+                }
+
+                $posted = collect($request->input('rooms', []))->pluck('room')->filter()->all();
+                $holder = filled($value) ? app(\App\Services\CentreSettings::class)->roomForTabletCode((string) $value) : null;
+
+                if ($holder !== null && ! in_array($holder, $posted, true)) {
+                    $fail('That code is already '.$holder.'’s. Each room needs its own code.');
                 }
             }],
             'centre.centre_opens' => ['required', 'date_format:H:i'],
@@ -160,10 +190,21 @@ class SettingController extends Controller
             'rooms.*.closes_at.after' => 'A room has to close after it opens.',
         ]);
 
+        // Room tablet codes have their own table since QA K4 (16 Nov 2026),
+        // with a unique index on the code behind the check above. The posted
+        // rooms' codes are cleared first so two rooms can swap codes in one
+        // save without the index seeing the same code twice in between.
+        \Illuminate\Support\Facades\DB::transaction(function () use ($validated) {
+            \App\Models\RoomTabletCode::whereIn('room', collect($validated['rooms'])->pluck('room'))->delete();
+
+            foreach ($validated['rooms'] as $row) {
+                \App\Models\RoomTabletCode::put($row['room'], $row['tablet_code'] ?? null);
+            }
+        });
+
         foreach ($validated['rooms'] as $row) {
             Setting::put("rooms.{$row['room']}.ratio", $row['ratio']);
             Setting::put("rooms.{$row['room']}.capacity", $row['capacity']);
-            Setting::put("rooms.{$row['room']}.tablet_code", $row['tablet_code'] ?? '');
             if ($row['opens_at'] && $row['closes_at']) {
                 \App\Models\RoomSchedule::updateOrCreate(['room' => $row['room']], ['opens_at' => $row['opens_at'], 'closes_at' => $row['closes_at']]);
             }

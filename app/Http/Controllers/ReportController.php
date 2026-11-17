@@ -292,7 +292,7 @@ class ReportController extends Controller
         $dates = collect(range(0, 4))->map(fn ($offset) => $startOfWeek->copy()->addDays($offset));
 
         $classrooms = ClassroomAssignment::inOrder($user->isAdmin()
-            ? Child::visibleTo($user)->where('status', 'Active')->distinct()->pluck('classroom')
+            ? Child::visibleTo($user)->onRollDuring($startOfWeek->toDateString(), $dates->last()->toDateString())->distinct()->pluck('classroom')
             : $user->assignedClassrooms());
 
         $selectedClassroom = trim((string) $request->input('classroom'));
@@ -301,13 +301,22 @@ class ReportController extends Controller
             $selectedClassroom = $classrooms->first();
         }
 
+        // Whoever was on the roll that week, not only who is Active today: a
+        // child whose last day was the Friday attended the week being printed.
         $children = Child::visibleTo($user)
-            ->where('status', 'Active')
-            ->when($selectedClassroom !== '', fn ($query) => $query->where('classroom', $selectedClassroom))
+            ->onRollDuring($startOfWeek->toDateString(), $dates->last()->toDateString())
             ->orderByRoom()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
+
+        // The rooms as they were that week, not where a child has moved
+        // since (QA C8) — and the room filter reads the same answer.
+        \App\Services\RoomHistory::apply($children, $dates->last());
+
+        if ($selectedClassroom !== '') {
+            $children = $children->filter(fn (Child $child) => $child->classroom === $selectedClassroom)->values();
+        }
 
         $presence = $this->presenceMap($children, $dates);
 

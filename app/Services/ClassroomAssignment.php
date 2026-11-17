@@ -24,15 +24,20 @@ class ClassroomAssignment
      *
      * Every band is closed at the top: the child is in the last room whose
      * starting age they have reached, which puts the boundary age in the higher
-     * band. On the day they turn 18 months they are Transition, not Infant.
+     * band. On the day they turn 19 months they are Transition, not Infant.
+     *
+     * The client's ranges (QA, 16 Nov 2026): Infant 6 wk–18 mo, Transition
+     * 19–24 mo, Toddler 24–36 mo, PreK 3–4 yrs, UPK-4 4–5 yrs, School Age
+     * 6–12 yrs. "18 mo" is the eighteenth month, so Transition starts at 19;
+     * a five-year-old is UPK-4 until their sixth birthday.
      */
     public const BANDS = [
         ['room' => 'Infant', 'weeks' => 6],
-        ['room' => 'Transition', 'months' => 18],
+        ['room' => 'Transition', 'months' => 19],
         ['room' => 'Toddler', 'months' => 24],
         ['room' => 'PreK', 'months' => 36],
         ['room' => 'UPK-4', 'months' => 48],
-        ['room' => 'School Age', 'months' => 60],
+        ['room' => 'School Age', 'months' => 72],
     ];
 
     /**
@@ -176,6 +181,110 @@ class ClassroomAssignment
         return $room;
     }
 
+    /**
+     * A room's ages as the bands assign them — "6 wk–18 mo", "5–12 yrs" —
+     * for the ⚠ tooltips, so the reason given is the rule actually checked.
+     * The bands follow the client's ranges since 16 Nov 2026, so the label
+     * is the client's own wording (config daycare.room_ages) when there is
+     * one — "6 wk–18 mo", "4–5 yrs" — and worked out from the bands if not.
+     */
+    public static function ageLabel(?string $room): ?string
+    {
+        $rank = self::rankOf($room);
+
+        if ($rank === null) {
+            return null;
+        }
+
+        if (filled($label = config("daycare.room_ages.$room"))) {
+            return $label;
+        }
+
+        $say = function (array $band): array {
+            if (isset($band['weeks'])) {
+                return [$band['weeks'], 'wk'];
+            }
+
+            return $band['months'] >= 24 && $band['months'] % 12 === 0
+                ? [intdiv($band['months'], 12), 'yrs']
+                : [$band['months'], 'mo'];
+        };
+
+        [$from, $fromUnit] = $say(self::BANDS[$rank]);
+        [$to, $toUnit] = isset(self::BANDS[$rank + 1])
+            ? $say(self::BANDS[$rank + 1])
+            : [self::AGES_OUT_AT_YEARS, 'yrs'];
+
+        // "2–3 yrs" when both ends are in years; "6 wk–18 mo" when they differ.
+        if ($fromUnit === 'mo' && $toUnit === 'yrs') {
+            [$to, $toUnit] = [$to * 12, 'mo'];
+        }
+
+        return $fromUnit === $toUnit ? "{$from}–{$to} {$toUnit}" : "{$from} {$fromUnit}–{$to} {$toUnit}";
+    }
+
+    /**
+     * Whether a child's age fits the room they are in — the one check every
+     * ⚠ about age against room is drawn from (QA, 16 Nov 2026: a 5-year-old
+     * in Infant with no mark, a 12-year-old past School Age with no mark,
+     * and a 5-month-old in Infant flagged although her age fits — her room
+     * had been set by hand to the room her age gives, and "the age has
+     * caught up with the override" was being drawn as the same ⚠).
+     *
+     * Returns one of:
+     *
+     *   ok       the room is the room the age bands give, whether or not a
+     *            director also set it by hand. No mark.
+     *   placed   the director set a different room on purpose, and it is
+     *            one band ahead of the age (moved up early — what
+     *            overrides are for). A soft note (✎), not a warning.
+     *   mismatch the age does not fit the room: no age band covers the
+     *            child at all (under 6 weeks, or 12 and over — no room is
+     *            licensed for them, override or not); or the room is behind
+     *            the age (held back, or an override the age has passed); or
+     *            more than one band ahead; or a room nobody set by hand
+     *            that the age bands disagree with. ⚠.
+     *   unknown  no date of birth, or no room: nothing to check against.
+     *
+     * @return array{state: string, text: ?string, automatic: ?string}
+     */
+    public static function fit(Child $child, ?Carbon $asOf = null): array
+    {
+        $room = $child->classroom;
+        $dob = $child->birthDate();
+
+        if (blank($room) || ! $dob) {
+            return ['state' => 'unknown', 'text' => null, 'automatic' => null];
+        }
+
+        $automatic = $child->automaticClassroom($asOf);
+        $age = $child->ageInWords($asOf);
+
+        if ($automatic === null) {
+            $asOfDay = ($asOf ? $asOf->copy() : Carbon::today())->startOfDay();
+            $tooOld = $asOfDay->gte($dob->copy()->startOfDay()->addYearsNoOverflow(self::AGES_OUT_AT_YEARS));
+
+            return ['state' => 'mismatch', 'automatic' => null, 'text' => $tooOld
+                ? "{$age} — over the School Age limit: {$room} is for ".self::ageLabel($room).'; no room takes '.self::AGES_OUT_AT_YEARS.' and over.'
+                : "{$age} — under 6 weeks: {$room} is for ".self::ageLabel($room).'; no room takes this age yet.'];
+        }
+
+        if ($automatic === $room) {
+            return ['state' => 'ok', 'text' => null, 'automatic' => $automatic];
+        }
+
+        $gap = (self::rankOf($room) ?? -99) - (self::rankOf($automatic) ?? 0);
+        $byHand = $child->hasClassroomOverrideOn($asOf) && $child->classroom_override === $room;
+        $ages = self::ageLabel($room);
+
+        if ($byHand && $gap === 1) {
+            return ['state' => 'placed', 'automatic' => $automatic, 'text' => "{$age} — moved up early to {$room} by hand; {$automatic} by age."];
+        }
+
+        // "5y 1m — Infant is for 6 wk–18 mo; by age, School Age."
+        return ['state' => 'mismatch', 'automatic' => $automatic, 'text' => "{$age} — {$room} is for {$ages}; by age, {$automatic}".($byHand ? ' (room set by hand).' : '.')];
+    }
+
     /** Where a room sits in the age order, or null if it is not one of ours. */
     public static function rankOf(?string $room): ?int
     {
@@ -214,10 +323,27 @@ class ClassroomAssignment
             return false;
         }
 
+        $from = $child->classroom;
+        $planned = $child->hasClassroomOverrideOn($asOf);
+
         $child->classroom = $room;
         // The value is already the computed one; going through the saving hook
         // again would only compute it a second time.
         $child->saveQuietly();
+
+        // The move goes in the enrollment history the same as one made by
+        // hand (QA C3/C5): a birthday crossing, or a dated move landing on its
+        // day. Nobody is signed in to credit — a page load that triggers the
+        // catch-up is not the person who moved the child — so it is unsigned.
+        if (filled($from) && filled($room)) {
+            $child->statusChanges()->create([
+                'event' => 'room',
+                'from_status' => $from.' → '.$room,
+                'to_status' => $child->status,
+                'note' => $planned ? 'Planned move, set by hand' : 'By age',
+                'changed_by' => null,
+            ]);
+        }
 
         return true;
     }

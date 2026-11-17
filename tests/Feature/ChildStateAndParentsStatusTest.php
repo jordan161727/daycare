@@ -47,7 +47,7 @@ class ChildStateAndParentsStatusTest extends TestCase
     public function test_add_saves_both_and_refuses_a_state_not_on_the_list(): void
     {
         $this->actingAs($this->admin)->post(route('children.store'), [
-            'first_name' => 'Sam', 'last_name' => 'Stateside', 'status' => 'Active',
+            'first_name' => 'Sam', 'last_name' => 'Stateside', 'status' => 'Active', 'birth_date' => '2023-05-01', 'mother_name' => 'Ready Mother', 'emergency_contact' => 'Ready Mother',
             'city' => 'Albany', 'state' => 'NY', 'zip' => '12207', 'parents_status' => 'Separated',
         ])->assertSessionHasNoErrors();
 

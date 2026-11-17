@@ -6,7 +6,7 @@
         <label class="block"><span class="mb-2 block text-sm font-semibold">Email <span class="text-rose-500">*</span></span><input type="email" name="email" autocomplete="off" value="{{ old('email', $teacher->email) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800" required><x-input-error :messages="$errors->get('email')" /></label>
         <label class="block sm:col-span-2"><span class="mb-2 block text-sm font-semibold">Assigned classrooms</span><select name="classrooms[]" multiple class="h-40 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><option value="">No classroom assigned</option>@foreach($classrooms as $classroom)<option value="{{ $classroom }}" @selected(in_array($classroom, old('classrooms', $teacher->assignedClassrooms()), true))>{{ $classroom }}</option>@endforeach</select><p class="mt-2 text-xs text-slate-500">Select one or more classrooms for this teacher.</p><x-input-error :messages="$errors->get('classrooms')" /></label>
         @if($teacher->exists)
-        <label class="block"><span class="mb-2 block text-sm font-semibold">New password</span><input type="password" name="password" autocomplete="new-password" minlength="12" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><span class="mt-1 block text-xs text-slate-500">At least 12 characters. Leave blank to keep the current one.</span><x-input-error :messages="$errors->get('password')" /></label>
+        <label class="block"><span class="mb-2 block text-sm font-semibold">New password</span><input type="password" name="password" autocomplete="new-password" minlength="12" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><span class="mt-1 block text-xs text-slate-500">At least 12 characters, with letters and numbers. Leave blank to keep the current one.</span><x-input-error :messages="$errors->get('password')" /></label>
         <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password</span><input type="password" name="password_confirmation" autocomplete="new-password" minlength="12" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password_confirmation')" /></label>
         @else
         {{-- How the first password gets set. Emailing a generated one is the
@@ -30,7 +30,7 @@
 @endif
 
             <div class="grid gap-5 sm:grid-cols-2" x-show="! invite">
-                <label class="block"><span class="mb-2 block text-sm font-semibold">Password <span class="text-rose-500">*</span></span><input type="password" name="password" autocomplete="new-password" minlength="12" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><span class="mt-1 block text-xs text-slate-500">At least 12 characters.</span><x-input-error :messages="$errors->get('password')" /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold">Password <span class="text-rose-500">*</span></span><input type="password" name="password" autocomplete="new-password" minlength="12" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><span class="mt-1 block text-xs text-slate-500">At least 12 characters, with letters and numbers.</span><x-input-error :messages="$errors->get('password')" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold">Confirm password <span class="text-rose-500">*</span></span><input type="password" name="password_confirmation" autocomplete="new-password" minlength="12" :required="! invite" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800"><x-input-error :messages="$errors->get('password_confirmation')" /></label>
             </div>
         </div>
@@ -50,7 +50,7 @@
                 <select name="employment" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                     <option value="">Not set</option>
                     @foreach(\App\Models\StaffRule::EMPLOYMENT as $type)
-                        <option value="{{ $type }}" @selected(old('employment', $teacher->employment) === $type)>{{ str_replace('_', ' ', $type) }}</option>
+                        <option value="{{ $type }}" @selected(old('employment', \App\Models\StaffRule::employmentType($teacher->employment)) === $type)>{{ \App\Models\StaffRule::employmentLabel($type) }}</option>
                     @endforeach
                 </select>
                 <p class="mt-1 text-xs text-slate-500">Sets default weekly hours. Substitutes are only scheduled to cover a ratio gap.</p>
@@ -63,7 +63,7 @@
                 <select name="job_role" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                     <option value="">Not set</option>
                     @foreach(\App\Models\User::JOB_ROLES as $option)
-                        <option value="{{ $option }}" @selected(old('job_role', $teacher->job_role) === $option)>{{ $option }}</option>
+                        <option value="{{ $option }}" @selected(old('job_role', $teacher->jobRoleOrLegacy()) === $option)>{{ $option }}</option>
                     @endforeach
                 </select>
                 <p class="mt-1 text-xs text-slate-500">Shown on the staff list and the timesheets. Separate from the room below.</p>
@@ -128,7 +128,7 @@
                 <input name="aspire_id" value="{{ old('aspire_id', $teacher->aspire_id) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                 <x-input-error :messages="$errors->get('aspire_id')" /></label>
 
-            @if(auth()->user()->canSeePay())
+            @if(auth()->user()->can('view-pay'))
             <label class="block"><span class="mb-2 block text-sm font-semibold">Pay rate ($ / hour)</span>
                 <input type="number" step="0.01" min="0" name="pay_rate" value="{{ old('pay_rate', $teacher->pay_rate) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                 <x-input-error :messages="$errors->get('pay_rate')" /></label>
@@ -138,7 +138,7 @@
                 <input type="number" step="0.1" min="0" max="5" name="evaluation_score" value="{{ old('evaluation_score', $teacher->evaluation_score) }}" class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-slate-800">
                 <x-input-error :messages="$errors->get('evaluation_score')" /></label>
 
-            @if(auth()->user()->canSeePay())
+            @if(auth()->user()->can('view-pay'))
             <label class="flex items-center gap-3 sm:col-span-2 lg:col-span-3">
                 <input type="hidden" name="direct_deposit" value="0">
                 <input type="checkbox" name="direct_deposit" value="1" @checked(old('direct_deposit', $teacher->direct_deposit)) class="h-4 w-4 rounded border-slate-300">

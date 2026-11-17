@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\RoomSchedule;
+use App\Models\RoomTabletCode;
 use App\Models\Setting;
 use App\Models\StaffDevice;
 
@@ -23,8 +24,8 @@ use App\Models\StaffDevice;
 class CentreSettings
 {
     public const KEYS = [
-        'centre_opens' => ['label' => 'Centre opens', 'default' => '07:00'],
-        'centre_closes' => ['label' => 'Centre closes', 'default' => '18:00'],
+        'centre_opens' => ['label' => 'Center opens', 'default' => '07:00'],
+        'centre_closes' => ['label' => 'Center closes', 'default' => '18:00'],
         'earliest_start' => ['label' => 'Earliest start for everyone else', 'default' => '07:30'],
         'early_dropoff_room' => ['label' => 'Early drop-off room', 'default' => 'Infant'],
         'school_age_leaves' => ['label' => 'School Age leaves for school', 'default' => '08:30'],
@@ -50,20 +51,61 @@ class CentreSettings
 
     public function ages(string $room): string
     {
+        // The client's wording, which ClassroomAssignment::BANDS assigns by.
         return (string) config("daycare.room_ages.$room", '');
+    }
+
+    /**
+     * The room whose physical space this room uses, or null for a room of
+     * its own (QA retest, 16 Nov 2026: UPK-4 and School Age are one room of
+     * 20, and were each warned as if they had 20 places to themselves).
+     */
+    public function sharesWith(string $room): ?string
+    {
+        $host = Setting::get("rooms.$room.shares_with", config("daycare.shared_rooms.$room"));
+
+        return filled($host) && $host !== $room && in_array($host, ClassroomAssignment::rooms(), true)
+            ? (string) $host
+            : null;
+    }
+
+    /** Every room in $room's space, in room order, itself included. */
+    public function space(string $room): array
+    {
+        $host = $this->sharesWith($room) ?? $room;
+
+        return array_values(array_filter(
+            ClassroomAssignment::rooms(),
+            fn (string $r) => $r === $host || $this->sharesWith($r) === $host,
+        ));
+    }
+
+    /** The places in $room's space: its host room's capacity. */
+    public function spaceCapacity(string $room): int
+    {
+        return $this->capacity($this->sharesWith($room) ?? $room);
+    }
+
+    /** "UPK-4 + School Age (shared room)", or the room's own name. */
+    public function spaceLabel(string $room): string
+    {
+        $rooms = $this->space($room);
+
+        return count($rooms) > 1 ? implode(' + ', $rooms).' (shared room)' : $room;
     }
 
     /** A centre-wide value by key — see KEYS. */
     /**
      * The four digits that tell a room tablet which room it is in.
      *
-     * Plain in Settings rather than hashed: it is read back on the Rooms &
-     * hours page for the director to hand to whoever moves a tablet, and it
-     * chooses a room, nothing more — see RoomTabletController::setup.
+     * Plain rather than hashed: it is read back on the Rooms & hours page for
+     * the director to hand to whoever moves a tablet, and it chooses a room,
+     * nothing more — see RoomTabletController::setup. In room_tablet_codes
+     * since QA K4 (16 Nov 2026), where each code is unique.
      */
     public function tabletCode(string $room): ?string
     {
-        $code = Setting::get("rooms.$room.tablet_code", null);
+        $code = RoomTabletCode::codes()[$room] ?? null;
 
         return blank($code) ? null : (string) $code;
     }
@@ -71,8 +113,8 @@ class CentreSettings
     /** The room a code names, or null for a code nobody set. */
     public function roomForTabletCode(string $code): ?string
     {
-        foreach (ClassroomAssignment::rooms() as $room) {
-            if ($this->tabletCode($room) !== null && hash_equals($this->tabletCode($room), $code)) {
+        foreach (RoomTabletCode::codes() as $room => $held) {
+            if (in_array($room, ClassroomAssignment::rooms(), true) && hash_equals((string) $held, $code)) {
                 return $room;
             }
         }
@@ -112,16 +154,23 @@ class CentreSettings
     public function rooms(): array
     {
         $hours = RoomSchedule::byRoom();
+        // Today's enrolled and expected, room by room, by the one rule
+        // (RoomCounts) — so a room booked past its places is said here too.
+        $today = RoomCounts::byRoom(now(config('app.timezone'))->toDateString());
+        // Checked by physical space: rooms that share one are added together.
+        $capacityWarnings = RoomCounts::capacityWarnings($today, $this);
         $rows = [];
 
         foreach (ClassroomAssignment::rooms() as $room) {
             $capacity = $this->capacity($room);
             $max = $this->nyMaxGroup($room);
             $schedule = $hours[$room] ?? null;
+            $overBooked = $capacityWarnings[$room] ?? null;
             $check = match (true) {
+                $overBooked !== null => ['tone' => 'warn', 'text' => $overBooked],
                 $max > 0 && $capacity > $max => ['tone' => 'warn', 'text' => "Above NY's group of {$max} — runs as two groups"],
-                $schedule && $this->minutes($schedule->closes_at) > $this->minutes($this->get('centre_closes')) => ['tone' => 'warn', 'text' => 'Closes after the centre does'],
-                $schedule && $this->minutes($schedule->opens_at) < $this->minutes($this->get('centre_opens')) => ['tone' => 'warn', 'text' => 'Opens before the centre does'],
+                $schedule && $this->minutes($schedule->closes_at) > $this->minutes($this->get('centre_closes')) => ['tone' => 'warn', 'text' => 'Closes after the center does'],
+                $schedule && $this->minutes($schedule->opens_at) < $this->minutes($this->get('centre_opens')) => ['tone' => 'warn', 'text' => 'Opens before the center does'],
                 default => ['tone' => 'ok', 'text' => 'OK'],
             };
 
@@ -130,10 +179,14 @@ class CentreSettings
                 'ages' => $this->ages($room),
                 'ratio' => $this->ratio($room),
                 'capacity' => $capacity,
+                'enrolled' => $today[$room]['enrolled'] ?? 0,
+                'expected' => $today[$room]['expected'] ?? 0,
                 'ny_max' => $max,
                 'opens_at' => $schedule ? substr((string) $schedule->opens_at, 0, 5) : null,
                 'closes_at' => $schedule ? substr((string) $schedule->closes_at, 0, 5) : null,
                 'check' => $check,
+                // The room whose space this one uses, if any (config daycare.shared_rooms).
+                'shares_with' => $this->sharesWith($room),
                 // The room tablet's code and what is paired to it (HANDOFF §11).
                 'tablet_code' => $this->tabletCode($room),
                 'tablets' => $this->tabletsLine($room),
@@ -155,20 +208,25 @@ class CentreSettings
         $closes = $this->minutes($this->get('centre_closes'));
 
         if ($this->minutes($this->get('earliest_start')) < $opens) {
-            $out[] = 'The earliest start for everyone else is before the centre opens — only staff who may open the building can start then.';
+            $out[] = 'The earliest start for everyone else is before the center opens — only staff who may open the building can start then.';
         }
         if ($this->minutes($this->get('school_age_returns')) <= $this->minutes($this->get('school_age_leaves'))) {
             $out[] = 'School Age comes back before it leaves — check the two times.';
         }
         if ((int) $this->get('longest_shift_hours') * 60 > $closes - $opens) {
-            $out[] = 'The longest shift is longer than the centre is open.';
+            $out[] = 'The longest shift is longer than the center is open.';
         }
         if ((int) $this->get('max_week_hours') < (int) $this->get('longest_shift_hours')) {
             $out[] = 'The most hours in a week is less than one longest shift.';
         }
         foreach ($this->rooms() as $row) {
             if ($row['check']['tone'] === 'warn') {
-                $out[] = "{$row['room']}: {$row['check']['text']}.";
+                $text = $row['check']['text'];
+                // A shared room's warning already names the space; said once.
+                $line = str_contains($text, '(shared room)') ? "{$text}." : "{$row['room']}: {$text}.";
+                if (! in_array($line, $out, true)) {
+                    $out[] = $line;
+                }
             }
         }
         if (! in_array($this->get('early_dropoff_room'), ClassroomAssignment::rooms(), true)) {

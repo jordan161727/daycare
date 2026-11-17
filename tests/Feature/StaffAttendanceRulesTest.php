@@ -43,7 +43,7 @@ class StaffAttendanceRulesTest extends TestCase
 
         $this->travelTo(Carbon::parse(self::TODAY.' 10:00:00'));
 
-        $this->director = User::factory()->create(['role' => 'admin', 'job_role' => 'Director', 'name' => 'Ray Kader', 'must_change_password' => false]);
+        $this->director = User::factory()->create(['role' => 'admin', 'job_role' => 'Director', 'can_view_pay' => true, 'name' => 'Ray Kader', 'must_change_password' => false]);
         $this->office = User::factory()->create(['role' => 'admin', 'job_role' => 'Administrator', 'name' => 'Office Admin', 'must_change_password' => false]);
         $this->lana = User::factory()->create([
             'role' => 'teacher', 'name' => 'Lana', 'classroom' => 'Transition', 'classrooms' => ['Transition'],
@@ -345,7 +345,8 @@ class StaffAttendanceRulesTest extends TestCase
         $this->assertStringNotContainsString('21.50', $html);
         $this->assertStringNotContainsString('name="pay_rate"', $html);
         $this->assertStringNotContainsString('name="direct_deposit"', $html);
-        $this->assertStringContainsString('Only Ray Kader can view pay.', $html);
+        $this->assertStringContainsString('Only people with pay access can view pay.', $html);
+        $this->assertStringContainsString('Pay access: Ray Kader', $html);
 
         $row = $this->actingAs($this->office)->get(route('staff.timesheets', ['view' => 'hist']))->viewData('rows')->firstWhere('id', $this->lana->id);
         $this->assertNull($row['rate']);

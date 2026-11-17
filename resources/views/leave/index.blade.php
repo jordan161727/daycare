@@ -109,7 +109,7 @@
             </button>
 
             <p class="text-[11px] text-slate-500 dark:text-slate-400">
-                Weekends and days the centre is closed are not counted, so a request
+                Weekends and days the center is closed are not counted, so a request
                 over a long weekend costs you the working days only.
             </p>
         </form>

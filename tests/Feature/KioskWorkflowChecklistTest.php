@@ -15,6 +15,7 @@ use App\Services\StaffPresence;
 use App\Services\TimeClock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\SetsUpRoomTablets;
 use Tests\TestCase;
 
 /**
@@ -30,7 +31,7 @@ use Tests\TestCase;
  */
 class KioskWorkflowChecklistTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, SetsUpRoomTablets;
 
     private User $admin;
 
@@ -59,7 +60,7 @@ class KioskWorkflowChecklistTest extends TestCase
 
         /* ---- 2. Set up once ---- */
 
-        foreach (['Lana Ortiz' => ['3333', 'PreK'], 'Sultana Begum' => ['4444', 'Toddler'], 'Evana Roy' => ['5555', 'Infant'], 'Pat Reyes' => ['6666', 'Infant']] as $name => [$pin, $room]) {
+        foreach (['Lana Ortiz' => ['333333', 'PreK'], 'Sultana Begum' => ['444444', 'Toddler'], 'Evana Roy' => ['555555', 'Infant'], 'Pat Reyes' => ['666666', 'Infant']] as $name => [$pin, $room]) {
             $this->t[$name] = User::factory()->create(['role' => 'teacher', 'name' => $name, 'classroom' => $room]);
             $this->t[$name]->setKioskPin($pin);
         }
@@ -86,34 +87,34 @@ class KioskWorkflowChecklistTest extends TestCase
         $this->asDoor();
         $lana = $this->t['Lana Ortiz'];
 
-        $this->doorPunch('3333', 'clock_in', 'PreK')->assertJsonPath('room', 'PreK');
+        $this->doorPunch('333333', 'clock_in', 'PreK')->assertJsonPath('room', 'PreK');
         $this->assertSame(1, TimePunch::where('user_id', $lana->id)->where('type', TimePunch::IN)->count());
         $this->assertSame('PreK', $presence->openCheckin($lana)?->classroom);
         $this->tick('3', 'Clock In → PreK: the punch and the room check-in made together');
 
         $this->travelTo(now()->setTime(11, 0));
-        $this->doorPunch('3333', 'break_start')->assertJsonPath('warning', 'PreK now has 0 teachers for 8 children (needs 2). The office has been told.');
+        $this->doorPunch('333333', 'break_start')->assertJsonPath('warning', 'PreK now has 0 teachers for 8 children (needs 2). The office has been told.');
         $this->assertTrue(KioskEvent::open()->where('text', 'Ratio: PreK short after Lana Ortiz left')->exists());
         $this->tick('3', 'Start Break → PreK short, amber warning, red flag');
 
         $this->travelTo(now()->setTime(11, 15));
-        $actions = array_column($this->doorIdentify('3333')->json('staff.actions'), 'action');
+        $actions = array_column($this->doorIdentify('333333')->json('staff.actions'), 'action');
         $this->assertSame(['break_end'], $actions);
         $this->tick('3', 'on break: only End Break, no Clock Out');
 
-        $this->doorPunch('3333', 'break_end');
+        $this->doorPunch('333333', 'break_end');
         $this->assertSame('PreK', $presence->status($lana)['room']);
         $this->tick('3', 'End Break → back in PreK');
 
         $this->travelTo(now()->setTime(11, 30));
-        $this->doorPunch('3333', 'break_start');
+        $this->doorPunch('333333', 'break_start');
         $this->travelTo(now()->setTime(11, 40));
-        $this->doorPunch('3333', 'break_end', 'Toddler');
+        $this->doorPunch('333333', 'break_end', 'Toddler');
         $this->assertSame('Toddler', $presence->status($lana)['room']);
         $this->tick('3', '"Going somewhere else?" → break ended in Toddler instead');
 
         $this->travelTo(now()->setTime(12, 30));
-        $this->doorPunch('3333', 'clock_out');
+        $this->doorPunch('333333', 'clock_out');
         $this->assertSame(StaffPresence::OFF, $presence->status($lana)['state']);
         // 10:30–12:30 with breaks of 15 and 10 minutes. A rest break of up
         // to 20 minutes is paid (FLSA; daycare.timesheet.clock.paid_break_cap),
@@ -127,40 +128,40 @@ class KioskWorkflowChecklistTest extends TestCase
         /* ---- 4. Room tablet ---- */
 
         $this->asTablet();
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '4444'])->assertJson(['status' => 'done'])->assertJsonPath('done.title', 'Clocked in for you');
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '444444'])->assertJson(['status' => 'done'])->assertJsonPath('done.title', 'Clocked in for you');
         $this->assertTrue(KioskEvent::open()->where('text', 'Sultana Begum skipped the front door — office to confirm start time')->exists());
         $this->assertDatabaseHas('time_punches', ['user_id' => $this->t['Sultana Begum']->id, 'type' => TimePunch::IN, 'source' => TimePunch::SOURCE_ROOM_TABLET]);
         $this->tick('4', 'Sultana not clocked in → clocked in for her at the tablet, office flagged');
 
         $this->asDoor();
-        $this->doorPunch('5555', 'clock_in', 'Infant');
-        $this->doorPunch('5555', 'break_start');
+        $this->doorPunch('555555', 'clock_in', 'Infant');
+        $this->doorPunch('555555', 'break_start');
         $this->asTablet();
         $this->travel(5)->minutes();
-        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '5555'])->assertJsonPath('staff.on_break', true);
+        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '555555'])->assertJsonPath('staff.on_break', true);
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $screen->json('ticket'), 'action' => 'check_in'])->assertJsonPath('done.title', 'You’re in PreK');
         $this->assertSame(TimeClock::WORKING, $clock->state($this->t['Evana Roy'], '2026-10-15'));
         $this->tick('4', 'Evana on break → tapping PreK at the tablet ends the break');
 
         $before = TimePunch::where('user_id', $this->t['Evana Roy']->id)->count();
-        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '5555']);
+        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '555555']);
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $screen->json('ticket'), 'action' => 'check_in', 'room' => 'Toddler'])->assertJson(['status' => 'ok']);
         $this->assertSame($before, TimePunch::where('user_id', $this->t['Evana Roy']->id)->count());
         $this->assertSame('Toddler', $presence->status($this->t['Evana Roy'])['room']);
         $this->tick('4', 'moving Evana to Toddler → a room move, no new payroll punch');
 
-        $ticket = fn () => $this->postJson(route('room.kiosk.identify'), ['pin' => '5555'])->json('ticket');
+        $ticket = fn () => $this->postJson(route('room.kiosk.identify'), ['pin' => '555555'])->json('ticket');
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket(), 'action' => 'clock_out'])->assertJson(['status' => 'stale']);
         $this->get(route('room.kiosk'))->assertSee('Clock out at the front door.');
         $this->tick('4', 'no clock-out at the tablet: payroll stays at the door');
 
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2105'])->assertJson(['status' => 'ok', 'room' => 'UPK-4', 'was' => 'PreK']);
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2104'])->assertJson(['status' => 'ok', 'room' => 'PreK']);
+        $this->keyRoomCode('2105')->assertJson(['status' => 'ok', 'room' => 'UPK-4', 'was' => 'PreK']);
+        $this->keyRoomCode('2104')->assertJson(['status' => 'ok', 'room' => 'PreK']);
         $this->tick('4', 'gear + 2105 → the tablet becomes UPK-4 (and back with 2104)');
 
         /* ---- 7. Check you understand (before closing empties the rooms) ---- */
 
-        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '5555']);
+        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '555555']);
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $screen->json('ticket'), 'action' => 'break_start'])->assertJson(['status' => 'ok']);
         $this->assertFalse($presence->teachersIn('Toddler')->contains('user_id', $this->t['Evana Roy']->id));
         $this->tick('7', 'a teacher on break counts in no room');

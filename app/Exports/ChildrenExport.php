@@ -36,7 +36,7 @@ class ChildrenExport implements WithMultipleSheets
      * @param  string|null  $nameFormat  how names read, taken from the reader
      *                                   once rather than asked per row
      */
-    public function __construct(private Collection $children, private ?string $nameFormat = null) {}
+    public function __construct(private Collection $children, private ?string $nameFormat = null, private bool $full = true) {}
 
     /** The collection both sheets are built from, for tests and callers. */
     public function collection(): Collection
@@ -47,8 +47,8 @@ class ChildrenExport implements WithMultipleSheets
     public function sheets(): array
     {
         return [
-            new ChildrenSheet($this->children, $this->nameFormat),
-            new PeopleSheet($this->children, $this->nameFormat),
+            new ChildrenSheet($this->children, $this->nameFormat, $this->full),
+            new PeopleSheet($this->children, $this->nameFormat, $this->full),
         ];
     }
 }

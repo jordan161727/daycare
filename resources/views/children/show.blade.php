@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', $child->first_name.' '.$child->last_name)
+@section('title', $child->displayName())
 @section('content')
 {{-- The child record — Phase 2.2 and 2.3 of docs/work.md, as
      ChildProfile.dc.html draws it: the header with the status and how far
@@ -14,32 +14,41 @@
 <x-kids-background />
 
 @php($isAdmin = auth()->user()->isAdmin())
+@php($recordVersion = \App\Services\RecordLock::version($child))
 @php($digits = fn (?string $number) => preg_replace('/[^0-9+]/', '', (string) $number))
 @php($roomColours = ['Infant' => '#8cc4b2', 'Transition' => '#e0b577', 'Toddler' => '#b3a3dc', 'PreK' => '#9dc585', 'UPK-4' => '#e8a0b8', 'School Age' => '#92b4df'])
 @php($missing = $child->missingItems())
 @php($pct = $child->completeness())
 @php($alerts = $child->alertList())
 @php($people = $child->personLinks->sortBy([fn ($a, $b) => ($a->priority ?? 99) <=> ($b->priority ?? 99), fn ($a, $b) => ($a->is_guardian ? 0 : 1) <=> ($b->is_guardian ? 0 : 1)])->values())
-@php($guardianCount = $people->where('is_guardian', true)->count())
-@php($emergencyCount = $people->where('is_emergency', true)->count())
+{{-- A restricted person is never counted as the guardian or the number to ring. --}}
+@php($guardianCount = $people->filter(fn ($link) => $link->is_guardian && blank($link->restriction))->count())
+@php($emergencyCount = $people->filter(fn ($link) => $link->is_emergency && blank($link->restriction))->count())
 @php($tone = ['Active' => 'ok', 'Pending' => 'info', 'Inactive' => 'mut', 'Archived' => 'mut'][$child->status] ?? 'mut')
 @php($roomSlug = strtolower(preg_replace('/[^a-z0-9]+/i', '-', $child->classroom ?? '')))
 @php($hours = $child->hoursPerWeek())
 @php($medical = $child->document('medical_statement'))
-@php($roomEvents = $statusChanges->filter(fn ($c) => in_array($c->event, ['room', 'started', 'reenrolled'], true) || ($c->event === 'status' && $c->from_status === null)))
+{{-- Moves only ("From → To"): a move dated ahead, or back to automatic with no change, is not a room the child was in (QA C6). --}}
+@php($roomEvents = $statusChanges->filter(fn ($c) => ($c->event === 'room' && str_contains((string) $c->from_status, '→')) || in_array($c->event, ['started', 'reenrolled'], true) || ($c->event === 'status' && $c->from_status === null)))
+@php($firstRoom = optional($roomEvents->where('event', 'room')->sortBy('created_at')->first(), fn ($c) => trim(\Illuminate\Support\Str::before($c->from_status, '→'))) ?? $child->classroom)
+@php($plannedRoom = $child->classroom_override && $child->classroom_override_from && $child->classroom_override_from->isAfter(today()) ? $child->classroom_override.' from '.$child->classroom_override_from->format('M j, Y').' (planned)' : null)
+{{-- Notes sort by when they were written, to the minute, so a door comment and an office note on the same day keep their order (QA F5);
+     a door comment names its author's own role, so a director's is not labelled a teacher's (QA F3). --}}
 @php($allNotes = collect()
-    ->concat($teacherComments->map(fn ($c) => ['at' => $c->date ?? $c->created_at, 'text' => $c->body, 'by' => ($c->author?->name ?? 'Staff').' · teacher, at check-in', 'kind' => $c->type() === 'health' ? 'Health' : 'Teacher']))
-    ->concat($officeNotes->map(fn ($n) => ['at' => $n->created_at, 'text' => $n->body, 'by' => ($n->author?->name ?? 'Office').' · office', 'kind' => $n->kind === 'health' ? 'Health' : 'Office']))
-    ->sortByDesc('at')->values())
+    ->concat($teacherComments->map(fn ($c) => ['at' => $c->created_at ?? $c->date, 'text' => $c->body, 'by' => ($c->author?->name ?? 'Staff').' · '.(($c->author_role ?? $c->author?->role) === 'teacher' ? 'teacher' : 'office').', at check-in', 'kind' => $c->type() === 'health' ? 'Health' : 'Teacher', 'src' => 1]))
+    ->concat($officeNotes->map(fn ($n) => ['at' => $n->created_at, 'text' => $n->body, 'by' => ($n->author?->name ?? 'Office').' · office', 'kind' => $n->kind === 'health' ? 'Health' : 'Office', 'src' => 0]))
+    ->sort(fn ($a, $b) => [$b['at']?->getTimestamp(), $a['src']] <=> [$a['at']?->getTimestamp(), $b['src']])->values())
 @php($noteCounts = ['All' => $allNotes->count(), 'Teacher' => $allNotes->where('kind', 'Teacher')->count(), 'Office' => $allNotes->where('kind', 'Office')->count(), 'Health' => $allNotes->where('kind', 'Health')->count()])
 
 <div class="ch" style="display: flex; flex-direction: column; gap: 16px;"
-     x-data="childRecord({ childId: @js($child->id), csrf: @js(csrf_token()), open: @js(session('open')) })"
+     x-data="childRecord({ childId: @js($child->id), csrf: @js(csrf_token()), open: @js(session('open')), guardianIds: @js($people->filter(fn ($link) => $link->is_guardian && blank($link->restriction))->pluck('person_id')->values()) })"
      @keydown.escape.window="menu = false; statusMenu = false">
 
     <a href="{{ $back }}" style="font-size: 13px; font-weight: 600;">← {{ str_starts_with($back, route('children.index')) ? 'Children' : 'Back' }}</a>
 
     @if(session('success'))<div style="border-radius: 12px; border: 1px solid #b9e4cc; background: #e3f5ec; padding: 10px 14px; font-size: 13.5px; font-weight: 500; color: #166534;">{{ session('success') }}</div>@endif
+    {{-- Hours saved outside when the centre is open (Child::hoursOutsideOpening). --}}
+    @if(session('hours_warning'))<div role="alert" data-hours-warning style="border-radius: 12px; border: 1px solid #f3d38b; background: #fdf3dc; padding: 10px 14px; font-size: 13.5px; font-weight: 500; color: #8a5a00;">{{ session('hours_warning') }}</div>@endif
     @if($errors->any())<div style="border-radius: 12px; border: 1px solid #fbc4cc; background: #ffe4e6; padding: 10px 14px; font-size: 13.5px; color: #be123c;">{{ $errors->first() }}</div>@endif
 
     {{-- ===== Header ===== --}}
@@ -51,10 +60,10 @@
                     {{-- Larger on a tap: the photograph is how a face gets matched to a name. --}}
                     <div x-data="{ open: false }" @keydown.escape.window="open = false">
                         <button type="button" @click="open = true" class="group relative block" title="Open the photo">
-                            <img src="{{ $photo }}" alt="{{ $child->first_name }} {{ $child->last_name }}" class="h-[88px] w-[88px] rounded-[22px] object-cover">
+                            <img src="{{ $photo }}" alt="{{ $child->displayName() }}" class="h-[88px] w-[88px] rounded-[22px] object-cover">
                         </button>
                         <div x-show="open" x-cloak x-transition.opacity @click="open = false" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/85 p-6 backdrop-blur-sm">
-                            <img @click.stop src="{{ $photo }}" alt="{{ $child->first_name }} {{ $child->last_name }}" class="max-h-[85vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl">
+                            <img @click.stop src="{{ $photo }}" alt="{{ $child->displayName() }}" class="max-h-[85vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl">
                             <button type="button" @click="open = false" class="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-lg text-white ring-1 ring-white/25" aria-label="Close">✕</button>
                         </div>
                     </div>
@@ -65,12 +74,13 @@
             </div>
             <div style="flex: 1 1 360px; display: flex; flex-direction: column; gap: 8px; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <h1 style="margin: 0; font-size: 26px; font-weight: 700;">{{ $child->first_name }} {{ $child->last_name }}@if(filled($child->nickname)) <span style="font-weight: 500; color: #8a90a0; font-size: 20px;">({{ $child->nickname }})</span>@endif</h1>
+                    {{-- In the order Settings › Children › Name order asks for (QA #40, 12 Nov 2026). --}}
+                    <h1 style="margin: 0; font-size: 26px; font-weight: 700;">{{ $child->displayName() }}@if(filled($child->nickname)) <span style="font-weight: 500; color: #8a90a0; font-size: 20px;">({{ $child->nickname }})</span>@endif</h1>
 
                     {{-- The status, and — for the director — the way to change it. --}}
                     <span style="position: relative; display: inline-flex;">
                         @if($isAdmin)
-                            <button type="button" class="pill {{ $tone }}" style="border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;" @click="statusMenu = ! statusMenu; menu = false" title="Change status" data-status-pill>{{ \App\Models\Child::statusLabel($child->status) }} ▾</button>
+                            <button type="button" class="pill {{ $tone }}" style="border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;" @click="statusMenu = ! statusMenu; menu = false" title="Change status" aria-haspopup="true" aria-expanded="false" :aria-expanded="statusMenu.toString()" data-status-pill>{{ \App\Models\Child::statusLabel($child->status) }} ▾</button>
                             <div x-show="statusMenu" x-cloak @click.outside="statusMenu = false" class="menu" style="left: 0; right: auto; min-width: 260px;">
                                 <span style="font-size: 11px; font-weight: 700; color: #8a90a0; text-transform: uppercase; letter-spacing: .06em; padding: 6px 12px 4px;">Status: {{ \App\Models\Child::statusLabel($child->status) }}</span>
                                 @if($child->isPending())
@@ -102,7 +112,7 @@
                 </div>
                 <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                     @foreach($alerts as $alert)
-                        <span class="pill {{ $alert['type'] }}">! {{ $alert['label'] }}: {{ $alert['text'] }}@if($alert['severity']) · {{ $alert['severity'] }}@endif</span>
+                        <x-child-alert :alert="$alert" />
                     @endforeach
                     @foreach($missing as $item)
                         <span class="pill miss">{{ $item }}</span>
@@ -110,10 +120,12 @@
                 </div>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <a class="btn" href="{{ route('messages.index', ['child' => $child->id]) }}">Message parents</a>
+                @if(app(\App\Services\Messaging::class)->canMessage($child))
+                    <a class="btn" href="{{ route('messages.index', ['child' => $child->id]) }}">Message parents</a>
+                @endif
                 <a class="btn" href="{{ route('check-in.index') }}?{{ $roomSlug }}">Sign in / out</a>
                 <div style="position: relative;">
-                    <button type="button" class="btn" aria-label="More" @click="menu = ! menu; statusMenu = false">⋯</button>
+                    <button type="button" class="btn" aria-label="More actions" aria-haspopup="true" aria-expanded="false" :aria-expanded="menu.toString()" @click="menu = ! menu; statusMenu = false">⋯</button>
                     <div x-show="menu" x-cloak @click.outside="menu = false" class="menu">
                         <a class="mi" href="{{ route('children.edit', $child) }}">Edit details</a>
                         @if($isAdmin)
@@ -161,7 +173,7 @@
                         <label class="fld"><span class="lbl">Reason</span><select class="inp" name="reason">@foreach(\App\Models\Child::WITHDRAWAL_REASONS as $reason)<option @selected(old('reason') === $reason)>{{ $reason }}</option>@endforeach</select></label>
                         <div class="fld"><span class="lbl">Could {{ $child->first_name }} come back?</span><div style="display: flex; gap: 6px;" x-data="{ back: @js(old('could_return', 'Yes')) }">@foreach(\App\Models\Child::COULD_RETURN as $option)<button type="button" class="fchip" :class="back === @js($option) && 'on'" @click="back = @js($option)">{{ $option }}</button>@endforeach<input type="hidden" name="could_return" :value="back"></div></div>
                     </div>
-                    <label class="fld"><span class="lbl">Note — shows on the DSS page and in the enrollment history</span><input class="inp" name="note" value="{{ old('note') }}" placeholder="e.g. Moving to Cheektowaga in November, mom gave 2 weeks' notice"></label>
+                    <label class="fld"><span class="lbl">Note — shows on the DSS page and in the enrollment history</span><input class="inp" name="note" value="{{ old('note') }}" required maxlength="500" placeholder="e.g. Moving to Cheektowaga in November, mom gave 2 weeks' notice"></label>
                     <div class="panel" style="font-size: 13px; line-height: 1.5;">
                         <b>What happens</b>
                         <span>• After the last day: off the attendance sheets, check-in, schedule and ratio counts, and no group texts.</span>
@@ -270,7 +282,7 @@
                             @endif
                         </span>
                         <span>Enrolled</span><span>{{ $child->enrolled_on?->format('M j, Y') ?? 'Not set' }} <span class="faint">· {{ $child->status === 'Active' ? 'still enrolled' : \App\Models\Child::statusLabel($child->status) }}</span></span>
-                        <span>Room history</span><span class="muted">@forelse($roomEvents->reverse() as $event){{ $loop->first ? '' : ' → ' }}{{ $event->event === 'room' ? \Illuminate\Support\Str::after($event->from_status, '→ ') : ($event->event === 'status' ? ($child->classroom ?: '—') : \Illuminate\Support\Str::after($event->from_status, '· ')) }} {{ $event->created_at->format('M j, Y') }}@empty{{ $child->classroom ?: '—' }}@endforelse</span>
+                        <span>Room history</span><span class="muted">@forelse($roomEvents->reverse() as $event){{ $loop->first ? '' : ' → ' }}{{ $event->event === 'room' ? \Illuminate\Support\Str::after($event->from_status, '→ ') : ($event->event === 'status' ? ($firstRoom ?: '—') : \Illuminate\Support\Str::after($event->from_status, '· ')) }} {{ $event->created_at->format('M j, Y') }}@empty{{ $child->classroom ?: '—' }}@endforelse{{ $plannedRoom ? ' → '.$plannedRoom : '' }}</span>
                         <span>Subsidy</span><span>@if($child->isDss())DSS Case No <b style="font-weight: 600; font-family: ui-monospace, monospace;">{{ $child->dss_case_no ?: '—' }}</b> · DSS CIN <b style="font-weight: 600; font-family: ui-monospace, monospace; color: {{ $child->dss_cin ? 'inherit' : '#be123c' }};">{{ $child->dss_cin ?: 'missing' }}</b>@else<span class="muted">Private pay</span>@endif</span>
                     </div>
 
@@ -279,7 +291,11 @@
                             @csrf
                             <b style="font-size: 13.5px;">Move {{ $child->first_name }} to another room</b>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
-                                <label class="fld"><span class="lbl">Room</span><select class="inp" name="room">@foreach(\App\Services\ClassroomAssignment::rooms() as $option)@continue($option === $child->classroom)<option>{{ $option }}</option>@endforeach</select></label>
+                                {{-- Nothing chosen until somebody chooses (QA #38, 12 Nov 2026): the
+                                     first room used to sit selected, so Move put a toddler in Infant
+                                     without anyone picking it. The current room is listed, marked and
+                                     not pickable, so the list reads as the whole building. --}}
+                                <label class="fld"><span class="lbl">Room</span><select class="inp" name="room" required data-room-picker><option value="" selected disabled>Choose a room…</option>@foreach(\App\Services\ClassroomAssignment::rooms() as $option)<option value="{{ $option }}" @disabled($option === $child->classroom)>{{ $option }}{{ $option === $child->classroom ? ' (current)' : '' }}</option>@endforeach</select></label>
                                 <label class="fld"><span class="lbl">Starting</span><input class="inp" type="date" name="from" value="{{ today()->toDateString() }}"></label>
                                 <label class="fld"><span class="lbl">Why (optional)</span><input class="inp" name="why" placeholder="e.g. Ready early, space in Toddler"></label>
                             </div>
@@ -289,16 +305,20 @@
                     @endif
                 </div>
 
+                @php($overviewRefused = $errors->hasAny(['schedule_days', 'drop_off_time', 'pick_up_time', 'dss_case_no', 'dss_cin', 'nickname']))
                 <form method="POST" action="{{ route('children.overview', $child) }}" x-show="overviewEdit" x-cloak style="display: flex; flex-direction: column; gap: 12px;" data-overview-form>
                     @csrf @method('PUT')
-                    <div class="fld"><span class="lbl">Days they attend</span><div><input type="hidden" name="schedule_days[]" value="">@foreach(\App\Models\Child::WEEKDAYS as $n => $name)<label class="d lg {{ in_array($n, $days, true) ? 'y' : 'n' }}" x-data="{ on: @js(in_array($n, $days, true)) }" :class="on ? 'y' : 'n'" style="cursor: pointer;"><input type="checkbox" name="schedule_days[]" value="{{ $n }}" x-model="on" style="display: none;">{{ $name[0] }}</label>@endforeach</div></div>
+                    <input type="hidden" name="{{ \App\Services\RecordLock::FIELD }}" value="{{ $recordVersion }}">{{-- RecordLock: refuse a save from a page drawn before someone else's --}}
+                    {{-- After a refused save the form comes back with what was typed, not the record's old values. --}}
+                    @php($overviewDays = $overviewRefused && is_array(old('schedule_days')) ? array_map('intval', array_filter(old('schedule_days'), fn ($d) => $d !== '' && $d !== null)) : $days)
+                    <div class="fld"><span class="lbl">Days they attend</span><div><input type="hidden" name="schedule_days[]" value="">@foreach(\App\Models\Child::WEEKDAYS as $n => $name)<label class="d lg {{ in_array($n, $overviewDays, true) ? 'y' : 'n' }}" x-data="{ on: @js(in_array($n, $overviewDays, true)) }" :class="on ? 'y' : 'n'" style="cursor: pointer;"><input type="checkbox" name="schedule_days[]" value="{{ $n }}" x-model="on" style="display: none;">{{ $name[0] }}</label>@endforeach</div></div>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
-                        <label class="fld"><span class="lbl">Drop-off</span><input class="inp" type="time" name="drop_off_time" value="{{ \App\Models\Child::timeInputValue($child->drop_off_time) }}"></label>
-                        <label class="fld"><span class="lbl">Pick-up</span><input class="inp" type="time" name="pick_up_time" value="{{ \App\Models\Child::timeInputValue($child->pick_up_time) }}"></label>
+                        <label class="fld"><span class="lbl">Drop-off</span><input class="inp" type="time" name="drop_off_time" value="{{ $overviewRefused ? old('drop_off_time') : \App\Models\Child::timeInputValue($child->drop_off_time) }}"></label>
+                        <label class="fld"><span class="lbl">Pick-up</span><input class="inp" type="time" name="pick_up_time" value="{{ $overviewRefused ? old('pick_up_time') : \App\Models\Child::timeInputValue($child->pick_up_time) }}"></label>
                         <label class="fld"><span class="lbl">Hours a week (worked out)</span><input class="inp" value="{{ $hours !== null ? rtrim(rtrim(number_format($hours, 1), '0'), '.') : '—' }}" disabled></label>
-                        <label class="fld"><span class="lbl">Subsidy case number</span><input class="inp" name="dss_case_no" value="{{ $child->dss_case_no }}" placeholder="e.g. S1177706D"></label>
-                        <label class="fld"><span class="lbl">CIN (the child's own number)</span><input class="inp" name="dss_cin" value="{{ $child->dss_cin }}" placeholder="e.g. HB14137F"></label>
-                        <label class="fld"><span class="lbl">Nickname</span><input class="inp" name="nickname" value="{{ $child->nickname }}"></label>
+                        <label class="fld"><span class="lbl">Subsidy case number</span><input class="inp" name="dss_case_no" value="{{ $overviewRefused ? old('dss_case_no') : $child->dss_case_no }}" placeholder="e.g. S1177706D"></label>
+                        <label class="fld"><span class="lbl">CIN (the child's own number)</span><input class="inp" name="dss_cin" value="{{ $overviewRefused ? old('dss_cin') : $child->dss_cin }}" placeholder="e.g. HB14137F"></label>
+                        <label class="fld"><span class="lbl">Nickname</span><input class="inp" name="nickname" value="{{ $overviewRefused ? old('nickname') : $child->nickname }}" placeholder="Leave blank if none"></label>
                     </div>
                     <span style="font-size: 12.5px;" class="faint">Hours are worked out from the days and times — no separate "expected hours" to keep in step.</span>
                     <div style="display: flex; gap: 8px; justify-content: flex-end;"><button type="button" class="btn" @click="overviewEdit = false">Cancel</button><button type="submit" class="btn pri">Save</button></div>
@@ -387,8 +407,8 @@
                                         <span style="display: inline-flex; align-items: center; gap: 4px;">
                                             <b style="display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: {{ $link->is_emergency ? ($link->priority === 1 ? '#1b5e91' : '#dcebfa') : '#f2f4f9' }}; color: {{ $link->is_emergency ? ($link->priority === 1 ? '#fff' : '#1b5e91') : '#b5bac6' }}; align-items: center; justify-content: center; font-size: 12px;">{{ $link->is_emergency ? $link->priority : '—' }}</b>
                                             @if($link->is_emergency && $person)
-                                                <form method="POST" action="{{ route('children.people.order', [$child, $person]) }}" style="display: inline;">@csrf<input type="hidden" name="direction" value="up"><button type="submit" class="mv" title="Call earlier">↑</button></form>
-                                                <form method="POST" action="{{ route('children.people.order', [$child, $person]) }}" style="display: inline;">@csrf<input type="hidden" name="direction" value="down"><button type="submit" class="mv" title="Call later">↓</button></form>
+                                                <form method="POST" action="{{ route('children.people.order', [$child, $person]) }}" style="display: inline;">@csrf<input type="hidden" name="direction" value="up"><button type="submit" class="mv" title="Call earlier" aria-label="Call {{ $person->name }} earlier">↑</button></form>
+                                                <form method="POST" action="{{ route('children.people.order', [$child, $person]) }}" style="display: inline;">@csrf<input type="hidden" name="direction" value="down"><button type="submit" class="mv" title="Call later" aria-label="Call {{ $person->name }} later">↓</button></form>
                                             @endif
                                         </span>
                                     </td>
@@ -425,7 +445,7 @@
                                             @foreach(['is_guardian' => 'Guardian', 'can_pickup' => 'Pick-up', 'is_emergency' => 'Emergency', 'pays_fees' => 'Pays the fees', 'gets_texts' => 'Gets texts'] as $field => $label)
                                                 <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; min-height: 38px;"><input type="hidden" name="{{ $field }}" value="0"><input type="checkbox" name="{{ $field }}" value="1" @checked($link->{$field}) style="width: 16px; height: 16px; accent-color: #1b5e91;"> {{ $label }}</label>
                                             @endforeach
-                                            <p class="w-full" style="margin: -2px 0 0; font-size: 12px; color: #5f6676;">Gets texts is ticked for a guardian with a mobile when they are added. Untick it for anyone who has not agreed to texts from the centre; replying STOP to a text also stops them.</p>
+                                            <p class="w-full" style="margin: -2px 0 0; font-size: 12px; color: #5f6676;">Gets texts is ticked for a guardian with a mobile when they are added. Untick it for anyone who has not agreed to texts from the center; replying STOP to a text also stops them.</p>
                                             <label class="fld" style="flex: 1 1 220px;"><span class="lbl">Restriction (court order etc.)</span><input class="inp" name="restriction" value="{{ $link->restriction }}" placeholder="Leave blank if none"></label>
                                             <button type="submit" class="btn sm pri">Save</button>
                                         </form>
@@ -454,6 +474,7 @@
                             </span>
                         @else
                             <span class="fam-chips"><span class="fam-chip fam-chip-warn"><span class="fam-dot" aria-hidden="true"></span>Nobody cleared yet</span></span>
+                            <span class="fam-muted">Nobody is cleared to collect this child.</span>
                         @endif
                         @if($barred->isNotEmpty())
                             <span class="fam-barred">Must not collect: {{ $barred->map(fn ($link) => $link->person?->name.' — '.$link->restriction)->join(' · ') }}</span>
@@ -477,7 +498,10 @@
                 <form method="POST" action="{{ route('children.alerts.store', $child) }}" x-show="alertForm" x-cloak class="panel" data-alert-form>
                     @csrf
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
-                        <label class="fld"><span class="lbl">Type</span><select class="inp" name="type">@foreach(\App\Models\Child::ALERT_TYPES as $key => $type)<option value="{{ $key }}">{{ $type['label'] }}</option>@endforeach</select></label>
+                        {{-- No kind until one is picked (QA #37, 12 Nov 2026): the first in the list is
+                             Court order, and an allergy saved without touching this box went on
+                             the roll as a court order. The server refuses a blank (ALERT_TYPES). --}}
+                        <label class="fld"><span class="lbl">Type</span><select class="inp" name="type" required data-alert-type><option value="" selected disabled>Choose…</option>@foreach(\App\Models\Child::ALERT_TYPES as $key => $type)<option value="{{ $key }}">{{ $type['label'] }}</option>@endforeach</select></label>
                         <label class="fld"><span class="lbl">What</span><input class="inp" name="text" required placeholder="e.g. Milk protein (dairy)"></label>
                         <label class="fld"><span class="lbl">Severity</span><select class="inp" name="severity"><option value="">—</option><option value="mild">Mild</option><option value="moderate">Moderate</option><option value="severe">Severe</option></select></label>
                         <label class="fld"><span class="lbl">Care plan signed</span><input class="inp" type="date" name="plan_on"></label>
@@ -489,14 +513,32 @@
 
                 <div style="display: flex; flex-direction: column; gap: 8px;">
                     @forelse($alerts as $i => $alert)
+                        <div x-data="{ editAlert: false }" style="display: flex; flex-direction: column; gap: 8px;">
                         <div style="display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: {{ $alert['type'] === 'court' || $alert['severity'] === 'severe' ? '#fff7f8' : '#f7f9fd' }}; border: 1px solid {{ $alert['type'] === 'court' || $alert['severity'] === 'severe' ? '#fbc4cc' : '#e7e9f0' }}; align-items: flex-start;" class="dark:!bg-slate-800/60" data-alert="{{ $i }}">
-                            <span class="pill {{ $alert['type'] }}">{{ $alert['label'] }}{{ $alert['severity'] ? ' · '.$alert['severity'] : '' }}</span>
+                            <x-child-alert :alert="array_merge($alert, ['text' => $alert['label']])" :label="false" style="flex: none;" />
                             <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px;">
                                 <b>{{ $alert['text'] }}</b>
                                 @if($alert['reaction'] || $alert['action'])<span class="muted">{{ $alert['reaction'] ? 'Reaction: '.$alert['reaction'].'. ' : '' }}{{ $alert['action'] ? 'Do: '.$alert['action'] : '' }}</span>@endif
-                                <span style="font-size: 12px;" class="faint">@if($alert['plan_on'])Care plan signed {{ \Illuminate\Support\Carbon::parse($alert['plan_on'])->format('M j, Y') }} · @endif shown on the roll, check-in and the kitchen list</span>
+                                <span style="font-size: 12px;" class="faint">@if($alert['plan_on'])Care plan signed {{ \Illuminate\Support\Carbon::parse($alert['plan_on'])->format('M j, Y') }} · @endif shown on the roll, check-in and the <a href="{{ route('kitchen.index') }}">kitchen list</a></span>
                             </div>
-                            <form method="POST" action="{{ route('children.alerts.destroy', [$child, $i]) }}" onsubmit="return confirm('Remove this alert?')">@csrf @method('DELETE')<button type="submit" class="btn sm">Remove</button></form>
+                            {{-- Each alert is edited in place (QA E2). Both post the alert's fingerprint, so a page
+                                 drawn before somebody else's change acts on this alert or on none (QA E4). --}}
+                            <button type="button" class="btn sm" @click="editAlert = ! editAlert">Edit</button>
+                            @if(auth()->user()?->isAdmin())<form method="POST" action="{{ route('children.alerts.destroy', [$child, $alert['index']]) }}" onsubmit="return confirm('Remove this alert?')">@csrf @method('DELETE')<input type="hidden" name="key" value="{{ $alert['key'] }}"><button type="submit" class="btn sm">Remove</button></form>@endif
+                        </div>
+                        <form method="POST" action="{{ route('children.alerts.update', [$child, $alert['index']]) }}" x-show="editAlert" x-cloak class="panel" data-alert-edit="{{ $i }}">
+                            @csrf @method('PUT')
+                            <input type="hidden" name="key" value="{{ $alert['key'] }}">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px;">
+                                <label class="fld"><span class="lbl">Type</span><select class="inp" name="type" required>@foreach(\App\Models\Child::ALERT_TYPES as $key => $type)<option value="{{ $key }}" @selected($alert['type'] === $key)>{{ $type['label'] }}</option>@endforeach</select></label>
+                                <label class="fld"><span class="lbl">What</span><input class="inp" name="text" required value="{{ $alert['text'] }}"></label>
+                                <label class="fld"><span class="lbl">Severity</span><select class="inp" name="severity"><option value="">—</option>@foreach(['mild' => 'Mild', 'moderate' => 'Moderate', 'severe' => 'Severe'] as $value => $label)<option value="{{ $value }}" @selected($alert['severity'] === $value)>{{ $label }}</option>@endforeach</select></label>
+                                <label class="fld"><span class="lbl">Care plan signed</span><input class="inp" type="date" name="plan_on" value="{{ $alert['plan_on'] }}"></label>
+                                <label class="fld" style="grid-column: 1 / -1;"><span class="lbl">Reaction</span><input class="inp" name="reaction" value="{{ $alert['reaction'] }}"></label>
+                                <label class="fld" style="grid-column: 1 / -1;"><span class="lbl">What to do</span><input class="inp" name="action" value="{{ $alert['action'] }}"></label>
+                            </div>
+                            <div style="display: flex; gap: 8px; justify-content: flex-end;"><button type="button" class="btn" @click="editAlert = false">Cancel</button><button type="submit" class="btn pri">Save alert</button></div>
+                        </form>
                         </div>
                     @empty
                         <span style="font-size: 13px;" class="faint">No alerts on file.</span>
@@ -513,18 +555,19 @@
 
                 <div class="kv" x-show="! healthEdit">
                     <span>Doctor</span><span>{{ $child->health('doctor') ?: '—' }}</span>
-                    <span>Immunizations</span><span>@if($child->immunizationsDue())<span class="pill warn">{{ $child->health('immunizations_due') ? 'Due' : 'Not on file' }}</span>@else<span class="pill ok">Up to date</span>@endif @if($child->health('immunizations_due'))<span style="font-size: 13px;" class="faint">next due {{ \Illuminate\Support\Carbon::parse($child->health('immunizations_due'))->format('M j, Y') }}</span>@endif</span>
-                    <span>Medical statement</span><span>@if($medical)<span class="pill {{ $medical->status()[1] }}">On file</span> <span style="font-size: 13px;" class="faint">signed {{ $medical->signed_on?->format('M j, Y') }}{{ $medical->expires_on ? ' · renews '.$medical->expires_on->format('M j, Y') : '' }}</span>@else<span class="pill miss">Missing</span>@endif</span>
-                    <span>Medication</span><span>{{ $child->health('medication') ?: 'None given at the centre' }}</span>
+                    <span>Immunizations</span><span>@if($child->immunizationsDue())<span class="pill warn">{{ $child->health('immunizations_due') ? 'Due' : 'Not on file' }}</span>@else<span class="pill ok">Up to date</span>@endif @if($child->health('immunizations_due'))@php($immDue = \Illuminate\Support\Carbon::parse($child->health('immunizations_due')))@if($immDue->lt(today()))<span style="font-size: 13px; font-weight: 600; color: #be123c;">overdue since {{ $immDue->format('M j, Y') }}</span>@else<span style="font-size: 13px;" class="faint">next due {{ $immDue->format('M j, Y') }}</span>@endif @endif</span>
+                    <span>Medical statement</span><span>@if($medical)@php($medicalExpired = $medical->status()[1] === 'bad')<span class="pill {{ $medical->status()[1] }}">{{ $medicalExpired ? 'Expired' : 'On file' }}</span> <span style="font-size: 13px;" class="faint">signed {{ $medical->signed_on?->format('M j, Y') }}{{ $medical->expires_on ? ($medicalExpired ? ' · expired ' : ' · renews ').$medical->expires_on->format('M j, Y') : '' }}</span>@else<span class="pill miss">Missing</span>@endif</span>
+                    <span>Medication</span><span>{{ $child->health('medication') ?: 'None given at the center' }}</span>
                 </div>
 
+                @php($healthRefused = $errors->hasAny(['doctor', 'immunizations_due', 'medication', 'custody_note']))
                 <form method="POST" action="{{ route('children.health', $child) }}" x-show="healthEdit" x-cloak style="display: flex; flex-direction: column; gap: 12px;" data-health-form>
                     @csrf @method('PUT')
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-                        <label class="fld"><span class="lbl">Doctor</span><input class="inp" name="doctor" value="{{ $child->health('doctor') }}" placeholder="Dr. Name · Practice · phone"></label>
-                        <label class="fld"><span class="lbl">Immunizations next due</span><input class="inp" type="date" name="immunizations_due" value="{{ $child->health('immunizations_due') }}"></label>
-                        <label class="fld"><span class="lbl">Medication</span><input class="inp" name="medication" value="{{ $child->health('medication') }}" placeholder="None given at the centre"></label>
-                        <label class="fld"><span class="lbl">Custody</span><input class="inp" name="custody_note" value="{{ $child->custody_note }}" placeholder="e.g. Shared — both parents may collect"></label>
+                        <label class="fld"><span class="lbl">Doctor</span><input class="inp" name="doctor" value="{{ $healthRefused ? old('doctor') : $child->health('doctor') }}" placeholder="Dr. Name · Practice · phone"></label>
+                        <label class="fld"><span class="lbl">Immunizations next due</span><input class="inp" type="date" name="immunizations_due" value="{{ $healthRefused ? old('immunizations_due') : $child->health('immunizations_due') }}"></label>
+                        <label class="fld"><span class="lbl">Medication</span><input class="inp" name="medication" value="{{ $healthRefused ? old('medication') : $child->health('medication') }}" placeholder="None given at the center"></label>
+                        <label class="fld"><span class="lbl">Custody</span><input class="inp" name="custody_note" value="{{ $healthRefused ? old('custody_note') : $child->custody_note }}" placeholder="e.g. Shared — both parents may collect"></label>
                     </div>
                     <div style="display: flex; gap: 8px; justify-content: flex-end;"><button type="button" class="btn" @click="healthEdit = false">Cancel</button><button type="submit" class="btn pri">Save</button></div>
                 </form>
@@ -579,7 +622,7 @@
                 <div style="display: flex; flex-direction: column;">
                     @forelse($allNotes as $i => $note)
                         <div style="display: flex; gap: 12px; padding: 10px 2px; border-bottom: 1px solid #f0f1f5; align-items: flex-start;" x-show="(filter === 'All' || filter === '{{ $note['kind'] }}') && ({{ $i }} < 8 || older)">
-                            <span style="width: 92px; flex: none; font-size: 12.5px;" class="faint">{{ $note['at']->format('M j') }}</span>
+                            <span style="width: 92px; flex: none; font-size: 12.5px;" class="faint">{{ $note['at']->timezone(config('app.timezone'))->format('M j') }}<br>{{ $note['at']->timezone(config('app.timezone'))->format('g:i A') }}</span>
                             <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px;"><span>{{ $note['text'] }}</span><span style="font-size: 12px;" class="faint">{{ $note['by'] }}</span></div>
                             <span class="pill {{ ['Teacher' => 'info', 'Office' => 'mut', 'Health' => 'bad'][$note['kind']] }}">{{ $note['kind'] }}</span>
                         </div>
@@ -591,7 +634,7 @@
                     <button type="button" class="btn sm" style="align-self: flex-start;" @click="older = ! older" x-text="older ? 'Show fewer' : 'Show older ({{ $allNotes->count() - 8 }})'">Show older ({{ $allNotes->count() - 8 }})</button>
                 @endif
                 @if(filled($child->other_notes))
-                    <div style="border-top: 1px solid #f0f1f5; padding-top: 10px;"><span class="lbl">From the enrolment form</span><p style="margin: 4px 0 0; white-space: pre-line; font-size: 13.5px;">{{ $child->other_notes }}</p></div>
+                    <div style="border-top: 1px solid #f0f1f5; padding-top: 10px;"><span class="lbl">From the enrollment form</span><p style="margin: 4px 0 0; white-space: pre-line; font-size: 13.5px;">{{ $child->other_notes }}</p></div>
                 @endif
             </section>
         </div>
@@ -630,12 +673,12 @@
 
             {{-- Attendance · month --}}
             <section class="sec" x-show="sec === 'all' || sec === 'attendance'" data-section="attendance">
-                <div class="sech"><h2>Attendance · {{ $month['label'] }}</h2><a href="{{ route('attendance.index') }}" style="margin-left: auto; font-size: 13px; font-weight: 600;">Open register →</a></div>
+                <div class="sech"><h2>Attendance · {{ $month['label'] }}</h2><a href="{{ route('attendance.index', array_filter(['room' => $child->classroom, 'child' => $child->lan])) }}" style="margin-left: auto; font-size: 13px; font-weight: 600;">Open register →</a></div>
                 <div class="cal">
                     @foreach(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as $head)<span style="font-size: 11px; font-weight: 700; text-align: center;" class="faint">{{ $head }}</span>@endforeach
                     @for($i = 0; $i < $month['lead']; $i++)<span></span>@endfor
                     @foreach($month['days'] as $day)
-                        <span class="cd c-{{ $day['state'] }}" title="{{ $day['date']->format('D M j') }} · {{ ['in' => 'Signed in', 'absent' => 'Absent', 'today' => 'Today', 'planned' => 'Planned', 'closed' => 'Centre closed', 'none' => 'Not scheduled'][$day['state']] }}">{{ $day['date']->day }}<span style="font-size: 10px; font-weight: 500;">{{ ['in' => $day['times'] ?? 'in', 'absent' => 'absent', 'today' => $day['times'] ?? 'today', 'planned' => '', 'closed' => 'closed', 'none' => ''][$day['state']] }}</span></span>
+                        <span class="cd c-{{ $day['state'] }}" title="{{ $day['date']->format('D M j') }} · {{ ['in' => 'Signed in', 'absent' => 'Absent', 'today' => 'Today', 'planned' => 'Planned', 'closed' => 'Center closed', 'none' => 'Not scheduled'][$day['state']] }}">{{ $day['date']->day }}<span style="font-size: 10px; font-weight: 500;">{{ ['in' => $day['times'] ?? 'in', 'absent' => 'absent', 'today' => $day['times'] ?? 'today', 'planned' => '', 'closed' => 'closed', 'none' => ''][$day['state']] }}</span></span>
                     @endforeach
                 </div>
                 <div style="display: flex; gap: 14px; font-size: 13px; flex-wrap: wrap;" class="muted"><span><b style="color: #15803d;">{{ $month['in'] }}</b> days in</span><span><b style="color: #be123c;">{{ $month['absent'] }}</b> absent</span>@if($month['avgIn'])<span>avg {{ $month['avgIn'] }}{{ $month['avgOut'] ? ' – '.$month['avgOut'] : '' }}</span>@endif</div>
@@ -666,7 +709,7 @@
             {{-- Record --}}
             <section class="sec" x-show="sec === 'all'" style="gap: 8px;" data-section="record">
                 <div class="sech"><h2 style="font-size: 14px;">Record</h2></div>
-                <span style="font-size: 12.5px;" class="faint">Created {{ $child->created_at?->format('M j, Y') }} · last change {{ $child->updated_at?->format('M j') }}{{ $child->updatedBy ? ' by '.$child->updatedBy->name : '' }}</span>
+                <span style="font-size: 12.5px;" class="faint">Created {{ $child->created_at?->format('M j, Y') }} · last change {{ $child->updated_at?->timezone(config('app.timezone'))->format('M j, g:i A') }}{{ $child->updatedBy ? ' by '.$child->updatedBy->name : '' }}</span>
                 @if($isAdmin)
                     @if($child->status === 'Active')<button type="button" class="btn sm" style="align-self: flex-start; color: #be123c;" @click="panel = 'withdraw'">Withdraw…</button>@endif
                     @if($child->isWithdrawn())<form method="POST" action="{{ route('children.reenroll', $child) }}">@csrf<button type="submit" class="btn sm">Re-enroll</button></form>@endif
@@ -678,11 +721,12 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
-    Alpine.data('childRecord', ({ childId, csrf, open }) => ({
+    Alpine.data('childRecord', ({ childId, csrf, open, guardianIds = [] }) => ({
         sec: 'all',
         menu: false, statusMenu: false,
         panel: open || null,
-        overviewEdit: false, roomForm: false, healthEdit: false, alertForm: false, noteEdit: false, docForm: false,
+        // A refused Overview save comes back with the form open on what was typed.
+        overviewEdit: @js($errors->hasAny(['schedule_days', 'drop_off_time', 'pick_up_time', 'dss_case_no', 'dss_cin', 'nickname'])), roomForm: false, healthEdit: @js($errors->hasAny(['doctor', 'immunizations_due', 'medication', 'custody_note'])), alertForm: false, noteEdit: false, docForm: false,
         addPerson: false, editing: @js(old('_person') ? (int) old('_person') : null),
         query: '', hits: [], searching: false, relationship: 'Mother', newName: '', newPhone: '', busy: false, error: '',
 
@@ -715,6 +759,9 @@ document.addEventListener('alpine:init', () => {
         },
 
         async unlinkPerson(id, name) {
+            // The last legal guardian: say so before the ordinary question.
+            if (guardianIds.length === 1 && guardianIds[0] === id
+                && ! confirm(name + ' is the last legal guardian on this record. Removing them leaves nobody legally responsible on file. Continue?')) return;
             if (! confirm('Remove ' + name + ' from this record? They stay on file for any other child.')) return;
             await this.send(`/people/${id}/unlink`, { child_id: childId });
         },

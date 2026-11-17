@@ -364,7 +364,7 @@ class AttendanceProjectionTest extends TestCase
 
         $this->actingAs($this->admin)
             ->put(route('children.update', $child), $this->childForm(['expected_hours_per_week' => '22.5']))
-            ->assertRedirect(route('children.index'));
+            ->assertRedirect(route('children.index', ['status' => 'Active']));
 
         $this->assertSame(22.5, $child->fresh()->expected_hours_per_week);
 

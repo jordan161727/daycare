@@ -150,7 +150,7 @@ tr.vf td.nm{color:var(--ink-faint);font-size:7.5px;}
     <span><span class="bx"></span> expected, did not come</span>
     <span><span class="tint"><span class="bx ns on"></span></span> drop-in — nobody booked it, still billable</span>
     <span><span class="tint"><span class="bx ns"></span></span> not expected</span>
-    <span><span style="display:inline-block;width:10px;text-align:center;color:var(--ink-faint)">–</span> centre closed, or not yet on the roll</span>
+    <span><span style="display:inline-block;width:10px;text-align:center;color:var(--ink-faint)">–</span> center closed, or not yet on the roll</span>
 </div>
 
 @if(empty($rooms))

@@ -24,7 +24,7 @@
 
     <section class="ch-card" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 12px;">
         <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-            <h1 style="margin: 0; font-size: 22px; font-weight: 700; margin-right: 6px;">Attendance</h1>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 700; margin-right: 6px;">Director Attendance</h1>
             {{-- The week control, drawn as Teacher Attendance draws its day (26 Oct 2026). --}}
             @include('attendance.partials.week-picker')
             <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: relative;">
@@ -50,7 +50,7 @@
                 <a class="chip {{ $c['on'] ? 'on' : '' }}" href="{{ $link(['room' => $c['name'] === 'All' ? null : $c['name']]) }}"><span style="width: 9px; height: 9px; border-radius: 3px; background: {{ $c['color'] }};"></span>{{ $c['name'] }} <span style="opacity: .7; font-weight: 500;">{{ $c['inN'] }}/{{ $c['n'] }}</span></a>
             @endforeach
             <span style="margin-left: auto; display: inline-flex; gap: 12px; font-size: 13px; flex-wrap: wrap;" class="muted" data-summary>
-                <span><b style="color: #1c2130;" x-text="w.sum.enr"></b> enrolled</span><span><b style="color: #1b5e91;" x-text="w.sum.exp"></b> expected</span><span><b style="color: #15803d;" x-text="w.sum.inN"></b> in</span><span><b style="color: #b45309;" x-text="w.sum.come"></b> still to come</span><span><b style="color: #be123c;" x-text="w.sum.notIn"></b> not in</span>
+                <span><b style="color: #1c2130;" x-text="w.sum.enr"></b> enrolled</span><span><b style="color: #1b5e91;" x-text="w.sum.exp"></b> expected</span><span><b style="color: #15803d;" x-text="w.sum.inN"></b> in</span><span><b style="color: #b45309;" x-text="w.sum.come"></b> still to come</span><span x-show="w.sum.abs > 0"><b style="color: #be123c;" x-text="w.sum.abs"></b> absent</span><span><b style="color: #be123c;" x-text="w.sum.notIn"></b> not in</span>
             </span>
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding-top: 10px; border-top: 1px solid #f0f1f5;">

@@ -136,7 +136,7 @@ class DssAttendance
      */
     public function children(Carbon $start, Carbon $end): Collection
     {
-        return Child::query()
+        $children = Child::query()
             ->where(function ($q) use ($start) {
                 $q->where('status', 'Active')
                     ->orWhere(fn ($w) => $w->whereNotNull('withdrawn_on')->whereDate('withdrawn_on', '>=', $start->toDateString()));
@@ -144,6 +144,11 @@ class DssAttendance
             ->where(fn ($q) => $q->whereNull('enrolled_on')->orWhereDate('enrolled_on', '<=', $end->toDateString()))
             ->orderBy('last_name')->orderBy('first_name')
             ->get();
+
+        // A month gone by is claimed under the room the child was in then (QA C8).
+        \App\Services\RoomHistory::apply($children, $end);
+
+        return $children;
     }
 
     /**
@@ -339,6 +344,9 @@ class DssAttendance
             'id' => $child->id,
             'first' => $child->first_name,
             'last' => $child->last_name,
+            // How the grid writes the name: the centre's Name order (QA #40, 12 Nov 2026).
+            // first and last stay apart for the KinderConnect file, which wants both columns.
+            'name' => $child->displayName(),
             'lan' => $child->lan,
             'room' => $child->classroom,
             'color' => ScheduleEditor::colour($child->classroom)[1],

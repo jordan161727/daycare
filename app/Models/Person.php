@@ -151,21 +151,33 @@ class Person extends Model implements AuthenticatableContract
      * What a PIN is looked up by.
      *
      * Keyed on the app key, so the table on its own is not a list of six-digit
-     * numbers waiting to be tried offline. Deliberately not unique: two
-     * families choosing 246810 is a collision to resolve at the door, not an
-     * error to refuse at the form.
+     * numbers waiting to be tried offline. The same HMAC as a staff PIN's
+     * (User::kioskIndexFor), and unique since QA K2 (16 Nov 2026) — across
+     * parents by the unique index on pin_index, and against staff by
+     * App\Rules\UniqueKioskPin.
      */
     public static function indexFor(string $pin): string
     {
         return hash_hmac('sha256', $pin, config('app.key'));
     }
 
-    /** Set a PIN, writing both the lookup index and the hash that proves it. */
+    /**
+     * Set a PIN, writing both the lookup index and the hash that proves it.
+     *
+     * Refuses a PIN somebody else — staff or parent — already has (QA K2):
+     * a form setting one validates with App\Rules\UniqueKioskPin first, so
+     * this is the backstop for anything that skips the form.
+     */
     public function setPin(string $pin): void
     {
+        if (\App\Rules\UniqueKioskPin::taken($pin, $this)) {
+            throw new \DomainException('Somebody else already uses that PIN.');
+        }
+
         $this->forceFill([
             'pin_index' => static::indexFor($pin),
             'pin_hash' => Hash::make($pin),
+            'pin_length' => strlen($pin),
             'failed_attempts' => 0,
             'locked_until' => null,
         ])->save();

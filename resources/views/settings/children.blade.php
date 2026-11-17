@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Children settings')
+@section('title', 'Settings · Children')
 @section('content')
 {{-- The archived children, and whether the Children page shows them.
 
@@ -15,7 +15,7 @@
 
     <div class="mt-5 min-w-0 flex-1 lg:mt-0"
          x-data="archivedChildren({ csrf: @js(csrf_token()), count: {{ $archived->count() }} })">
-        <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Children</h1>
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Settings · Children</h1>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">How names read, archived children, and whether the Children page shows them.</p>
 
         @if(session('status'))
@@ -73,7 +73,7 @@
                 <label class="flex min-h-[44px] cursor-pointer items-center justify-between gap-4">
                     <span class="min-w-0">
                         <span class="block text-sm font-semibold text-slate-900 dark:text-white">Show archived children</span>
-                        <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">Adds an Archived tab to the Children page. They stay out of the All, Active and Inactive counts.</span>
+                        <span class="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">Adds an Archived tab to the Children page. They stay out of the Active, Pending, Withdrawn and All tabs and their counts.</span>
                     </span>
                     {{-- A real checkbox in the switch role: posts as one and reads
                          as a switch to a screen reader. --}}
@@ -104,7 +104,7 @@
                         x-text="on ? 'Show archived children?' : 'Hide archived children?'"></h2>
                     <p id="setting-dialog-body" class="mt-2 text-sm text-slate-600 dark:text-slate-300"
                        x-text="on
-                           ? 'The Children page gets an Archived tab listing archived children, with an Unarchive button on each. They stay out of the All, Active and Inactive counts, search and Export.'
+                           ? 'The Children page gets an Archived tab listing archived children, with an Unarchive button on each. They stay out of the Active, Pending, Withdrawn and All tabs and their counts, search and Export.'
                            : 'The Archived tab is removed from the Children page. Archived children stay archived and can still be found and restored here in Settings › Children.'"></p>
                     <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                         <button type="button" @click="confirming = false; on = saved"
@@ -153,7 +153,7 @@
 
             <p class="mt-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400" x-show="count === 0" @if($archived->isNotEmpty()) x-cloak @endif>No archived children.</p>
 
-            <p class="mt-3 border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">Unarchived children go back to the Children page as Inactive.</p>
+            <p class="mt-3 border-t border-slate-200 pt-3 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">Unarchived children go back to the Children page as Withdrawn.</p>
         </section>
 
         <div x-show="toast" x-cloak role="status" aria-live="polite"

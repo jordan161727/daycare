@@ -12,7 +12,7 @@
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold tracking-tight">Departments</h1>
-            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">The parts of the centre staff are grouped into. Reports total hours by these, so a department is worth naming the way payroll says it.</p>
+            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">The parts of the center staff are grouped into. Reports total hours by these, so a department is worth naming the way payroll says it.</p>
         </div>
         <a href="{{ route('departments.create') }}" class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">Add Department</a>
     </div>
@@ -24,7 +24,7 @@
     <section class="glass-card mt-6 rounded-2xl p-6">
         @if($departments->isEmpty())
             <p class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-                No departments yet. Staff work perfectly well without one — add these only if you want hours totalled by part of the centre.
+                No departments yet. Staff work perfectly well without one — add these only if you want hours totaled by part of the center.
             </p>
         @else
             <table class="w-full text-sm">

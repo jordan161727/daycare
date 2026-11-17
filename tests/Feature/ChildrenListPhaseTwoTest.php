@@ -51,7 +51,8 @@ class ChildrenListPhaseTwoTest extends TestCase
             ->assertDontSee('Done')
             ->assertDontSee('Orphan');
 
-        $this->actingAs($this->admin)->get(route('children.index', ['gap' => 'shoes']))->assertNotFound();
+        // An unknown one opens the list unfiltered rather than a 404 (tester report, Nov 2026).
+        $this->actingAs($this->admin)->get(route('children.index', ['gap' => 'shoes']))->assertOk()->assertViewHas('gap', '');
     }
 
     public function test_the_tabs_the_room_chips_and_the_pay_chips_narrow_the_list(): void
@@ -60,7 +61,7 @@ class ChildrenListPhaseTwoTest extends TestCase
         $this->child('Ben', 'Toddler', ['lan' => '10002', 'classroom' => 'Toddler']);
         $this->child('Cleo', 'Soon', ['lan' => '10003', 'classroom' => 'Toddler', 'status' => 'Pending', 'enrolled_on' => '2026-11-02']);
 
-        $page = $this->actingAs($this->admin)->get(route('children.index'))->assertOk();
+        $page = $this->actingAs($this->admin)->get(route('children.index', ['status' => 'all']))->assertOk();
         $page->assertSee('Active <span class="ml-0.5 opacity-60">2</span>', false)
             ->assertSee('Pending <span class="ml-0.5 opacity-60">1</span>', false)
             ->assertSee('Withdrawn <span class="ml-0.5 opacity-60">0</span>', false)
@@ -69,7 +70,7 @@ class ChildrenListPhaseTwoTest extends TestCase
             // The pending child says when she starts.
             ->assertSee('Starts Nov 2');
 
-        $this->actingAs($this->admin)->get(route('children.index', ['room' => 'Toddler']))
+        $this->actingAs($this->admin)->get(route('children.index', ['status' => 'all', 'room' => 'Toddler']))
             ->assertOk()->assertSee('Toddler')->assertSee('Soon')->assertDontSee('Ada');
 
         $this->actingAs($this->admin)->get(route('children.index', ['pay' => 'dss']))
@@ -78,8 +79,9 @@ class ChildrenListPhaseTwoTest extends TestCase
         $this->actingAs($this->admin)->get(route('children.index', ['pay' => 'private']))
             ->assertOk()->assertSee('Ben')->assertDontSee('Ada');
 
-        $this->actingAs($this->admin)->get(route('children.index', ['room' => 'Attic']))->assertNotFound();
-        $this->actingAs($this->admin)->get(route('children.index', ['pay' => 'gold']))->assertNotFound();
+        // Unknown chips are dropped rather than a 404 (tester report, Nov 2026).
+        $this->actingAs($this->admin)->get(route('children.index', ['room' => 'Attic']))->assertOk()->assertViewHas('room', '');
+        $this->actingAs($this->admin)->get(route('children.index', ['pay' => 'gold']))->assertOk()->assertViewHas('pay', '');
     }
 
     public function test_a_row_carries_the_nickname_the_guardian_the_pay_and_the_schedule(): void
@@ -89,7 +91,7 @@ class ChildrenListPhaseTwoTest extends TestCase
 
         $html = $this->actingAs($this->admin)->get(route('children.index'))->assertOk()->getContent();
 
-        $this->assertStringContainsString('Foster, Ella', $html);
+        $this->assertStringContainsString('Ella Foster', $html);
         $this->assertStringContainsString('(Ellie)', $html);
         $this->assertStringContainsString('Kate Foster', $html);
         $this->assertStringContainsString('(716) 555-0116', $html);

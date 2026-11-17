@@ -43,7 +43,14 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
      *                                   queue — neither of which has a signed-in
      *                                   reader to ask.
      */
-    public function __construct(private Collection $children, private ?string $nameFormat = null) {}
+    public function __construct(private Collection $children, private ?string $nameFormat = null, private bool $full = true) {}
+
+    /**
+     * The office's columns, left out of a teacher's file. Spec §4: a teacher
+     * reads basic info for their own room — the subsidy numbers, how a child
+     * left, the health facts and the custody line are the office's.
+     */
+    public const OFFICE_ONLY = ['DSS case no', 'DSS CIN', 'Withdrawal reason', 'Withdrawal note', 'Could return', 'Health', 'Custody note'];
 
     public function collection(): Collection
     {
@@ -55,6 +62,29 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
         return 'Children';
     }
 
+    public function headings(): array
+    {
+        return $this->keep($this->allHeadings());
+    }
+
+    /** @param  Child  $child */
+    public function map($child): array
+    {
+        return $this->keep($this->allColumns($child));
+    }
+
+    /** The cells whose heading the reader may have, in order. */
+    private function keep(array $cells): array
+    {
+        if ($this->full) {
+            return $cells;
+        }
+
+        $headings = $this->allHeadings();
+
+        return array_values(array_filter($cells, fn ($cell, $i) => ! in_array($headings[$i] ?? null, self::OFFICE_ONLY, true), ARRAY_FILTER_USE_BOTH));
+    }
+
     /**
      * The columns of the roster, left to right.
      *
@@ -63,7 +93,7 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
      * all. In a spreadsheet they are two columns, because the first thing
      * anybody does with this file is sort or filter by one of them.
      */
-    public function headings(): array
+    private function allHeadings(): array
     {
         return [
             'LAN',
@@ -141,8 +171,7 @@ class ChildrenSheet implements FromCollection, WithHeadings, WithMapping, WithSt
         ];
     }
 
-    /** @param  Child  $child */
-    public function map($child): array
+    private function allColumns(Child $child): array
     {
         return [
             $child->lan,

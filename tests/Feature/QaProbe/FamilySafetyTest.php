@@ -88,6 +88,19 @@ class FamilySafetyTest extends TestCase
 
     // ------------------------------------------------------------ D2..D5 restricted ticks
 
+    /*
+     * D2–D4 — decided 16 Nov 2026 (Jordan): a restriction does NOT clear the
+     * ticks on save. The court order is what decides, not somebody
+     * remembering to untick a box (PeopleStepTest says the same), so the
+     * ticks are kept and the restriction overrides them wherever the data is
+     * read: pick-up, the door, guardian contact and texts.
+     */
+    private function assertRestrictionOverridesTicks(Child $child, Person $person, string $how): void
+    {
+        $this->assertFalse($person->fresh()->mayCollect($child), "$how: a restricted person may collect");
+        $this->assertFalse($child->fresh()->guardianLink()?->person_id === $person->id, "$how: a restricted person is the guardian contact");
+    }
+
     public function test_D2_record_page_flags_form_refuses_ticks_on_a_restricted_person(): void
     {
         $child = $this->child('Ava');
@@ -98,9 +111,7 @@ class FamilySafetyTest extends TestCase
             'pays_fees' => '0', 'gets_texts' => '1', 'restriction' => 'Court order — no contact',
         ]);
 
-        $link = $this->linkOf($child, $dad);
-        $this->assertFalse($link->can_pickup || $link->is_guardian || $link->gets_texts,
-            'Saved on a restricted person: can_pickup='.var_export($link->can_pickup, true).' is_guardian='.var_export($link->is_guardian, true).' gets_texts='.var_export($link->gets_texts, true));
+        $this->assertRestrictionOverridesTicks($child, $dad, 'record page');
     }
 
     public function test_D3_api_link_refuses_ticks_on_a_restricted_person(): void
@@ -108,13 +119,11 @@ class FamilySafetyTest extends TestCase
         $child = $this->child('Ava');
         $dad = $this->link($child, 'TEST-Dad Restricted', '7165550201', ['restriction' => 'Court order']);
 
-        $r = $this->actingAs($this->admin)->postJson(route('people.link', $dad), [
+        $this->actingAs($this->admin)->postJson(route('people.link', $dad), [
             'child_id' => $child->id, 'is_guardian' => true, 'can_pickup' => true, 'gets_texts' => true, 'restriction' => 'Court order',
         ]);
 
-        $link = $this->linkOf($child, $dad);
-        $this->assertFalse($link->can_pickup || $link->is_guardian || $link->gets_texts,
-            'HTTP '.$r->status().'; stored can_pickup='.var_export($link->can_pickup, true).' is_guardian='.var_export($link->is_guardian, true).' gets_texts='.var_export($link->gets_texts, true));
+        $this->assertRestrictionOverridesTicks($child, $dad, 'people.link');
     }
 
     public function test_D4_api_store_refuses_a_new_person_both_restricted_and_ticked(): void
@@ -128,8 +137,7 @@ class FamilySafetyTest extends TestCase
 
         $link = ChildPerson::where('child_id', $child->id)->first();
         $this->assertNotNull($link, 'HTTP '.$r->status());
-        $this->assertFalse($link->can_pickup || $link->is_guardian || $link->gets_texts,
-            'HTTP '.$r->status().'; stored can_pickup='.var_export($link->can_pickup, true).' is_guardian='.var_export($link->is_guardian, true).' gets_texts='.var_export($link->gets_texts, true));
+        $this->assertRestrictionOverridesTicks($child, Person::find($link->person_id), 'people.store');
     }
 
     /** The safety net that DOES exist: a restriction beats the tick everywhere it is read. */
@@ -522,12 +530,18 @@ class FamilySafetyTest extends TestCase
         $ava = $this->child('Ava'); // Toddler
         $dad = $this->link($ava, 'TEST-Dad', '7165551001', ['can_pickup' => true, 'restriction' => 'Court order']);
 
-        // teacher clears a court-order restriction and ticks pick-up
+        // Decided 16 Nov 2026 (Jordan, with LifecycleRoles j9): the room's
+        // teacher may change ticks and ADD a restriction, but lifting one is
+        // the office's.
         $this->actingAs($this->teacher)->post(route('children.people.flags', [$ava, $dad]), [
             'relationship' => 'Father', 'is_guardian' => '1', 'can_pickup' => '1', 'is_emergency' => '0', 'pays_fees' => '0', 'gets_texts' => '1', 'restriction' => '',
-        ])->assertRedirect();
+        ]);
+        $this->assertFalse($dad->fresh()->mayCollect($ava), 'a teacher lifted a court-order restriction');
 
-        $this->assertTrue($dad->mayCollect($ava), 'teacher could not clear restriction (expected by route comment: teachers may edit pick-up)');
+        $this->actingAs($this->admin)->post(route('children.people.flags', [$ava, $dad]), [
+            'relationship' => 'Father', 'is_guardian' => '1', 'can_pickup' => '1', 'is_emergency' => '0', 'pays_fees' => '0', 'gets_texts' => '1', 'restriction' => '',
+        ])->assertRedirect();
+        $this->assertTrue($dad->fresh()->mayCollect($ava), 'the office could not lift the restriction');
     }
 
     public function test_D24_teacher_of_another_room_is_refused_everywhere(): void
@@ -573,7 +587,7 @@ class FamilySafetyTest extends TestCase
         $show = $this->actingAs($this->teacher)->getJson(route('people.show', $mum))->assertOk()->json();
         $this->actingAs($this->teacher)->postJson(route('people.update', $mum), ['name' => 'TEST-Mum Shared', 'cell' => '7165551399'])->assertOk();
 
-        $this->assertSame('7165551399', $mum->fresh()->cell);
+        $this->assertSame('+17165551399', $mum->fresh()->cell);
         // Observation recorded: the Toddler teacher reads Pia (Preschool) and her restriction in the drawer
         $this->assertCount(2, $show['children']);
         $this->assertSame('TEST pia-only restriction', collect($show['children'])->firstWhere('id', $pia->id)['restriction']);

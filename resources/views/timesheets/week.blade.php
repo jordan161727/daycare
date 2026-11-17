@@ -113,7 +113,7 @@
                                         @if($s['avatar'])
                                             <img src="{{ $s['avatar'] }}" alt="" class="av" style="width: 30px; height: 30px; object-fit: cover;" loading="lazy" decoding="async">
                                         @else
-                                            <span class="av" style="width: 30px; height: 30px; background: #dcebfa; color: #1b5e91;" aria-hidden="true">{{ $s['initials'] }}</span>
+                                            <span class="av" style="width: 30px; height: 30px; background: #dcebfa; color: #1b5e91;" aria-hidden="true" title="{{ $s['name'] }}">{{ $s['initials'] }}</span>
                                         @endif
                                         <div style="display: flex; flex-direction: column;">
                                             <a href="{{ route('staff.show', $s['id']) }}" style="font-weight: 600; color: inherit;">{{ $s['name'] }}</a>
@@ -181,7 +181,7 @@
                                         @if($row['avatar'])
                                             <img src="{{ $row['avatar'] }}" alt="" class="av" style="width: 30px; height: 30px; object-fit: cover;" loading="lazy" decoding="async">
                                         @else
-                                            <span class="av" style="width: 30px; height: 30px; background: #dcebfa; color: #1b5e91;" aria-hidden="true">{{ $row['initials'] }}</span>
+                                            <span class="av" style="width: 30px; height: 30px; background: #dcebfa; color: #1b5e91;" aria-hidden="true" title="{{ $row['name'] }}">{{ $row['initials'] }}</span>
                                         @endif
                                         <div style="display: flex; flex-direction: column;">
                                             <a href="{{ route('staff.show', $row['id']) }}" style="font-weight: 600; color: inherit;" title="{{ $row['role'] }}">{{ $row['name'] }}</a>

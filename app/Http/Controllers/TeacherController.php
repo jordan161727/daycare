@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 class TeacherController extends Controller
 {
@@ -204,8 +205,8 @@ class TeacherController extends Controller
         // Twelve characters at least, checked here and not only in the
         // browser (QA #43, 12 Nov 2026).
         $passwordRules = $settingByHand
-            ? ['required', 'string', 'min:12', 'confirmed']
-            : ['nullable', 'string', 'min:12', 'confirmed'];
+            ? ['required', 'string', Password::defaults(), 'confirmed']
+            : ['nullable', 'string', Password::defaults(), 'confirmed'];
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -239,7 +240,7 @@ class TeacherController extends Controller
 
         // Pay is the director's alone (see User::canSeePay); anyone else's
         // save leaves it as it was.
-        if (! $request->user()->canSeePay()) {
+        if (! $request->user()->can('view-pay')) {
             unset($data['pay_rate'], $data['direct_deposit']);
         }
 

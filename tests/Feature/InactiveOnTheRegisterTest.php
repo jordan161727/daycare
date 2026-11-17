@@ -179,7 +179,10 @@ class InactiveOnTheRegisterTest extends TestCase
             ->get(route('attendance.classic', ['date' => self::LAST_TERM]))
             ->assertOk()
             ->assertSee('All <span class="ml-0.5 opacity-60 tabular-nums"', false)
-            ->assertSee("+ '/' + 2", false);
+            // Counted in the page off the same rows (on the roll that day, or
+            // arrived — QA retest, 16 Nov 2026), not a figure of its own.
+            ->assertSee("+ '/' + centreCount", false)
+            ->assertViewHas('dayCounts', fn (array $counts) => $counts['enrolled'] === 2);
     }
 
     /** The printed week carries them too, or the paper disagrees with the screen. */

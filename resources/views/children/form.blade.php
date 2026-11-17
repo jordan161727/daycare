@@ -101,7 +101,7 @@
     ['label' => 'Emergency & pickup', 'fields' => array_merge(array_values($sections['Emergency contacts']), array_values($sections['Authorized Pickup 1']), array_values($sections['Authorized Pickup 2']), array_values($sections['Authorized Pickup 3']))],
     ['label' => 'Notes', 'fields' => $noteFields],
 ] : array_values(array_filter([
-    ['label' => 'Basics', 'blurb' => 'Who the child is, and how their place at the centre is set up.', 'fields' => array_merge(['photo'], $identityFields, $enrollmentFields)],
+    ['label' => 'Basics', 'blurb' => 'Who the child is, and how their place at the center is set up.', 'fields' => array_merge(['photo'], $identityFields, $enrollmentFields)],
     ['label' => 'Child details', 'blurb' => 'Where they live, and the number to ring first.', 'fields' => array_values($sections['Contact'])],
 
     $usesPeopleStep
@@ -175,26 +175,151 @@
         originalStatus: @js($child?->status),
         confirmingStatus: false,
         statusConfirmed: false,
+        {{-- Leaving Add part-way asks first (tester report, Nov 2026): any
+             typing marks the form, a save that goes ahead clears it. A form
+             sent back with a message already holds unsaved answers. --}}
+        guardUnsaved: @js($child === null),
+        dirty: @js($child === null && $errors->any()),
+        {{-- Dirty means the answers differ from how the form opened, not that
+             an event fired: the date pickers and the steps fire input and
+             change on their own (QA retest, 16 Nov 2026). Typing a value and
+             deleting it again is not a change. A form sent back with a
+             message stays marked: what it holds was never saved. --}}
+        openedAs: null,
+        answers() {
+            const data = new FormData(this.$el);
+            data.delete('_token');
+            return new URLSearchParams([...data].map(([k, v]) => [k, typeof v === 'string' ? v : (v.name || '')])).toString();
+        },
+        noteChange() {
+            if (! this.guardUnsaved || this.openedAs === null) return;
+            this.dirty = @js($child === null && $errors->any()) || this.answers() !== this.openedAs;
+        },
+        {{-- The same child twice, caught as it is typed (QA, Nov 2026): once a
+             first name, a last name and a whole date of birth are in, the
+             children on file with them are fetched and named above the form,
+             with a way to each. Saving past them takes "Continue anyway"; the
+             server still refuses without it. --}}
+        dupUrl: @js(request()->user()?->isAdmin() ? route('children.duplicate-check') : null),
+        dupExcept: @js($child?->getKey()),
+        dupMatches: [],
+        dupCount: 0,
+        dupKey: '',
+        dupTimer: null,
+        dupConfirmed: false,
+        dupBirth() {
+            const real = this.$el.querySelector('[name=birth_date]');
+            if (! real) return '';
+            {{-- The box being typed in is flatpickr's; the named input only
+                 takes the date once the box is left. --}}
+            const text = (real._flatpickr?.altInput ? real._flatpickr.altInput.value : real.value).trim();
+            let m, y, mo, d;
+            if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text))) [, mo, d, y] = m.map(Number);
+            else if ((m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text))) [, y, mo, d] = m.map(Number);
+            else return '';
+            const date = new Date(y, mo - 1, d);
+            if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return '';
+            return String(mo).padStart(2, '0') + '/' + String(d).padStart(2, '0') + '/' + y;
+        },
+        dupWatch() {
+            if (! this.dupUrl) return;
+            clearTimeout(this.dupTimer);
+            this.dupTimer = setTimeout(() => this.dupCheck(), 400);
+        },
+        async dupCheck() {
+            const value = (name) => (this.$el.querySelector('[name=' + name + ']')?.value || '').trim();
+            const first = value('first_name'), last = value('last_name'), born = this.dupBirth();
+            const key = [first.toLowerCase(), last.toLowerCase(), born].join('|');
+            if (key === this.dupKey) return;
+            this.dupKey = key;
+            this.dupConfirmed = false;
+            if (! first || ! last || ! born) { this.dupMatches = []; this.dupCount = 0; return; }
+            const query = new URLSearchParams({ first_name: first, last_name: last, birth_date: born });
+            if (this.dupExcept) query.set('except', this.dupExcept);
+            try {
+                const response = await fetch(this.dupUrl + '?' + query, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+                if (! response.ok || key !== this.dupKey) return;
+                const found = await response.json();
+                if (key !== this.dupKey) return;
+                this.dupMatches = found.matches || [];
+                this.dupCount = found.count || this.dupMatches.length;
+            } catch (e) { /* The save still checks. */ }
+        },
+        dupSentence() {
+            const match = this.dupMatches[0];
+            if (! match) return '';
+            const more = this.dupCount - 1;
+            return 'A child named ' + match.name + (match.born ? ' born ' + match.born : '') + ' already exists (LAN ' + match.lan + ')' + (more > 0 ? ' and ' + more + ' more' : '') + '.';
+        },
+        holdForDuplicate(event) {
+            if (! this.dupMatches.length || this.dupConfirmed || event.submitter?.name === 'confirm_duplicate') return false;
+            event.preventDefault();
+            this.$nextTick(() => { this.$refs.dupWarning?.scrollIntoView({ block: 'center', behavior: 'smooth' }); this.$refs.dupConfirm?.focus() });
+            return true;
+        },
     }"
+    @input="noteChange(); dupWatch()"
+    @change="noteChange(); dupWatch()"
+    {{-- Cancel is a choice to leave: it is never held by the prompt. --}}
+    @click="if ($event.target.closest('[data-cancel-form]')) { dirty = false; guardUnsaved = false }"
+    data-unsaved-guard
     {{-- The dialog opens the moment a different status is picked, with Save on
          it, so the change is made and saved from where the hand already is
          rather than from the top of the page. The submit guard is the second
          lock: nothing with a changed status posts without the word. --}}
-    x-init="$watch('status', value => { if (originalStatus !== null && value !== originalStatus && ! statusConfirmed) { confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) } })"
-    @submit="if (@js($tabbed) && (! firstName.trim() || ! lastName.trim())) { $event.preventDefault(); nameMissing = true; go(0); $nextTick(() => (firstName.trim() ? $refs.lastName : $refs.firstName)?.focus()) } else if (originalStatus !== null && status !== originalStatus && ! statusConfirmed) { $event.preventDefault(); confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) }"
+    x-init="$watch('status', value => { if (originalStatus !== null && value !== originalStatus && ! statusConfirmed) { confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) } }); if (guardUnsaved) { setTimeout(() => { openedAs = answers() }, 0); window.addEventListener('beforeunload', e => { if (guardUnsaved && dirty) { e.preventDefault(); e.returnValue = ''; } }) }"
+    @submit="if (holdForDuplicate($event)) {} else if (@js($tabbed) && (! firstName.trim() || ! lastName.trim())) { $event.preventDefault(); nameMissing = true; go(0); $nextTick(() => (firstName.trim() ? $refs.lastName : $refs.firstName)?.focus()) } else if (originalStatus !== null && status !== originalStatus && ! statusConfirmed) { $event.preventDefault(); confirmingStatus = true; $nextTick(() => $refs.statusConfirm?.focus()) }; if (! $event.defaultPrevented) dirty = false"
     @keydown.escape.window="if (confirmingStatus) { confirmingStatus = false; status = originalStatus }"
 >
     @csrf
     @if($method !== 'POST') @method($method) @endif
+    {{-- The version of the record this form was drawn from: a save from an older one is refused (RecordLock). --}}
+    @if($child?->exists)<input type="hidden" name="{{ \App\Services\RecordLock::FIELD }}" value="{{ \App\Services\RecordLock::version($child) }}">@endif
     @isset($importToken)<input type="hidden" name="import_token" value="{{ $importToken }}">@endisset
 
     @if($errors->has('duplicate'))
-        {{-- The same child twice, refused by name: the record it matches,
-             and the one way past — saying this is a different child. --}}
+        {{-- The same child twice, held back by name and birthday: the record
+             it matches, a way to it, and the one way past — saying this is a
+             different child, which posts the form again with the word. --}}
+        @php($duplicateOf = session('duplicate_of') ? \App\Models\Child::find(session('duplicate_of')) : null)
         <div class="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100" role="alert" data-duplicate>
             <p class="font-semibold">Possible duplicate</p>
             <p class="mt-1">{{ $errors->first('duplicate') }}</p>
-            <label class="mt-2 flex items-center gap-2 font-medium"><input type="checkbox" name="allow_duplicate" value="1" class="rounded border-amber-400"> Save anyway — this is a different child</label>
+            <div class="mt-2 flex flex-wrap items-center gap-3">
+                @if($duplicateOf)
+                    <a href="{{ route('children.show', $duplicateOf) }}" class="font-semibold underline" data-duplicate-open>Open LAN {{ $duplicateOf->lan }}</a>
+                @endif
+                <button type="submit" name="confirm_duplicate" value="1" class="rounded-lg border border-amber-400 bg-white px-3 py-1.5 font-semibold text-amber-900 hover:bg-amber-100 dark:bg-transparent dark:text-amber-100" data-duplicate-confirm>Continue anyway — this is a different child</button>
+            </div>
+        </div>
+    @endif
+
+    {{-- The live check's warning (see dupCheck above): the same look as the
+         banner a refused save shows. Ticking the box sends confirm_duplicate
+         with the save. --}}
+    <div x-ref="dupWarning" x-show="dupMatches.length" x-cloak class="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100" role="alert" data-duplicate-live>
+        <p class="font-semibold">Possible duplicate</p>
+        <p class="mt-1" x-text="dupSentence()" data-duplicate-live-text></p>
+        <ul class="mt-1 space-y-0.5" x-show="dupMatches.length">
+            <template x-for="match in dupMatches" :key="match.id">
+                <li>
+                    <a :href="match.url" class="font-semibold underline" target="_blank" rel="noopener" data-duplicate-live-open>Open record</a>
+                    <span x-text="'LAN ' + match.lan + ' · ' + match.name + ' · ' + (match.room || 'no room yet') + ' · ' + match.status"></span>
+                </li>
+            </template>
+        </ul>
+        <label class="mt-2 flex items-center gap-2 font-semibold">
+            <input type="checkbox" name="confirm_duplicate" value="1" x-ref="dupConfirm" x-model="dupConfirmed" :disabled="! dupMatches.length" data-duplicate-live-confirm>
+            Continue anyway — this is a different child
+        </label>
+    </div>
+
+    @if($errors->has('activation'))
+        {{-- Active needs a date of birth, a guardian and an emergency
+             contact; the tabs that hold what is missing are marked. --}}
+        <div class="mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100" role="alert" data-activation-refused>
+            <p class="font-semibold">Not ready to be Active</p>
+            <p class="mt-1">{{ $errors->first('activation') }}</p>
         </div>
     @endif
 
@@ -206,19 +331,24 @@
             <div class="cs-band-top">
                 <span class="cs-avatar shrink-0"><x-child-avatar :child="$child" size="h-11 w-11" /></span>
                 <div class="min-w-0">
-                    <p class="cs-band-name truncate">{{ $child->first_name }} {{ $child->last_name }}</p>
+                    <p class="cs-band-name truncate">{{ $child->displayName() }}</p>
                     <p class="cs-meta truncate">LAN {{ $child->lan }} · {{ $child->classroom ?: 'Unassigned' }} · {{ $child->status }}</p>
                 </div>
                 <div class="ml-auto flex items-center gap-2">
-                    <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain">Cancel</a>
+                    <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain" data-cancel-form>Cancel</a>
                     <button class="cs-btn cs-btn-primary" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
                 </div>
             </div>
-            <div class="cs-tabs" role="tablist">
+            {{-- The edit form's steps as tabs a screen reader can name and
+                 follow to their panel (QA #17/#33, 12 Nov 2026). --}}
+            <div class="cs-tabs" role="tablist" aria-label="Child record sections">
                 @foreach($steps as $i => $step)
                     <button
                         type="button"
                         role="tab"
+                        id="cs-tab-{{ $i }}"
+                        aria-controls="cs-panel-{{ $i }}"
+                        aria-label="{{ $step['label'] }}, step {{ $i + 1 }} of {{ count($steps) }}"
                         class="cs-tab"
                         @click="index = {{ $i }}"
                         :aria-selected="index === {{ $i }} ? 'true' : 'false'"
@@ -256,7 +386,13 @@
              @keydown.home.prevent="go(0); $nextTick(() => $el.querySelector('[aria-selected=true]')?.focus())"
              @keydown.end.prevent="go({{ $last }}); $nextTick(() => $el.querySelector('[aria-selected=true]')?.focus())">
             @foreach($steps as $i => $step)
+                {{-- Named outright (QA #17/#33, 12 Nov 2026), so a screen reader
+                     says "Basics, step 1 of 6" rather than piecing the name
+                     together from the number, the word and the Required tag. --}}
+                @php($tabName = $step['label'].', step '.($i + 1).' of '.count($steps))
                 <button type="button" role="tab" id="ca-tab-{{ $i }}" aria-controls="ca-panel-{{ $i }}" class="ca-tab"
+                        aria-label="{{ $tabName }}"
+                        @if($i === 0) :aria-label="(! firstName.trim() || ! lastName.trim()) ? @js($tabName.', required') : @js($tabName)" @endif
                         @click="go({{ $i }})"
                         aria-selected="{{ $i === $initialStep ? 'true' : 'false' }}" :aria-selected="index === {{ $i }} ? 'true' : 'false'"
                         tabindex="{{ $i === $initialStep ? 0 : -1 }}" :tabindex="index === {{ $i }} ? 0 : -1"
@@ -324,7 +460,9 @@
                         <div class="cs-grid mt-4">
                             <label>
                                 <span class="cs-label">Nickname</span>
-                                <input name="nickname" value="{{ old('nickname') }}" class="cs-input">
+                                {{-- Blank when there isn't one: "N/A", "None" and "-" are saved as no
+                                     nickname anyway (Child::cleanNickname, QA #20, 12 Nov 2026). --}}
+                                <input name="nickname" value="{{ old('nickname') }}" class="cs-input" placeholder="Leave blank if none">
                                 <x-input-error :messages="$errors->get('nickname')" />
                             </label>
                             <label>
@@ -384,7 +522,7 @@
             </div>
             @else
             {{-- ---- 1. Basics ---- --}}
-            <div @if($stepper) x-show="index === 0" @endif>
+            <div @if($stepper) id="cs-panel-0" role="tabpanel" aria-labelledby="cs-tab-0" x-show="index === 0" @endif>
                 <h2 class="cs-title">{{ $steps[0]['label'] }}</h2>
                 <p class="cs-blurb">{{ $steps[0]['blurb'] }}</p>
                 <div class="cs-cards">
@@ -405,7 +543,7 @@
                             <div class="h-16 w-16 shrink-0">
                                 <img x-show="preview" x-cloak :src="preview" alt="" class="h-16 w-16 rounded-xl object-cover">
                                 @if($currentPhoto)
-                                    <img x-show="! preview && ! cleared" src="{{ $currentPhoto }}" alt="{{ $child->first_name }} {{ $child->last_name }}" class="h-16 w-16 rounded-xl object-cover">
+                                    <img x-show="! preview && ! cleared" src="{{ $currentPhoto }}" alt="{{ $child->displayName() }}" class="h-16 w-16 rounded-xl object-cover">
                                 @endif
                                 <div x-show="! preview @if($currentPhoto) && cleared @endif" @if($currentPhoto) x-cloak @endif>
                                     @if($child)
@@ -644,7 +782,7 @@
                 ? [1 => ['Contact']]
                 : [1 => ['Contact'], 2 => ['Mother / Legal Guardian', 'Father / Legal Guardian'], 3 => ['Emergency contacts', 'Authorized Pickup 1', 'Authorized Pickup 2', 'Authorized Pickup 3']]
             as $stepIndex => $cards)
-                <div @if($stepper) x-show="index === {{ $stepIndex }}" x-cloak @endif>
+                <div @if($stepper) id="cs-panel-{{ $stepIndex }}" role="tabpanel" aria-labelledby="cs-tab-{{ $stepIndex }}" x-show="index === {{ $stepIndex }}" x-cloak @endif>
                     <h2 class="cs-title">{{ $steps[$stepIndex]['label'] }}</h2>
                     <p class="cs-blurb">{{ $steps[$stepIndex]['blurb'] }}</p>
                     <div class="cs-cards">
@@ -683,7 +821,7 @@
                                             @if($options = $choices($field, $current))
                                                 <select id="{{ $field }}" name="{{ $field }}" class="{{ $fieldClass($field) }}">@foreach($options as $value => $text)<option value="{{ $value }}" @selected((string) $current === (string) $value)>{{ $text }}</option>@endforeach</select>
                                             @else
-                                                <input id="{{ $field }}" type="text" name="{{ $field }}" value="{{ $current }}" class="{{ $fieldClass($field) }}">
+                                                <input id="{{ $field }}" type="text" name="{{ $field }}" value="{{ $current }}" class="{{ $fieldClass($field) }}" @if($field === 'nickname') placeholder="Leave blank if none" @endif>
                                             @endif
                                             <x-input-error :messages="$errors->get($field)" />
                                         </label>
@@ -698,13 +836,13 @@
 
             {{-- ---- 3. People: one row per adult, saved as it goes ---- --}}
             @if($usesPeopleStep)
-                <div @if($stepper) x-show="index === 2" x-cloak @endif>
+                <div @if($stepper) id="cs-panel-2" role="tabpanel" aria-labelledby="cs-tab-2" x-show="index === 2" x-cloak @endif>
                     @include('children.partials.people-step')
                 </div>
             @endif
 
             {{-- ---- 4. Notes: two boxes of prose, a card each ---- --}}
-            <div @if($tabbed) {!! $panel($last) !!} @elseif($stepper) x-show="index === {{ $last }}" x-cloak @endif>
+            <div @if($tabbed) {!! $panel($last) !!} @elseif($stepper) id="cs-panel-{{ $last }}" role="tabpanel" aria-labelledby="cs-tab-{{ $last }}" x-show="index === {{ $last }}" x-cloak @endif>
                 @unless($tabbed)
                     <h2 class="cs-title">{{ $steps[$last]['label'] }}</h2>
                     <p class="cs-blurb">{{ $steps[$last]['blurb'] }}</p>
@@ -785,7 +923,7 @@
             <button class="cs-btn cs-btn-primary" x-show="index === {{ $last }}" x-cloak x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
             <span class="cs-counter">Section <span x-text="index + 1">{{ $initialStep + 1 }}</span> of {{ count($steps) }}</span>
         @elseif($tabbed)
-            <a href="{{ route('children.index') }}" class="ca-cancel">Cancel</a>
+            <a href="{{ route('children.index') }}" class="ca-cancel" data-cancel-form>Cancel</a>
             <span class="ca-step">Step <span x-text="index + 1">{{ $initialStep + 1 }}</span> of {{ count($steps) }}</span>
             <button type="button" class="ca-btn" @click="go(index - 1)" x-show="index > 0" @if($initialStep === 0) x-cloak @endif>Back</button>
             {{-- Next is a plain button and Add is the submit, so Enter in a text
@@ -794,7 +932,7 @@
                     x-text="'Next: ' + @js(array_column($steps, 'label'))[index + 1]">Next: {{ $steps[min($initialStep + 1, $last)]['label'] }}</button>
             <button class="ca-btn ca-btn-primary" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
         @else
-            <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain">Cancel</a>
+            <a href="{{ route('children.index') }}" class="cs-btn cs-btn-plain" data-cancel-form>Cancel</a>
             <button class="cs-btn cs-btn-primary ml-auto" x-text="status === 'Archived' ? 'Save and archive' : @js($submit)">{{ $submit }}</button>
         @endif
     </div>

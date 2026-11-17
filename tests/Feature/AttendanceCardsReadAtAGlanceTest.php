@@ -76,7 +76,7 @@ class AttendanceCardsReadAtAGlanceTest extends TestCase
         $this->assertStringContainsString(":class=\"isIn(card) ? '' : 'opacity-40 grayscale group-hover:opacity-70 group-hover:grayscale-0'\"", $html);
         $this->assertStringContainsString('x-show="isIn(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-teal-500', $html);
         $this->assertStringContainsString('>Checked in</span>', $html);
-        $this->assertStringContainsString('x-show="isOut(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-400', $html);
+        $this->assertStringContainsString('x-show="isOut(card)" x-cloak class="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-500 dark:bg-slate-600', $html);
         $this->assertStringContainsString('>Checked out</span>', $html);
     }
 

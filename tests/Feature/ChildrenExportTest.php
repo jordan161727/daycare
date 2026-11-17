@@ -139,6 +139,10 @@ class ChildrenExportTest extends TestCase
             // When the enrollment note was last touched, and by whom the
             // record was: facts about the record, like the timestamps.
             'enrollment_note_at', 'updated_by',
+            // The time away between a last day and a re-enrollment: what the
+            // DSS grid and the register read, already told as the withdrawn
+            // and re-enrolled lines of the enrollment history.
+            'enrollment_gaps',
         ];
 
         // The contact blocks moved to people and child_people and are on the

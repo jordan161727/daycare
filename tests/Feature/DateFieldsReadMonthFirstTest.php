@@ -51,6 +51,35 @@ class DateFieldsReadMonthFirstTest extends TestCase
         // A field that arrives after load is picked up.
         $this->assertTrue($result['lateUpgraded']);
         $this->assertSame('10/03/2026', $result['lateShown']);
+
+        // Tester report, Nov 2026. A birth date's calendar is in the page,
+        // under its box, covering no field; other fields keep 'auto'.
+        $this->assertTrue($result['dobStatic']);
+        $this->assertTrue($result['dobCalendarInFlow']);
+        $this->assertSame('auto', $result['enrPosition']);
+
+        // Escape, Tab, the form being sent and a click elsewhere close it.
+        $this->assertTrue($result['openedOnce']);
+        $this->assertTrue($result['closedByEscape']);
+        $this->assertTrue($result['closedByTab']);
+        $this->assertTrue($result['closedBySubmit']);
+        $this->assertTrue($result['labelClickCloses']);
+
+        // Nonsense is said under the field while typing — with a past
+        // example for a birth date — and the calendar closes off it.
+        $this->assertSame('Type the date as mm/dd/yyyy, for example 06/16/2021.', $result['whileTypingMessage']);
+        $this->assertTrue($result['whileTypingShown']);
+        $this->assertSame('true', $result['whileTypingInvalid']);
+        $this->assertTrue($result['whileTypingClosed']);
+        $this->assertFalse($result['halfTypedShown'], 'a date still being typed is not yet wrong');
+        $this->assertNull($result['fixedInvalid'], 'typing it right clears the mark');
+
+        // Left half typed, any other field says so on leaving the box, and
+        // the form does not send.
+        $this->assertFalse($result['enrHalfTypedShown']);
+        $this->assertSame('Type the date as mm/dd/yyyy, for example 06/16/2026.', $result['blurMessage']);
+        $this->assertSame('true', $result['blurInvalid']);
+        $this->assertFalse($result['submittedWithBadDate']);
     }
 
     public function test_the_page_loads_the_date_field_upgrade(): void

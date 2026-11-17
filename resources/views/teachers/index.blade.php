@@ -96,7 +96,7 @@
                                 @if($teacher->avatar_url)
                                     <img src="{{ $teacher->avatar_url }}" alt="" class="h-8 w-8 rounded-full object-cover">
                                 @else
-                                    <span class="grid h-8 w-8 place-items-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{{ $teacher->initials }}</span>
+                                    <span class="grid h-8 w-8 place-items-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300" title="{{ $teacher->name }}">{{ $teacher->initials }}</span>
                                 @endif
                             </td>
                             <td class="px-4 py-3">

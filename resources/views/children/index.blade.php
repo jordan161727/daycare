@@ -16,21 +16,32 @@
 @php($isAdmin = auth()->user()->isAdmin())
 @php($archivedTab = $status === \App\Models\Child::ARCHIVED)
 @php($leftTab = $status === 'Inactive' || $archivedTab)
+{{-- No status in the address now means Active (QA #5, 12 Nov 2026), so every
+     link that keeps the open tab names it — All as status=all. --}}
+@php($allStatus = \App\Http\Controllers\ChildController::ALL_STATUSES)
+@php($statusParam = $status === '' ? $allStatus : $status)
 @php($keep = array_filter(['sort' => $sort, 'direction' => $direction, 'room' => $room, 'pay' => $pay, 'gap' => $gap]))
 @php($nextDirection = fn ($column) => $sort === $column && $direction === 'asc' ? 'desc' : 'asc')
-@php($sortUrl = fn ($column) => route('children.index', array_filter(['sort' => $column, 'direction' => $nextDirection($column), 'status' => $status, 'room' => $room, 'pay' => $pay, 'gap' => $gap])))
+@php($sortUrl = fn ($column) => route('children.index', array_filter(['sort' => $column, 'direction' => $nextDirection($column), 'status' => $statusParam, 'room' => $room, 'pay' => $pay, 'gap' => $gap])))
 @php($arrow = fn ($column) => $sort === $column ? ($direction === 'asc' ? ' ↑' : ' ↓') : '')
 @php($roomColours = ['Infant' => '#8cc4b2', 'Transition' => '#e0b577', 'Toddler' => '#b3a3dc', 'PreK' => '#9dc585', 'UPK-4' => '#e8a0b8', 'School Age' => '#92b4df'])
 
-<div class="ch" x-data="childrenRoll({ csrf: @js(csrf_token()), archivedTab: @js($archivedTab) })" @keydown.escape.window="confirming = null" style="display: flex; flex-direction: column; gap: 14px;">
+{{-- The search is kept in the address as ?search= (tester report, Nov 2026),
+     so Back, a refresh and a shared link all open on the same search. ?q= is
+     read too, as the shorter spelling. --}}
+@php($searchQuery = mb_substr(trim(collect([request('search'), request('q')])->first(fn ($value) => is_string($value) && trim($value) !== '') ?? ''), 0, 100))
+<div class="ch" x-data="childrenRoll({ csrf: @js(csrf_token()), archivedTab: @js($archivedTab), search: @js($searchQuery), index: @js((object) ($searchIndex ?? [])), listed: @js($children->pluck('lan')->map(fn ($lan) => (string) $lan)->values()) })" @click.capture="keepSearchInAddress(search)" @keydown.escape.window="confirming = null" style="display: flex; flex-direction: column; gap: 14px;">
 
     {{-- Records to finish: what is still missing across the active roll, and
-         a press lists just those children. Director's job, so director only. --}}
+         a press lists just those children. Director's job, so director only.
+         Each press opens the Active tab (QA #5, 12 Nov 2026): the counts are
+         the active roll's, and the list they open has to be the same set —
+         "84" pressed used to list 88, the withdrawn included. --}}
     @if($isAdmin && $gapCounts->isNotEmpty())
         <div class="gap" data-records-to-finish>
             <b>Records to finish:</b>
             @foreach($gapCounts as $key => $count)
-                <a href="{{ route('children.index', array_filter(['status' => $status, 'room' => $room, 'pay' => $pay, 'gap' => $gap === $key ? null : $key])) }}" class="gapb {{ $gap === $key ? 'on' : '' }}" data-gap="{{ $key }}">{{ $count }} {{ strtolower(\App\Models\Child::GAPS[$key]) }}</a>
+                <a href="{{ route('children.index', array_filter(['status' => 'Active', 'room' => $room, 'pay' => $pay, 'gap' => $gap === $key ? null : $key])) }}" class="gapb {{ $gap === $key ? 'on' : '' }}" data-gap="{{ $key }}">{{ $count }} {{ strtolower(\App\Models\Child::GAPS[$key]) }}</a>
             @endforeach
             <span style="margin-left: auto; font-size: 12.5px;">Click one to list just those children</span>
         </div>
@@ -39,7 +50,7 @@
     <section class="ch-card" style="overflow: hidden;">
         <div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid #e7e9f0;">
             <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
-                <h1 style="margin: 0; font-size: 22px; font-weight: 700; margin-right: 6px;">{{ $isAdmin ? 'Children' : 'My Students' }}</h1>
+                <h1 style="margin: 0; font-size: 22px; font-weight: 700; margin-right: 6px;">Children</h1>
 
                 {{-- The roll by status, as tabs with a count apiece. Every
                      status is drawn, as the mock has it, so the tab is where
@@ -54,7 +65,7 @@
                     @if($showArchived)
                         <a href="{{ route('children.index', $keep + ['status' => \App\Models\Child::ARCHIVED]) }}" class="seg {{ $archivedTab ? 'on' : '' }}" data-count="Archived" data-keep @if($archivedTab) aria-current="true" @endif>Archived <span class="ml-0.5 opacity-60">{{ $archivedCount }}</span></a>
                     @endif
-                    <a href="{{ route('children.index', $keep) }}" class="seg {{ $status === '' ? 'on' : '' }}" data-count="all" data-keep @if($status === '') aria-current="true" @endif>All <span class="ml-0.5 opacity-60">{{ $rollCount }}</span></a>
+                    <a href="{{ route('children.index', $keep + ['status' => $allStatus]) }}" class="seg {{ $status === '' ? 'on' : '' }}" data-count="all" data-keep @if($status === '') aria-current="true" @endif>All <span class="ml-0.5 opacity-60">{{ $rollCount }}</span></a>
                 </div>
 
                 <div style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
@@ -70,7 +81,7 @@
                          because it is built from the same query as the table.
                          Not on the Archived tab — the archived are off the roll. --}}
                     @if(! $archivedTab)
-                        <a href="{{ route('children.export', request()->only('sort', 'direction', 'status', 'room', 'pay', 'gap') + ['t' => now()->timestamp]) }}" class="btn" title="Download this list as an Excel file">Export</a>
+                        <a href="{{ route('children.export', array_filter(['sort' => $sort, 'direction' => $direction, 'status' => $statusParam, 'room' => $room, 'pay' => $pay, 'gap' => $gap]) + ['t' => now()->timestamp]) }}" class="btn" title="Download this list as an Excel file">Export</a>
                     @endif
                     @if($isAdmin)
                         <a href="{{ route('children.create') }}" class="btn pri">+ Add child</a>
@@ -80,19 +91,21 @@
 
             {{-- Room chips, then the pay chips, counting the tab that is open. --}}
             <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;" data-room-chips>
-                <a href="{{ route('children.index', array_filter(['status' => $status, 'pay' => $pay, 'gap' => $gap, 'sort' => $sort, 'direction' => $direction])) }}" class="chip {{ $room === '' ? 'on' : '' }}"><span style="width: 9px; height: 9px; border-radius: 3px; background: #c3cbe0;"></span>All <span style="opacity: .7; font-weight: 500;">{{ $payCounts['all'] }}</span></a>
+                <a href="{{ route('children.index', array_filter(['status' => $statusParam, 'pay' => $pay, 'gap' => $gap, 'sort' => $sort, 'direction' => $direction])) }}" class="chip {{ $room === '' ? 'on' : '' }}" data-room-chip-all><span style="width: 9px; height: 9px; border-radius: 3px; background: #c3cbe0;"></span>All <span style="opacity: .7; font-weight: 500;">{{ $payCounts['all'] }}</span></a>
                 @foreach($roomCounts as $name => $count)
-                    <a href="{{ route('children.index', array_filter(['status' => $status, 'pay' => $pay, 'gap' => $gap, 'sort' => $sort, 'direction' => $direction, 'room' => $room === $name ? null : $name])) }}" class="chip {{ $room === $name ? 'on' : '' }}" data-room-chip="{{ $name }}"><span style="width: 9px; height: 9px; border-radius: 3px; background: {{ $roomColours[$name] ?? '#c3cbe0' }};"></span>{{ $name }} <span style="opacity: .7; font-weight: 500;">{{ $count }}</span></a>
+                    <a href="{{ route('children.index', array_filter(['status' => $statusParam, 'pay' => $pay, 'gap' => $gap, 'sort' => $sort, 'direction' => $direction, 'room' => $room === $name ? null : $name])) }}" class="chip {{ $room === $name ? 'on' : '' }}" data-room-chip="{{ $name }}"><span style="width: 9px; height: 9px; border-radius: 3px; background: {{ $roomColours[$name] ?? '#c3cbe0' }};"></span>{{ $name }} <span style="opacity: .7; font-weight: 500;">{{ $count }}</span></a>
                 @endforeach
                 <span style="width: 1px; height: 22px; background: #e7e9f0; margin: 0 6px;"></span>
                 <span style="font-size: 11px; font-weight: 700; color: #8a90a0; letter-spacing: .06em;">PAY</span>
                 @foreach(['' => 'All', 'dss' => 'DSS', 'private' => 'Private pay'] as $key => $label)
-                    <a href="{{ route('children.index', array_filter(['status' => $status, 'room' => $room, 'gap' => $gap, 'sort' => $sort, 'direction' => $direction, 'pay' => $key])) }}" class="chip {{ $pay === $key ? 'on' : '' }}" data-pay-chip="{{ $key ?: 'all' }}">{{ $label }} <span style="opacity: .7; font-weight: 500;">{{ $payCounts[$key ?: 'all'] }}</span></a>
+                    <a href="{{ route('children.index', array_filter(['status' => $statusParam, 'room' => $room, 'gap' => $gap, 'sort' => $sort, 'direction' => $direction, 'pay' => $key])) }}" class="chip {{ $pay === $key ? 'on' : '' }}" data-pay-chip="{{ $key ?: 'all' }}">{{ $label }} <span style="opacity: .7; font-weight: 500;">{{ $payCounts[$key ?: 'all'] }}</span></a>
                 @endforeach
             </div>
         </div>
 
         @if(session('success'))<div style="margin: 12px 20px 0; border-radius: 12px; border: 1px solid #b9e4cc; background: #e3f5ec; padding: 10px 14px; font-size: 13.5px; font-weight: 500; color: #166534;">{{ session('success') }}</div>@endif
+        {{-- Hours saved outside when the centre is open (Child::hoursOutsideOpening). --}}
+        @if(session('hours_warning'))<div role="alert" data-hours-warning style="margin: 12px 20px 0; border-radius: 12px; border: 1px solid #f3d38b; background: #fdf3dc; padding: 10px 14px; font-size: 13.5px; font-weight: 500; color: #8a5a00;">{{ session('hours_warning') }}</div>@endif
 
         @if($archivedTab)
             {{-- Said once, above the drawer, because the tabs a few lines up
@@ -110,20 +123,30 @@
                     <tbody>
                         @forelse($children as $child)
                             @php($url = route('children.show', $child))
-                            <tr class="row" x-show="!gone.includes(@js($child->lan)) && @js(strtolower($child->first_name.' '.$child->last_name.' '.$child->lan)).includes(search.toLowerCase())" @click="if (! $event.target.closest('a, button, form')) window.location = @js($url)">
+                            @php($searchHays[$child->lan] = $child->rosterSearchText())
+                            <tr class="row" x-show="!gone.includes(@js((string) $child->lan)) && matches(@js($searchHays[$child->lan]))" @click="if (! $event.target.closest('a, button, form')) window.location = @js($url)">
                                 <td class="faint" style="font-variant-numeric: tabular-nums;">{{ $child->lan }}</td>
-                                <td><div style="display: flex; align-items: center; gap: 10px;"><span class="av"><x-child-avatar :child="$child" /></span><a href="{{ $url }}" style="font-weight: 600; color: #1c2130;" class="dark:!text-slate-100">{{ $child->last_name }}, {{ $child->first_name }}@if(filled($child->nickname))<span style="font-weight: 500; color: #8a90a0;"> ({{ $child->nickname }})</span>@endif</a></div></td>
+                                <td><div style="display: flex; align-items: center; gap: 10px;"><span class="av"><x-child-avatar :child="$child" /></span><a href="{{ $url }}" style="font-weight: 600; color: #1c2130;" class="dark:!text-slate-100">{{ $child->displayName() }}@if(filled($child->nickname))<span style="font-weight: 500; color: #8a90a0;"> ({{ $child->nickname }})</span>@endif</a></div></td>
                                 <td><span style="display: inline-flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 3px; background: {{ $roomColours[$child->classroom] ?? '#c3cbe0' }};"></span>{{ $child->classroom ?: '—' }}</span></td>
                                 <td style="font-weight: 600;">{{ $child->withdrawn_on?->format('M j, Y') ?? ($child->archived_at?->format('M j, Y') ?? '—') }}</td>
                                 <td>@if(filled($child->withdrawal_reason))<span class="pill mut">{{ $child->withdrawal_reason }}</span>@else<span class="faint">—</span>@endif</td>
                                 <td style="white-space: normal; max-width: 320px; font-size: 13px;" class="muted">{{ $child->withdrawal_note ?: '' }}</td>
-                                <td>{{ $archivedTab ? ('Archived '.($child->archived_at?->format('M j, Y') ?? '')) : ($child->could_return ?: '—') }}</td>
+                                <td>
+                                    @if(! $archivedTab && $child->status === 'Active')
+                                        {{-- Past their last day, still Active: listed with the leavers by
+                                             Child::inStatusTab until the nightly children:sync-enrollments
+                                             moves them (QA retest, 16 Nov 2026). Nothing to re-enroll. --}}
+                                        <span class="pill miss" title="Last day was {{ $child->withdrawn_on?->format('M j, Y') }}, but the status still says Active. Not counted as enrolled anywhere." data-left-not-updated>Left {{ $child->withdrawn_on?->format('M j') }} — status not updated</span>
+                                    @else
+                                        {{ $archivedTab ? ('Archived '.($child->archived_at?->format('M j, Y') ?? '')) : ($child->could_return ?: '—') }}
+                                    @endif
+                                </td>
                                 <td style="text-align: right;">
-                                    @if($isAdmin)
+                                    @if($isAdmin && ! (! $archivedTab && $child->status === 'Active'))
                                         @if($archivedTab)
-                                            <button type="button" @click="unarchive({ lan: @js($child->lan), name: @js($child->first_name.' '.$child->last_name), url: @js(route('children.unarchive', $child)) })" class="btn sm" aria-label="Restore {{ $child->first_name }} {{ $child->last_name }}">Restore</button>
+                                            <button type="button" @click="unarchive({ lan: @js($child->lan), name: @js($child->displayName()), url: @js(route('children.unarchive', $child)) })" class="btn sm" aria-label="Restore {{ $child->displayName() }}">Restore</button>
                                         @else
-                                            <form method="POST" action="{{ route('children.reenroll', $child) }}" style="display: inline;">@csrf<button type="submit" class="btn sm" aria-label="Re-enroll {{ $child->first_name }} {{ $child->last_name }}">Re-enroll</button></form>
+                                            <form method="POST" action="{{ route('children.reenroll', $child) }}" style="display: inline;">@csrf<button type="submit" class="btn sm" aria-label="Re-enroll {{ $child->displayName() }}">Re-enroll</button></form>
                                         @endif
                                     @endif
                                 </td>
@@ -131,6 +154,7 @@
                         @empty
                             <tr><td colspan="8" style="padding: 48px 12px; text-align: center;" class="muted">{{ $archivedTab ? 'No archived children.' : 'Nobody on the roll is withdrawn right now.' }}</td></tr>
                         @endforelse
+                        @include('children.partials.search-empty', ['searchHays' => $searchHays ?? [], 'colspan' => 8])
                     </tbody>
                 </table>
             @else
@@ -158,17 +182,26 @@
                             @php($guardian = $child->guardianLink())
                             @php($missing = $child->missingItems())
                             @php($alerts = $child->alertList())
+                            {{-- The search finds the name either way round, whichever
+                                 order Settings shows it in, and the nickname (QA #40).
+                                 Every guardian's name too, not only the one the
+                                 Guardian column shows: "Search name, LAN or parent"
+                                 has to find the second parent as well. The same text
+                                 the chip counts are worked out from (Child::rosterSearchText). --}}
+                            @php($searchHays[$child->lan] = $child->rosterSearchText())
                             <tr class="row" data-child-row="{{ $child->lan }}"
-                                x-show="!gone.includes(@js($child->lan)) && @js(strtolower($child->first_name.' '.$child->last_name.' '.$child->classroom.' '.$child->lan.' '.($guardian?->person?->name ?? ''))).includes(search.toLowerCase())"
+                                x-show="!gone.includes(@js((string) $child->lan)) && matches(@js($searchHays[$child->lan]))"
                                 @click="if (! $event.target.closest('a, button, form')) window.location = @js($url)">
                                 <td class="faint sticky left-0 z-10 w-[4rem] bg-white dark:bg-slate-900" style="font-variant-numeric: tabular-nums; width: 4rem; min-width: 4rem; box-sizing: border-box;">{{ $child->lan }}</td>
                                 <td class="sticky left-[4rem] z-10 bg-white dark:bg-slate-900">
                                     {{-- The same avatar-and-name block the attendance
                                          sheet draws, in the same classes, so the two
-                                         tables cannot drift. --}}
+                                         tables cannot drift. The name in the order
+                                         Settings › Name order asks for (QA #40, 12 Nov
+                                         2026); the column still sorts by surname. --}}
                                     <div class="att-person" style="display: flex; align-items: center; gap: 10px;">
                                         <span class="att-avatar av"><x-child-avatar :child="$child" /></span>
-                                        <a href="{{ $url }}" class="att-name dark:!text-slate-100" style="font-weight: 600; color: #1c2130;">{{ $child->last_name }}, {{ $child->first_name }}@if(filled($child->nickname))<span style="font-weight: 500; color: #8a90a0;"> ({{ $child->nickname }})</span>@endif</a>
+                                        <a href="{{ $url }}" class="att-name dark:!text-slate-100" style="font-weight: 600; color: #1c2130;">{{ $child->displayName() }}@if(filled($child->nickname))<span style="font-weight: 500; color: #8a90a0;"> ({{ $child->nickname }})</span>@endif</a>
                                     </div>
                                 </td>
                                 {{-- The room's colour square, as the mock-up has it, and the
@@ -180,8 +213,10 @@
                                     <div style="display: flex; flex-direction: column; gap: 3px;">
                                         @php($days = $child->scheduleDays() ?? [])
                                         <span title="{{ $child->scheduleDaysLabel() ?? 'Days not set' }}">@foreach(\App\Models\Child::WEEKDAYS as $n => $name)<span class="d {{ in_array($n, $days, true) ? 'y' : 'n' }}">{{ $name[0] }}</span>@endforeach</span>
-                                        {{-- Sheet-size times ("7:30a – 5:00p"): the column is read down sixty rows. --}}
-                                        <span style="font-size: 12px; white-space: nowrap;" class="muted">{{ $child->scheduleLabel() ? \App\Models\Child::timeShort($child->drop_off_time).' – '.\App\Models\Child::timeShort($child->pick_up_time) : 'Hours not agreed' }}</span>
+                                        {{-- Sheet-size times ("7:30a – 5:00p"): the column is read down sixty rows.
+                                             "Hours not agreed" by the same rule the badge counts —
+                                             no days or no times (Child::hoursAgreed, QA #31). --}}
+                                        <span style="font-size: 12px; white-space: nowrap;" class="muted">{{ $child->hoursAgreed() ? \App\Models\Child::timeShort($child->drop_off_time).' – '.\App\Models\Child::timeShort($child->pick_up_time) : 'Hours not agreed' }}</span>
                                     </div>
                                 </td>
                                 <td><span class="pill {{ $child->isDss() ? 'info' : 'mut' }}">{{ $child->isDss() ? 'DSS' : 'Private pay' }}</span></td>
@@ -193,12 +228,21 @@
                                 </td>
                                 <td>
                                     @foreach($alerts as $alert)
-                                        <span class="pill {{ $alert['type'] }}" title="{{ $alert['label'] }}: {{ $alert['text'] }}" style="margin-right: 4px;">! {{ \Illuminate\Support\Str::limit($alert['text'], 40) }}</span>
+                                        {{-- How bad, on the chip itself (QA E3): a severe allergy reads as one from the list. --}}
+                                        {{-- Its own colour and icon per kind (<x-child-alert>, QA 16 Nov 2026). --}}
+                                        <x-child-alert :alert="$alert" :label="false" :limit="40" style="margin: 0 4px 3px 0;" />
                                     @endforeach
                                 </td>
                                 <td>
                                     @if($child->isPending())
                                         <span class="pill info" style="margin-right: 4px;">{{ $child->enrolled_on ? 'Starts '.$child->enrolled_on->format('M j') : 'Pending' }}</span>
+                                    @elseif($child->status === 'Active' && $child->enrolled_on && $child->enrolled_on->toDateString() > now(config('app.timezone'))->toDateString())
+                                        {{-- Active with a first day still to come: not on today's roll anywhere yet (RoomCounts::isEnrolled). --}}
+                                        <span class="pill info" style="margin-right: 4px;" title="Not counted as enrolled until the first day">Starts {{ $child->enrolled_on->format('M j') }}</span>
+                                    @elseif($child->status === 'Active' && $child->withdrawn_on && $child->withdrawn_on->toDateString() < now(config('app.timezone'))->toDateString())
+                                        {{-- Active past their last day: the nightly children:sync-enrollments has not
+                                             moved them to Withdrawn. Left off every count (RoomCounts::isEnrolled). --}}
+                                        <span class="pill miss" style="margin-right: 4px;" title="Last day was {{ $child->withdrawn_on->format('M j, Y') }}, but the status still says Active. Not counted as enrolled or expected anywhere." data-left-not-updated>Left {{ $child->withdrawn_on->format('M j') }} — status not updated</span>
                                     @endif
                                     @if($missing === [])
                                         <span class="pill ok">Complete</span>
@@ -208,14 +252,19 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="10" style="padding: 48px 12px; text-align: center;" class="muted">{{ $status === '' && $room === '' && $pay === '' && $gap === '' ? 'No children have been added yet.' : ($status !== '' && $room === '' && $pay === '' && $gap === '' ? 'Nobody on the roll is '.strtolower(\App\Models\Child::statusLabel($status)).' right now.' : 'Nobody matches these filters.') }}</td></tr>
+                            <tr><td colspan="10" style="padding: 48px 12px; text-align: center;" class="muted">{{ $rollCount === 0 ? 'No children have been added yet.' : ($status !== '' && $room === '' && $pay === '' && $gap === '' ? 'Nobody on the roll is '.strtolower(\App\Models\Child::statusLabel($status)).' right now.' : 'Nobody matches these filters.') }}</td></tr>
                         @endforelse
+                        @include('children.partials.search-empty', ['searchHays' => $searchHays ?? [], 'colspan' => 10])
                     </tbody>
                 </table>
             @endif
         </div>
         <div style="padding: 12px 20px; font-size: 13px; border-top: 1px solid #f0f1f5; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between;" class="muted">
-            <span>Showing {{ $children->count() }} of {{ $rollCount + ($archivedTab ? $archivedCount : 0) }} · click a row to open the child's record · Archive lives inside the record</span>
+            {{-- Follows the search box (tester report, Nov 2026): the rows it
+                 hides are not being shown. --}}
+            @php($shownNow = $searchQuery === '' ? $children->count() : collect($searchHays ?? [])->filter(fn ($hay) => str_contains($hay, mb_strtolower($searchQuery)))->count())
+            @php($footerTail = ' of '.($rollCount + ($archivedTab ? $archivedCount : 0)).' · click a row to open the child\'s record · Archive lives inside the record')
+            <span data-showing x-text="'Showing ' + shownCount + @js($footerTail)">Showing {{ $shownNow }}{{ $footerTail }}</span>
             @if($isAdmin)<a href="{{ route('children.import.form') }}">Import children →</a>@endif
         </div>
     </section>
@@ -233,8 +282,75 @@
 
 <script>
 document.addEventListener('alpine:init', () => {
-    Alpine.data('childrenRoll', ({ csrf, archivedTab }) => ({
-        search: '',
+    Alpine.data('childrenRoll', ({ csrf, archivedTab, search = '', index = {}, listed = [] }) => ({
+        // Opens on the ?search= (or ?q=) in the address, and writes back to
+        // it as it is typed (debounced, replaceState), so Back, a refresh and
+        // a shared link keep it.
+        search,
+        // Every child the chips count on this tab, by LAN: { h: search text,
+        // r: room, d: DSS }. listed is the LANs of the rows on the page.
+        index,
+        listed,
+        searchTimer: null,
+
+        init() {
+            this.$watch('search', value => {
+                clearTimeout(this.searchTimer);
+                this.searchTimer = setTimeout(() => this.keepSearchInAddress(value), 300);
+            });
+            this.keepSearchInAddress(this.search);
+            // The room and pay chips follow the search too.
+            Alpine.effect(() => this.recountChips());
+        },
+
+        needle() { return String(this.search ?? '').trim().toLowerCase(); },
+        matches(hay) { const q = this.needle(); return q === '' || String(hay ?? '').includes(q); },
+
+        // "Showing X of Y": the rows on the page the search leaves showing.
+        get shownCount() {
+            return this.listed.filter(lan => ! this.gone.includes(lan) && this.matches(this.index[lan]?.h ?? '')).length;
+        },
+
+        // The address, and every link back to this page (tabs, chips, sort
+        // headers), carry the search. Called on the debounce and on any
+        // click, so a row opened straight after typing still has it — the
+        // record's Back link is built from the address it was opened from.
+        keepSearchInAddress(value) {
+            clearTimeout(this.searchTimer);
+            const q = String(value ?? '').trim();
+            const withQ = (href) => {
+                const url = new URL(href, window.location.href);
+                url.searchParams.delete('q');
+                if (q) url.searchParams.set('search', q); else url.searchParams.delete('search');
+                return url;
+            };
+            const here = withQ(window.location.href);
+            if (here.href !== window.location.href) {
+                try { history.replaceState(history.state, '', here); } catch (e) {}
+            }
+            this.$root.querySelectorAll('a[href]').forEach(link => {
+                const url = new URL(link.getAttribute('href'), window.location.href);
+                if (url.origin === here.origin && url.pathname === here.pathname) link.setAttribute('href', withQ(url.href).href);
+            });
+        },
+
+        recountChips() {
+            const q = this.needle();
+            const gone = this.gone;
+            const count = (test) => Object.entries(this.index).filter(([lan, child]) => ! gone.includes(lan) && child.h.includes(q) && test(child)).length;
+            const chips = [
+                ...[...this.$root.querySelectorAll('[data-room-chip]')].map(chip => [chip, (c) => c.r === chip.dataset.roomChip]),
+                ...[...this.$root.querySelectorAll('[data-room-chip-all], [data-pay-chip="all"]')].map(chip => [chip, () => true]),
+                ...[...this.$root.querySelectorAll('[data-pay-chip="dss"]')].map(chip => [chip, (c) => c.d]),
+                ...[...this.$root.querySelectorAll('[data-pay-chip="private"]')].map(chip => [chip, (c) => ! c.d]),
+            ];
+            chips.forEach(([chip, test]) => {
+                const number = chip.lastElementChild;
+                if (! number) return;
+                number.dataset.full ??= number.textContent;
+                number.textContent = q === '' ? number.dataset.full : count(test);
+            });
+        },
         // LANs of rows that have gone since the page loaded — restored off
         // the Archived tab. Hidden rather than removed, so Undo can put one
         // straight back.

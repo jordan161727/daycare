@@ -16,6 +16,7 @@ use App\Services\StaffPresence;
 use App\Services\TimeClock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\SetsUpRoomTablets;
 use Tests\TestCase;
 
 /**
@@ -31,7 +32,7 @@ use Tests\TestCase;
  */
 class KioskQaSpecTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, SetsUpRoomTablets;
 
     private const DAY = '2026-10-15';
 
@@ -68,22 +69,22 @@ class KioskQaSpecTest extends TestCase
             }
         }
         foreach (['Infant' => '2101', 'Transition' => '2102', 'Toddler' => '2103', 'PreK' => '2104', 'UPK-4' => '2105', 'School Age' => '2106'] as $room => $code) {
-            Setting::put("rooms.$room.tablet_code", $code);
+            \App\Models\RoomTabletCode::put($room, $code);
         }
 
         // name, pin, scheduled room, shift, [in, room, since]
         $rows = [
-            ['LaQuora', '1111', 'PreK', ['10:45', '18:00'], null],
-            ['Frenci', '2222', 'UPK-4', ['08:30', '17:00'], ['08:31', 'UPK-4', '08:31']],
-            ['Lana', '3333', 'PreK', ['07:00', '15:30'], ['07:12', 'PreK', '07:12']],
-            ['Sultana', '4444', 'Toddler', ['11:00', '18:00'], null],
-            ['Evana', '5555', 'Infant', ['07:30', '16:00'], ['07:28', 'Infant', '07:28']],
-            ['Farhana', '6666', 'Infant', ['08:00', '16:30'], ['07:58', 'Infant', '07:58']],
-            ['Mary Jo', '7777', 'Toddler', ['07:00', '15:30'], ['06:55', 'Toddler', '06:55']],
-            ['Chandler', '8888', 'Transition', ['08:00', '16:30'], ['08:02', 'Transition', '08:02']],
-            ['Denise', '9999', 'UPK-4', ['08:00', '16:30'], ['07:57', 'UPK-4', '07:57']],
-            ['Zameera', '1212', 'Transition', ['15:00', '18:00'], null],
-            ['Tammy', '1313', 'Toddler', null, null],
+            ['LaQuora', '111111', 'PreK', ['10:45', '18:00'], null],
+            ['Frenci', '222222', 'UPK-4', ['08:30', '17:00'], ['08:31', 'UPK-4', '08:31']],
+            ['Lana', '333333', 'PreK', ['07:00', '15:30'], ['07:12', 'PreK', '07:12']],
+            ['Sultana', '444444', 'Toddler', ['11:00', '18:00'], null],
+            ['Evana', '555555', 'Infant', ['07:30', '16:00'], ['07:28', 'Infant', '07:28']],
+            ['Farhana', '666666', 'Infant', ['08:00', '16:30'], ['07:58', 'Infant', '07:58']],
+            ['Mary Jo', '777777', 'Toddler', ['07:00', '15:30'], ['06:55', 'Toddler', '06:55']],
+            ['Chandler', '888888', 'Transition', ['08:00', '16:30'], ['08:02', 'Transition', '08:02']],
+            ['Denise', '999999', 'UPK-4', ['08:00', '16:30'], ['07:57', 'UPK-4', '07:57']],
+            ['Zameera', '121212', 'Transition', ['15:00', '18:00'], null],
+            ['Tammy', '131313', 'Toddler', null, null],
         ];
         foreach ($rows as [$name, $pin, $room, $shift, $on]) {
             $u = User::factory()->create(['role' => 'teacher', 'name' => $name, 'classroom' => $room]);
@@ -117,13 +118,14 @@ class KioskQaSpecTest extends TestCase
     {
         $before = $this->snapshot();
         $this->asDoor();
-        $this->postJson(route('clock.kiosk.identify'), ['pin' => '0000'])->assertJson(['status' => 'not_found']);
+        $this->postJson(route('clock.kiosk.identify'), ['pin' => '000000'])->assertJson(['status' => 'not_found']);
         $this->asTablet();
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '0000'])->assertJson(['status' => 'not_found']);
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '000000'])->assertJson(['status' => 'not_found']);
         $this->assertSame($before, $this->snapshot(), 'state changed');
         foreach (['clock/kiosk', 'room/kiosk'] as $view) {
             $js = $this->src($view);
-            $this->assertStringContainsString("title: 'Not recognised'", $js);
+            // US spelling on screen (QA K6, 16 Nov 2026).
+            $this->assertStringContainsString("title: 'Not recognized'", $js);
             $this->assertStringContainsString("this.entry = '';", $js, "$view does not clear the PIN");
         }
     }
@@ -131,7 +133,8 @@ class KioskQaSpecTest extends TestCase
     public function test_A2_clear_empties_the_pin(): void
     {
         foreach (['clock/kiosk', 'room/kiosk'] as $view) {
-            $this->assertStringContainsString('@click="entry = \'\'"', $this->src($view), "$view has no Clear");
+            // Clear also restarts the idle clear (QA K3, 16 Nov 2026).
+            $this->assertStringContainsString('@click="entry = \'\'; armIdle()"', $this->src($view), "$view has no Clear");
         }
     }
 
@@ -144,11 +147,15 @@ class KioskQaSpecTest extends TestCase
 
     public function test_A4_only_four_digits_are_used(): void
     {
+        // The four is config('kiosk.pin_length') now, six by default (QA K1,
+        // 16 Nov 2026): one length, nothing else accepted.
+        $this->assertSame(6, config('kiosk.pin_length'));
         foreach (['clock/kiosk', 'room/kiosk'] as $view) {
-            $this->assertStringContainsString('if (this.entry.length === 4) this.identify();', $this->src($view));
+            $this->assertStringContainsString('if (this.entry.length === this.pinLength) this.identify();', $this->src($view));
         }
         $this->asDoor();
-        $this->postJson(route('clock.kiosk.identify'), ['pin' => '33331'])->assertStatus(422);
+        $this->postJson(route('clock.kiosk.identify'), ['pin' => '3333331'])->assertStatus(422);
+        $this->postJson(route('clock.kiosk.identify'), ['pin' => '3333'])->assertStatus(422);
     }
 
     /* ================= B. Front door ================= */
@@ -156,7 +163,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B1_status_card_for_someone_off(): void
     {
         $this->asDoor();
-        $r = $this->identify('1111');
+        $r = $this->identify('111111');
         $r->assertJsonPath('staff.presence_label', 'Not on the clock');
         $this->assertStringContainsString('10:45 AM – 6:00 PM · PreK', (string) $r->json('staff.today'));
         $this->assertSame(['clock_in'], array_column($r->json('staff.actions'), 'action'));
@@ -165,7 +172,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B2_room_picker_scheduled_first_and_office(): void
     {
         $this->asDoor();
-        $rooms = $this->identify('1111')->json('staff.rooms');
+        $rooms = $this->identify('111111')->json('staff.rooms');
         $this->assertSame('PreK', $rooms[0]['room']);
         $this->assertTrue($rooms[0]['mine']);
         $this->assertStringContainsString('Your schedule', $this->src('clock/kiosk'));
@@ -175,7 +182,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B3_clock_in_to_prek(): void
     {
         $this->asDoor();
-        $r = $this->doorPunch('1111', 'clock_in', 'PreK');
+        $r = $this->doorPunch('111111', 'clock_in', 'PreK');
         $this->assertSame('clock_in', $r->json('action'));
         $this->assertDoorTitle('clock_in', 'You’re clocked in');
         $s = $this->presence->status($this->t['LaQuora']);
@@ -188,7 +195,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B4_clock_in_to_the_office_is_not_counted(): void
     {
         $this->asDoor();
-        $this->doorPunch('1111', 'clock_in', 'office');
+        $this->doorPunch('111111', 'clock_in', 'office');
         $this->assertSame(StaffPresence::NO_ROOM, $this->presence->status($this->t['LaQuora'])['state']);
         $this->assertFalse($this->presence->teachersIn('PreK')->contains('user_id', $this->t['LaQuora']->id));
     }
@@ -196,7 +203,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B5_lana_starts_a_break_and_prek_goes_short(): void
     {
         $this->asDoor();
-        $r = $this->doorPunch('3333', 'break_start');
+        $r = $this->doorPunch('333333', 'break_start');
         $this->assertDoorTitle('break_start', 'Enjoy your break');
         $s = $this->presence->status($this->t['Lana']);
         $this->assertSame([StaffPresence::ON_BREAK, 'PreK'], [$s['state'], $s['last_room']]);
@@ -208,7 +215,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B6_evana_ends_her_break(): void
     {
         $this->asDoor();
-        $this->doorPunch('5555', 'break_end');
+        $this->doorPunch('555555', 'break_end');
         $this->assertDoorTitle('break_end', 'Welcome back');
         $this->assertSame('Infant', $this->presence->status($this->t['Evana'])['room']);
         $this->assertSame(16, $this->breakMinutes('Evana'));
@@ -219,7 +226,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B7_evana_goes_somewhere_else(): void
     {
         $this->asDoor();
-        $this->doorPunch('5555', 'break_end', 'Toddler');
+        $this->doorPunch('555555', 'break_end', 'Toddler');
         $this->assertSame('Toddler', $this->presence->status($this->t['Evana'])['room']);
         $this->assertSame(16, $this->breakMinutes('Evana'));
         $this->assertTrue($this->room('Infant')['short']);
@@ -228,7 +235,7 @@ class KioskQaSpecTest extends TestCase
     public function test_B8_farhana_clocks_out(): void
     {
         $this->asDoor();
-        $r = $this->doorPunch('6666', 'clock_out');
+        $r = $this->doorPunch('666666', 'clock_out');
         $this->assertDoorTitle('clock_out', 'See you tomorrow');
         $this->assertSame(StaffPresence::OFF, $this->presence->status($this->t['Farhana'])['state']);
         $this->assertTrue(TimePunch::where('user_id', $this->t['Farhana']->id)->where('type', TimePunch::OUT)->exists());
@@ -245,9 +252,9 @@ class KioskQaSpecTest extends TestCase
     public function test_B10_clocking_out_from_the_office(): void
     {
         $this->asDoor();
-        $this->doorPunch('1111', 'clock_in', 'office');
+        $this->doorPunch('111111', 'clock_in', 'office');
         $this->mark();
-        $r = $this->doorPunch('1111', 'clock_out');
+        $r = $this->doorPunch('111111', 'clock_out');
         $this->assertNull($r->json('warning'));
         $this->assertEmpty(array_filter($this->newLog(), fn ($l) => str_contains($l, ' left ')));
     }
@@ -256,7 +263,7 @@ class KioskQaSpecTest extends TestCase
     {
         $before = $this->snapshot();
         $this->asDoor();
-        $this->identify('3333');
+        $this->identify('333333');
         $this->assertSame($before, $this->snapshot());
         $this->assertStringContainsString('Not <span x-text="firstName"></span>? Cancel', $this->src('clock/kiosk'));
         $this->assertStringContainsString('@click="reset()"', $this->src('clock/kiosk'));
@@ -267,7 +274,7 @@ class KioskQaSpecTest extends TestCase
     public function test_C1_sultana_is_clocked_in_at_the_tablet(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '4444'])->assertJson(['status' => 'done'])->assertJsonPath('done.title', 'Clocked in for you');
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '444444'])->assertJson(['status' => 'done'])->assertJsonPath('done.title', 'Clocked in for you');
         $this->assertSame('PreK', $this->presence->status($this->t['Sultana'])['room']);
         $this->assertLogContains(['Sultana clocked in (auto, PreK tablet)', 'Sultana → PreK', 'Sultana skipped the front door — office to confirm start time']);
         $this->assertSame('#be123c', $this->colourOf('Sultana skipped the front door — office to confirm start time'));
@@ -276,14 +283,14 @@ class KioskQaSpecTest extends TestCase
     public function test_C2_lana_already_in_prek(): void
     {
         $this->asTablet();
-        $r = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333']);
+        $r = $this->postJson(route('room.kiosk.identify'), ['pin' => '333333']);
         $r->assertJsonPath('staff.is_here', true)->assertJsonPath('staff.can_here', false);
     }
 
     public function test_C3_frenci_moves_into_prek_and_upk4_goes_short(): void
     {
         $this->asTablet();
-        $r = $this->tabletPunch('2222', 'check_in');
+        $r = $this->tabletPunch('222222', 'check_in');
         $r->assertJsonPath('done.title', 'You’re in PreK')
             ->assertJsonPath('done.warning', 'UPK-4 now has 1 teacher for 16 children (needs 2). The office has been told.');
         $this->assertSame('PreK', $this->presence->status($this->t['Frenci'])['room']);
@@ -293,7 +300,7 @@ class KioskQaSpecTest extends TestCase
     public function test_C4_frencis_own_room_is_marked_and_not_clickable(): void
     {
         $this->asTablet();
-        $rooms = collect($this->postJson(route('room.kiosk.identify'), ['pin' => '2222'])->json('staff.rooms'));
+        $rooms = collect($this->postJson(route('room.kiosk.identify'), ['pin' => '222222'])->json('staff.rooms'));
         $this->assertTrue($rooms->firstWhere('room', 'UPK-4')['is_here']);
         $this->assertStringContainsString(':disabled="sending || other.is_here"', $this->src('room/kiosk'));
     }
@@ -301,10 +308,10 @@ class KioskQaSpecTest extends TestCase
     public function test_C5_evana_on_break_checks_into_prek(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '5555'])->assertJsonPath('staff.on_break', true);
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '555555'])->assertJsonPath('staff.on_break', true);
         $this->assertStringContainsString('ends your break', $this->src('room/kiosk'));
         // One action, one minute: the check-in lands at 10:31, 16 minutes after the break began.
-        $this->tabletPunch('5555', 'check_in')->assertJsonPath('done.sub', 'Break ended. Checked into PreK at 10:31 AM.');
+        $this->tabletPunch('555555', 'check_in')->assertJsonPath('done.sub', 'Break ended. Checked into PreK at 10:31 AM.');
         $this->assertSame(TimeClock::WORKING, $this->clock->state($this->t['Evana'], self::DAY));
         $this->assertSame(16, $this->breakMinutes('Evana'));
         $this->assertTrue($this->room('Infant')['short']);
@@ -313,7 +320,7 @@ class KioskQaSpecTest extends TestCase
     public function test_C6_denise_takes_a_break_at_the_tablet(): void
     {
         $this->asTablet();
-        $r = $this->tabletPunch('9999', 'break_start');
+        $r = $this->tabletPunch('999999', 'break_start');
         $r->assertJsonPath('done.title', 'Enjoy your break')
             ->assertJsonPath('done.warning', 'UPK-4 now has 1 teacher for 16 children (needs 2). The office has been told.');
         $s = $this->presence->status($this->t['Denise']);
@@ -324,13 +331,13 @@ class KioskQaSpecTest extends TestCase
     public function test_C7_no_break_button_while_on_break(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '5555'])->assertJsonPath('staff.can_break', false);
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '555555'])->assertJsonPath('staff.can_break', false);
     }
 
     public function test_C8_no_clock_out_on_the_tablet(): void
     {
         $this->asTablet();
-        $this->tabletPunch('3333', 'clock_out', expect: 'stale');
+        $this->tabletPunch('333333', 'clock_out', expect: 'stale');
         $this->assertSame(TimeClock::WORKING, $this->clock->state($this->t['Lana'], self::DAY));
         $this->assertStringContainsString('Clock out at the front door.', $this->src('room/kiosk'));
     }
@@ -349,7 +356,7 @@ class KioskQaSpecTest extends TestCase
     public function test_D2_code_2101_makes_it_infant(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2101'])->assertJson(['status' => 'ok', 'room' => 'Infant', 'was' => 'PreK']);
+        $this->keyRoomCode('2101')->assertJson(['status' => 'ok', 'room' => 'Infant', 'was' => 'PreK']);
         $this->assertSame('Infant', $this->tablet->fresh()->classroom);
         $this->assertLogContains(['Room tablet set to Infant (was PreK)']);
         $this->assertStringContainsString('title: `This tablet is now ${data.room}`', $this->src('room/kiosk'));
@@ -358,7 +365,7 @@ class KioskQaSpecTest extends TestCase
     public function test_D3_a_bad_code(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.setup'), ['code' => '9999'])->assertJson(['status' => 'bad_code']);
+        $this->keyRoomCode('9999')->assertJson(['status' => 'bad_code']);
         $this->assertSame('PreK', $this->tablet->fresh()->classroom);
         $this->assertStringContainsString('That’s not a room code', $this->src('room/kiosk'));
     }
@@ -366,7 +373,7 @@ class KioskQaSpecTest extends TestCase
     public function test_D4_same_room_code(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2104'])->assertJson(['status' => 'ok', 'room' => 'PreK']);
+        $this->keyRoomCode('2104')->assertJson(['status' => 'ok', 'room' => 'PreK']);
         $this->assertLogContains(['Room tablet set to PreK']);
         $this->assertEmpty(array_filter($this->newLog(), fn ($l) => str_contains($l, '(was')));
     }
@@ -374,9 +381,9 @@ class KioskQaSpecTest extends TestCase
     public function test_D5_after_2101_sultana_lands_in_infant(): void
     {
         $this->asTablet();
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2101']);
+        $this->keyRoomCode('2101');
         $this->act();
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '4444'])->assertJson(['status' => 'done']);
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '444444'])->assertJson(['status' => 'done']);
         $this->assertSame('Infant', $this->presence->status($this->t['Sultana'])['room']);
     }
 
@@ -417,7 +424,7 @@ class KioskQaSpecTest extends TestCase
     public function test_E5_farhana_clocked_out(): void
     {
         $this->asDoor();
-        $this->doorPunch('6666', 'clock_out');
+        $this->doorPunch('666666', 'clock_out');
         $this->assertSame('Clocked out 10:31 AM', $this->notIn()['Farhana']);
     }
 
@@ -432,8 +439,8 @@ class KioskQaSpecTest extends TestCase
     public function test_F1_newest_first(): void
     {
         $this->asDoor();
-        $this->doorPunch('1111', 'clock_in', 'PreK');
-        $this->doorPunch('3333', 'break_start');
+        $this->doorPunch('111111', 'clock_in', 'PreK');
+        $this->doorPunch('333333', 'break_start');
         // LaQuora is in PreK now, so Lana leaving does not make it short: no flag.
         $texts = array_column($this->presence->board()['activity'], 'text');
         $this->assertSame(['Lana left PreK', 'Lana started break (front door)', 'LaQuora → PreK', 'LaQuora clocked in (front door)'], $texts);
@@ -443,7 +450,7 @@ class KioskQaSpecTest extends TestCase
     public function test_F2_never_more_than_12(): void
     {
         $this->asDoor();
-        foreach (['1111' => 'PreK', '4444' => 'Toddler', '1313' => 'Infant', '1212' => 'Transition'] as $pin => $room) {
+        foreach (['111111' => 'PreK', '444444' => 'Toddler', '131313' => 'Infant', '121212' => 'Transition'] as $pin => $room) {
             $this->doorPunch($pin, 'clock_in', $room);
             $this->doorPunch($pin, 'break_start');
         }
@@ -454,9 +461,9 @@ class KioskQaSpecTest extends TestCase
     public function test_F3_colours(): void
     {
         $this->asDoor();
-        $this->doorPunch('3333', 'break_start');
+        $this->doorPunch('333333', 'break_start');
         $this->asTablet();
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2104']);
+        $this->keyRoomCode('2104');
         $this->assertSame('#1b5e91', $this->colourOf('Lana started break (front door)'));
         $this->assertSame(\App\Services\ScheduleEditor::COLOURS['PreK'][1], $this->colourOf('Lana left PreK'));
         $this->assertSame('#be123c', $this->colourOf('Ratio: PreK short after Lana left'));
@@ -466,7 +473,7 @@ class KioskQaSpecTest extends TestCase
     public function test_F4_ratio_flag_above_the_actions_own_entries(): void
     {
         $this->asDoor();
-        $this->doorPunch('3333', 'break_start');
+        $this->doorPunch('333333', 'break_start');
         $texts = array_column($this->presence->board()['activity'], 'text');
         $this->assertSame(['Ratio: PreK short after Lana left', 'Lana left PreK', 'Lana started break (front door)'], array_slice($texts, 0, 3));
     }
@@ -476,13 +483,13 @@ class KioskQaSpecTest extends TestCase
     public function test_G1_door_then_tablet_one_state_one_room(): void
     {
         $this->asDoor();
-        $this->doorPunch('1111', 'clock_in', 'Toddler');
+        $this->doorPunch('111111', 'clock_in', 'Toddler');
         $this->asTablet();
-        $this->tabletPunch('1111', 'check_in');
+        $this->tabletPunch('111111', 'check_in');
         $this->asDoor();
-        $this->doorPunch('1111', 'break_start');
+        $this->doorPunch('111111', 'break_start');
         $this->asTablet();
-        $this->tabletPunch('1111', 'check_in');
+        $this->tabletPunch('111111', 'check_in');
         $this->assertSame(1, StaffRoomCheckin::open()->where('user_id', $this->t['LaQuora']->id)->count());
         $this->assertSame('PreK', $this->presence->status($this->t['LaQuora'])['room']);
     }
@@ -490,12 +497,12 @@ class KioskQaSpecTest extends TestCase
     public function test_G2_breaks_never_negative_and_accumulate(): void
     {
         $this->asDoor();
-        $this->doorPunch('3333', 'break_start');
+        $this->doorPunch('333333', 'break_start');
         $this->travel(10)->minutes();
-        $this->doorPunch('3333', 'break_end');
-        $this->doorPunch('3333', 'break_start');
+        $this->doorPunch('333333', 'break_end');
+        $this->doorPunch('333333', 'break_start');
         $this->travel(5)->minutes();
-        $this->doorPunch('3333', 'break_end');
+        $this->doorPunch('333333', 'break_end');
         $this->assertSame(17, $this->breakMinutes('Lana')); // 11 + 6
     }
 
@@ -507,9 +514,9 @@ class KioskQaSpecTest extends TestCase
     public function test_G4_clock_in_again_after_clocking_out(): void
     {
         $this->asDoor();
-        $this->doorPunch('6666', 'clock_out'); // 10:31, worked 2h 33m
+        $this->doorPunch('666666', 'clock_out'); // 10:31, worked 2h 33m
         $this->travel(29)->minutes();
-        $this->doorPunch('6666', 'clock_in', 'Infant'); // 11:01
+        $this->doorPunch('666666', 'clock_in', 'Infant'); // 11:01
         $this->travel(29)->minutes();
         $this->act(); // 11:31
         $line = $this->presence->line($this->t['Farhana'], $this->presence->status($this->t['Farhana']), []);
@@ -520,7 +527,7 @@ class KioskQaSpecTest extends TestCase
     public function test_G5_tammy_with_no_shift_clocks_in(): void
     {
         $this->asDoor();
-        $this->doorPunch('1313', 'clock_in', 'Toddler');
+        $this->doorPunch('131313', 'clock_in', 'Toddler');
         $this->assertSame('Toddler', $this->presence->status($this->t['Tammy'])['room']);
         $this->assertArrayNotHasKey('Tammy', $this->notIn());
     }

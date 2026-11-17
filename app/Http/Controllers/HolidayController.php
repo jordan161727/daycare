@@ -309,7 +309,7 @@ class HolidayController extends Controller
         }
 
         if (Carbon::parse($to)->isWeekend()) {
-            return back()->withErrors(['closed_on' => 'The centre is not open at the weekend — pick a weekday.']);
+            return back()->withErrors(['closed_on' => 'The center is not open on weekends — pick a weekday.']);
         }
 
         if ($this->weeks->isFrozen(ScheduleWeek::startOf($to))) {

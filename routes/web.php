@@ -109,16 +109,23 @@ Route::middleware('throttle:kiosk')->group(function () {
  * same PIN, and signed out for the same reason. What they record is which
  * room somebody is in, for the ratios; they never clock anyone out.
  *
- * Two presses check a secret — the PIN, and the four-digit room code behind
- * the gear — and both sit on the tight limiter.
+ * Three presses check a secret — the PIN, and behind the gear an
+ * administrator's PIN and the room code
+ * — and all of them sit on the tight limiter.
  */
 Route::middleware('throttle:kiosk')->group(function () {
     Route::get('/room', [RoomTabletController::class, 'index'])->name('room.kiosk');
     Route::post('/room/punch', [RoomTabletController::class, 'punch'])->name('room.kiosk.punch');
     Route::post('/room/identify', [RoomTabletController::class, 'identify'])
         ->middleware('throttle:kiosk-secret')->name('room.kiosk.identify');
+
+    // The gear (QA K4, 16 Nov 2026): an administrator's PIN first, and only
+    // then the room code. Both check a secret, so both sit on the tight
+    // limiter, and both on the gear's own five-in-ten-minutes as well.
+    Route::post('/room/setup/authorize', [RoomTabletController::class, 'authorizeSetup'])
+        ->middleware(['throttle:kiosk-secret', 'throttle:room-setup'])->name('room.kiosk.setup.authorize');
     Route::post('/room/setup', [RoomTabletController::class, 'setup'])
-        ->middleware('throttle:kiosk-secret')->name('room.kiosk.setup');
+        ->middleware(['throttle:kiosk-secret', 'throttle:room-setup'])->name('room.kiosk.setup');
 });
 
 /*
@@ -450,6 +457,8 @@ Route::get('/teachers/{staff}/card.png', [StaffCardController::class, 'download'
 Route::post('/teachers/{staff}/clock-pin', [StaffCardController::class, 'pin'])->name('staff.card.pin');
 Route::get('/children/create', [ChildController::class, 'create'])->name('children.create');
 Route::post('/children', [ChildController::class, 'store'])->name('children.store');
+// The Add and Edit forms' live "already on file?" check, as JSON.
+Route::get('/children/duplicate-check', [ChildController::class, 'duplicateCheck'])->middleware('never-cached')->name('children.duplicate-check');
 
 Route::get('/children/import',[ChildrenController::class,'showImport'])->name('children.import.form');
 
@@ -505,6 +514,9 @@ Route::middleware('role:admin,teacher')->group(function () {
     Route::put('/children/{child}/health', [ChildRecordController::class, 'health'])->name('children.health')->whereNumber('child');
     Route::post('/children/{child}/alerts', [ChildRecordController::class, 'storeAlert'])->name('children.alerts.store')->whereNumber('child');
     Route::delete('/children/{child}/alerts/{index}', [ChildRecordController::class, 'destroyAlert'])->name('children.alerts.destroy')->whereNumber('child')->whereNumber('index');
+    Route::put('/children/{child}/alerts/{index}', [ChildRecordController::class, 'updateAlert'])->name('children.alerts.update')->whereNumber('child')->whereNumber('index');
+    // Today's allergies and medical alerts by room, as the Health card promises (QA E3).
+    Route::get('/kitchen-list', [\App\Http\Controllers\KitchenListController::class, 'index'])->name('kitchen.index');
     Route::post('/children/{child}/notes', [ChildRecordController::class, 'storeNote'])->name('children.notes.store')->whereNumber('child');
     Route::post('/children/{child}/documents', [ChildRecordController::class, 'storeDocument'])->name('children.documents.store')->whereNumber('child');
     Route::get('/children/{child}/documents/{document}', [ChildRecordController::class, 'document'])->name('children.documents.show')->whereNumber('child')->whereNumber('document');

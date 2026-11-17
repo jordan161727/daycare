@@ -21,7 +21,7 @@ class ChildPerson extends Model
 
     protected $fillable = [
         'child_id', 'person_id', 'relationship',
-        'is_guardian', 'can_pickup', 'is_emergency',
+        'is_guardian', 'can_pickup', 'pickup_days', 'is_emergency',
         'pays_fees', 'gets_texts',
         'priority', 'restriction', 'source',
     ];
@@ -73,18 +73,38 @@ class ChildPerson extends Model
      */
     public function allowsPickup(): bool
     {
-        return $this->can_pickup && blank($this->restriction);
+        return $this->can_pickup && blank($this->restriction) && $this->collectsToday();
+    }
+
+    /**
+     * Whether today is one of their pick-up days. No days set is every day;
+     * "Mon,Thu" is grandma on Mondays and Thursdays and nobody else's.
+     */
+    public function collectsToday(): bool
+    {
+        if (blank($this->pickup_days)) {
+            return true;
+        }
+
+        return in_array(today()->format('D'), array_map('trim', explode(',', (string) $this->pickup_days)), true);
     }
 
     /** The pick-up list, as a scope so the rule is written once. */
     public function scopeAllowedToCollect($query)
     {
-        return $query->where('can_pickup', true)->whereNull('restriction');
+        return $query->where('can_pickup', true)->whereNull('restriction')
+            ->where(fn ($days) => $days->whereNull('pickup_days')
+                ->orWhere('pickup_days', '')
+                ->orWhere('pickup_days', 'like', '%'.today()->format('D').'%'));
     }
 
-    /** The emergency list, in the order the centre rings them. */
+    /**
+     * The emergency list, in the order the centre rings them. A restricted
+     * person is left off whatever the tick says: nobody rings the parent a
+     * court order keeps away to say the child is hurt.
+     */
     public function scopeEmergencyOrder($query)
     {
-        return $query->where('is_emergency', true)->orderBy('priority');
+        return $query->where('is_emergency', true)->whereNull('restriction')->orderBy('priority');
     }
 }

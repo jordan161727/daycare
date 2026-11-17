@@ -85,6 +85,7 @@ class User extends Authenticatable
             'dob' => 'date:Y-m-d',
             'start_date' => 'date:Y-m-d',
             'direct_deposit' => 'boolean',
+            'can_view_pay' => 'boolean',
             // Decimal rather than float: MySQL hands a DECIMAL column back as
             // '15.50' and SQLite as 15.5, and a pay rate that loses its second
             // place on one driver and keeps it on the other is a payslip that
@@ -306,16 +307,69 @@ class User extends Authenticatable
         return $this->isAdmin() && $this->job_role === 'Director';
     }
 
-    /** Pay rates and direct deposit are the director's alone. */
-    public function canSeePay(): bool
+    /**
+     * The owner: who Settings belongs to. The director, or an admin account
+     * with no job title at all (the centre's own account, and every admin
+     * made before job titles existed). An admin whose title names another
+     * job — the office — is not.
+     */
+    public function isOwner(): bool
     {
-        return $this->isDirector();
+        return $this->isAdmin() && (blank($this->job_role) || $this->job_role === 'Director');
     }
 
-    /** Who can see pay, by name, for the line that says so to everyone else. */
-    public static function payViewerName(): ?string
+    /**
+     * Pay rates and direct deposit: for admin accounts that have been given
+     * pay access (users.can_view_pay, granted by the owner on a staff
+     * profile). Checked through the 'view-pay' gate.
+     *
+     * The flag replaced "the director alone"; its migration switched it on for
+     * exactly those accounts. Should a database not have the column yet (a
+     * deploy that has not migrated), the old rule still answers, so nobody
+     * gains or loses access in between.
+     */
+    public function canSeePay(): bool
     {
-        return static::where('role', 'admin')->where('job_role', 'Director')->orderBy('id')->value('name');
+        if (! $this->isAdmin()) {
+            return false;
+        }
+
+        if (! self::hasPayAccessColumn()) {
+            return $this->isDirector();
+        }
+
+        return (bool) $this->can_view_pay;
+    }
+
+    private static ?bool $payAccessColumn = null;
+
+    private static function hasPayAccessColumn(): bool
+    {
+        return self::$payAccessColumn ??= (bool) rescue(
+            fn () => \Illuminate\Support\Facades\Schema::hasColumn('users', 'can_view_pay'),
+            false,
+            false,
+        );
+    }
+
+    /** Can switch pay access on and off for others: the owner. */
+    public function canGrantPay(): bool
+    {
+        return $this->isOwner();
+    }
+
+    /**
+     * Who can see pay, by name, for the line that says so to everyone else.
+     *
+     * @return list<string>
+     */
+    public static function payViewerNames(): array
+    {
+        return rescue(
+            fn () => static::where('role', 'admin')->where('can_view_pay', true)->orderBy('name')->pluck('name')->all(),
+            [],
+            false,
+        );
     }
 
     public function students()
@@ -420,8 +474,8 @@ class User extends Authenticatable
     /**
      * The letters a name could go by, best first.
      *
-     * Two words: first and last initial, then first initial with each later
-     * letter of the last name. One word: the first letter with the next
+     * Two words: first and last initial, then the same numbered ("BJ2") for
+     * a second person with them. One word: the first letter with the next
      * capital ("LaQuora" → LQ) or else the next letter ("Lana" → LA), then
      * each later letter in turn.
      *
@@ -440,8 +494,14 @@ class User extends Authenticatable
         $options = [];
 
         if (count($words) > 1) {
-            $options[] = $first.Str::upper(Str::substr($rest, 0, 1));
-        } elseif (preg_match('/\p{Lu}/u', $rest, $capital)) {
+            // A second Beth Jones is "BJ2", not "BO" — letters from inside the
+            // surname read as somebody else's initials (QA retest, 16 Nov 2026).
+            $initials = $first.Str::upper(Str::substr($rest, 0, 1));
+
+            return [$initials, ...array_map(fn (int $n) => $initials.$n, range(2, 9))];
+        }
+
+        if (preg_match('/\p{Lu}/u', $rest, $capital)) {
             $options[] = $first.$capital[0];
         }
 
@@ -492,7 +552,22 @@ class User extends Authenticatable
      */
     public function jobRole(): string
     {
-        return filled($this->job_role) ? $this->job_role : ucfirst((string) $this->role);
+        return $this->jobRoleOrLegacy() ?? ucfirst((string) $this->role);
+    }
+
+    /**
+     * The job as stored, or the one an old row implies: a teacher whose
+     * employment type was the retired "Lead" (StaffRule::LEGACY_EMPLOYMENT)
+     * is a Lead Teacher. What the job pickers preselect, so the next save
+     * stores it properly.
+     */
+    public function jobRoleOrLegacy(): ?string
+    {
+        if (filled($this->job_role)) {
+            return $this->job_role;
+        }
+
+        return $this->employment === 'LEAD' && $this->role === 'teacher' ? 'Lead Teacher' : null;
     }
 
     /**
@@ -517,11 +592,18 @@ class User extends Authenticatable
 
     public function scopeJobRoleIs($query, string $role)
     {
+        $unset = fn ($q) => $q->whereNull('job_role')->orWhere('job_role', '');
+        // Untitled teachers on the retired "Lead" employment type read as Lead
+        // Teacher (jobRoleOrLegacy), not as Teacher.
+        $legacyLead = fn ($q) => $q->where('employment', 'LEAD')->where('role', 'teacher');
+
         return $query->where(fn ($outer) => $outer
             ->where('job_role', $role)
             ->orWhere(fn ($fallback) => $fallback
-                ->where(fn ($unset) => $unset->whereNull('job_role')->orWhere('job_role', ''))
-                ->where('role', strtolower($role))));
+                ->where($unset)
+                ->where('role', strtolower($role))
+                ->where(fn ($q) => $q->whereNull('employment')->orWhere('employment', '!=', 'LEAD')->orWhere('role', '!=', 'teacher')))
+            ->when($role === 'Lead Teacher', fn ($q) => $q->orWhere(fn ($lead) => $lead->where($unset)->where($legacyLead))));
     }
 
     /**
@@ -556,9 +638,9 @@ class User extends Authenticatable
      * What a secret is looked up by.
      *
      * Keyed on the app key, so a stolen table is not a list of four-digit
-     * numbers to try offline. Deliberately not unique for PINs: two people
-     * choosing 1234 is a collision to resolve at the screen, not an error to
-     * refuse at the form.
+     * numbers to try offline. Unique for PINs since QA K2 (16 Nov 2026): two
+     * people choosing 1234 is refused at the form and by the database's
+     * unique index on kiosk_pin_index, rather than resolved at the screen.
      */
     public static function kioskIndexFor(string $secret): string
     {
@@ -577,13 +659,14 @@ class User extends Authenticatable
      * With four digits and a handful of staff that is a small thing to give
      * away, and much smaller than the alternative: two people on one PIN means
      * the clock cannot tell them apart, so it has to stop and ask — every
-     * morning, to both of them, for as long as the collision stands.
+     * morning, to both of them, for as long as the collision stands. Since
+     * QA K2 (16 Nov 2026) it cannot stand: the column is unique, and this is
+     * what turns that into a sentence on the form rather than a database error.
      */
     public static function kioskPinTaken(string $pin, ?self $except = null): bool
     {
-        return static::where('kiosk_pin_index', static::kioskIndexFor($pin))
-            ->when($except?->exists, fn ($query) => $query->whereKeyNot($except->getKey()))
-            ->exists();
+        // Any staff member's or any parent's (QA K2, 16 Nov 2026).
+        return \App\Rules\UniqueKioskPin::taken($pin, $except);
     }
     /**
      * Issue a card, and hand its code back once.
@@ -611,12 +694,21 @@ class User extends Authenticatable
         return filled($this->card_hash);
     }
 
-    /** Set the four digits somebody keys in when the card is in a coat pocket. */
+    /**
+     * Set the digits somebody keys in when the card is in a coat pocket.
+     *
+     * Callers validate first — config('kiosk.pin_length') digits and
+     * not kioskPinTaken() — see StaffCardController::pin, the one screen
+     * that sets it. The unique index on kiosk_pin_index is the backstop.
+     */
     public function setKioskPin(string $pin): void
     {
         $this->forceFill([
             'kiosk_pin_index' => static::kioskIndexFor($pin),
             'kiosk_pin_hash' => Hash::make($pin),
+            // How long it is, never what it is: kiosk:duplicate-pins lists
+            // the PINs that no longer fit config('kiosk.pin_length').
+            'kiosk_pin_length' => strlen($pin),
             'kiosk_failed_attempts' => 0,
             'kiosk_locked_until' => null,
         ])->save();

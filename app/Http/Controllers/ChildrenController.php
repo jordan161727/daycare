@@ -97,12 +97,14 @@ class ChildrenController extends Controller
 
         $created = $updated = $skipped = 0;
         $errors = [];
+        $duplicates = [];
         $unread = [];
         $several = count($files) > 1;
 
         foreach ($files as $file) {
             $name = $file->getClientOriginalName();
             $import = new ChildrenImport;
+            $import->confirmDuplicates = $request->boolean('confirm_duplicates');
 
             try {
                 DB::transaction(fn () => Excel::import($import, $file));
@@ -131,6 +133,10 @@ class ChildrenController extends Controller
             foreach ($import->errors as $error) {
                 $errors[] = $several ? "{$name} — {$error}" : $error;
             }
+
+            foreach ($import->duplicates as $duplicate) {
+                $duplicates[] = $several ? "{$name} — {$duplicate}" : $duplicate;
+            }
         }
 
         // Every file failed: that is an error, not an import that did nothing.
@@ -149,9 +155,14 @@ class ChildrenController extends Controller
             $message .= ' '.count($errors).' row(s) could not be read'.($unread !== [] ? ', and '.count($unread).' file(s) not at all' : '').' — see below.';
         }
 
+        if ($duplicates !== []) {
+            $message .= ' '.count($duplicates).' row(s) look like a child already on file and were not added — see below.';
+        }
+
         return back()
             ->with('success', $message)
-            ->with('import_errors', array_merge($unread, $errors));
+            ->with('import_errors', array_merge($unread, $errors))
+            ->with('import_duplicates', $duplicates);
     }
 
     public function showImport()

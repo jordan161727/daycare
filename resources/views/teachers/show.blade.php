@@ -22,7 +22,7 @@
         ]);
 
     $profile = [
-        'Employment' => $teacher->employment,
+        'Employment' => $teacher->employment ? $teacher->employmentLabel() : null,
         'Room' => $teacher->title,
         'Legal name (payroll)' => $teacher->legal_name,
         'Phone' => $teacher->phone,
@@ -38,7 +38,7 @@
         'Evaluation' => $teacher->evaluation_score,
     ];
     // Pay is the director's alone (User::canSeePay).
-    if (! auth()->user()->canSeePay()) {
+    if (! auth()->user()->can('view-pay')) {
         unset($profile['Direct deposit'], $profile['Pay rate']);
     }
 @endphp
@@ -47,7 +47,7 @@
 <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
     <x-page-header
         :title="$teacher->name"
-        :subtitle="trim(($teacher->employment ?: 'No employment type').' · '.$rules->count().' rule'.($rules->count() === 1 ? '' : 's').', '.$rules->where('priority', 'HARD')->count().' hard')" />
+        :subtitle="trim(($teacher->employment ? $teacher->employmentLabel() : 'No employment type').' · '.$rules->count().' rule'.($rules->count() === 1 ? '' : 's').', '.$rules->where('priority', 'HARD')->count().' hard')" />
     <div class="flex w-fit gap-2">
         <a href="{{ route('teachers.index') }}" class="rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Back to roster</a>
         <a href="{{ route('teachers.edit', $teacher) }}" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:bg-indigo-700">Edit details</a>
@@ -161,17 +161,18 @@
         {{-- The fallback, for the morning the card is in a coat at home. --}}
         <form method="POST" action="{{ route('staff.card.pin', $teacher) }}" class="md:border-l md:border-slate-100 md:pl-5 md:dark:border-white/10">
             @csrf
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">4-digit clock PIN</p>
+            @php($pinLength = (int) config('kiosk.pin_length')) {{-- QA K1, 16 Nov 2026: the clock's length, not a written 4. --}}
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ $pinLength }}-digit clock PIN</p>
             <div class="mt-2 flex flex-wrap items-end gap-2">
                 <label>
                     <span class="sr-only">Clock PIN</span>
-                    <input type="password" name="kiosk_pin" inputmode="numeric" maxlength="4" required class="cs-input w-24 text-center tracking-[0.3em]" placeholder="••••">
+                    <input type="password" name="kiosk_pin" inputmode="numeric" maxlength="{{ $pinLength }}" required class="cs-input w-24 text-center tracking-[0.3em]" placeholder="{{ str_repeat('•', $pinLength) }}">
                 </label>
                 <label>
                     <span class="sr-only">Confirm PIN</span>
                     {{-- Confirmed, because a mistyped PIN is not discovered
                          until somebody is at the clock unable to start. --}}
-                    <input type="password" name="kiosk_pin_confirmation" inputmode="numeric" maxlength="4" required class="cs-input w-24 text-center tracking-[0.3em]" placeholder="••••">
+                    <input type="password" name="kiosk_pin_confirmation" inputmode="numeric" maxlength="{{ $pinLength }}" required class="cs-input w-24 text-center tracking-[0.3em]" placeholder="{{ str_repeat('•', $pinLength) }}">
                 </label>
                 <button class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold transition hover:bg-slate-100 dark:border-white/10 dark:hover:bg-white/10">
                     {{ $teacher->hasKioskPin() ? 'Replace' : 'Set PIN' }}
@@ -188,7 +189,7 @@
     {{-- "Hard" and "Soft" are the scheduler's words. What a director needs to
          know is what happens when the two disagree, which is what this says. --}}
     <p class="mt-1 text-sm text-slate-500">
-        These shape the generated week. A <span class="font-semibold text-rose-700 dark:text-rose-400">must</span> is never broken &mdash; the scheduler leaves a room short first. A <span class="font-semibold text-sky-700 dark:text-sky-400">prefer</span> is honoured when it can be, and reported when it cannot.
+        These shape the generated week. A <span class="font-semibold text-rose-700 dark:text-rose-400">must</span> is never broken &mdash; the scheduler leaves a room short first. A <span class="font-semibold text-sky-700 dark:text-sky-400">prefer</span> is honored when it can be, and reported when it cannot.
     </p>
 
     <div class="mt-4 space-y-2">
@@ -208,7 +209,7 @@
                         <p class="mt-1 text-xs font-medium text-amber-700">Recorded, but the scheduler does not act on this rule yet.</p>
                     @endif
                 </div>
-                <form method="POST" action="{{ route('teachers.rules.destroy', [$teacher, $rule]) }}" onsubmit="return confirm('Remove this rule? The next generated schedule will stop honouring it.')">
+                <form method="POST" action="{{ route('teachers.rules.destroy', [$teacher, $rule]) }}" onsubmit="return confirm('Remove this rule? The next generated schedule will stop honoring it.')">
                     @csrf @method('DELETE')
                     <button class="text-xs font-semibold text-rose-600 hover:text-rose-800">Remove</button>
                 </form>

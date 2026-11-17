@@ -123,10 +123,10 @@ class ChildAlertsTest extends TestCase
             ->assertOk()
             ->assertSee('No pickup by Jordan Key')
             ->assertSee('Banana')
-            // Rose for a rule that must not be broken, amber for a thing to
-            // watch: the pill carries the kind as its class (Phase 2 list).
-            ->assertSee('pill court', false)
-            ->assertSee('pill allergy', false);
+            // Each kind has its own colour and icon (<x-child-alert>): the
+            // chip carries the kind as its class.
+            ->assertSee('na-alert--court', false)
+            ->assertSee('na-alert--allergy', false);
     }
 
     public function test_the_record_shows_them_above_the_paragraph(): void

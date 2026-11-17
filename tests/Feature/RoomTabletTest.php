@@ -14,6 +14,7 @@ use App\Services\StaffPresence;
 use App\Services\TimeClock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\SetsUpRoomTablets;
 use Tests\TestCase;
 
 /**
@@ -30,7 +31,7 @@ use Tests\TestCase;
  */
 class RoomTabletTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, SetsUpRoomTablets;
 
     private StaffDevice $tablet;
 
@@ -43,8 +44,8 @@ class RoomTabletTest extends TestCase
         $this->travelTo(Carbon::parse('2026-10-15 10:30:00', config('app.timezone')));
         config(['daycare.kiosk.enabled' => true]);
 
-        Setting::put('rooms.PreK.tablet_code', '2104');
-        Setting::put('rooms.UPK-4.tablet_code', '2105');
+        \App\Models\RoomTabletCode::put('PreK', '2104');
+        \App\Models\RoomTabletCode::put('UPK-4', '2105');
 
         $this->tablet = new StaffDevice(['name' => 'PreK iPad', 'kind' => StaffDevice::KIND_ROOM, 'classroom' => 'PreK']);
         $this->tablet->token_hash = '';
@@ -85,7 +86,7 @@ class RoomTabletTest extends TestCase
         // device on first visit, and the gear and room code say where it is.
         $this->get(route('room.kiosk'))->assertOk()->assertDontSee('not set up yet');
 
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2105'])->assertOk()->assertJson(['status' => 'ok', 'room' => 'UPK-4']);
+        $this->keyRoomCode('2105')->assertOk()->assertJson(['status' => 'ok', 'room' => 'UPK-4']);
 
         $device = StaffDevice::latest('id')->first();
         $this->assertNotSame($this->tablet->id, $device->id);
@@ -96,7 +97,7 @@ class RoomTabletTest extends TestCase
     {
         $this->pair($this->tablet);
 
-        $this->postJson(route('room.kiosk.setup'), ['code' => '2105'])
+        $this->keyRoomCode('2105')
             ->assertOk()->assertJson(['status' => 'ok', 'room' => 'UPK-4', 'was' => 'PreK']);
 
         $this->assertSame('UPK-4', $this->tablet->fresh()->classroom);
@@ -109,7 +110,7 @@ class RoomTabletTest extends TestCase
     {
         $this->pair($this->tablet);
 
-        $this->postJson(route('room.kiosk.setup'), ['code' => '0000'])->assertJson(['status' => 'bad_code']);
+        $this->keyRoomCode('0000')->assertJson(['status' => 'bad_code']);
 
         $this->assertSame('PreK', $this->tablet->fresh()->classroom);
         $this->assertSame(0, KioskEvent::count());
@@ -117,6 +118,9 @@ class RoomTabletTest extends TestCase
 
     public function test_a_room_code_may_not_be_a_staff_pin(): void
     {
+        // Codes are 4 digits and PINs 6 by default, so a code cannot be a
+        // PIN; the check still matters if a centre sets the two equal.
+        config(['kiosk.pin_length' => 4]);
         $admin = User::factory()->create(['role' => 'admin']);
         $this->teacher('Lana Ortiz', '3333', 'PreK');
 
@@ -150,10 +154,10 @@ class RoomTabletTest extends TestCase
 
     public function test_somebody_not_clocked_in_is_clocked_in_here_placed_and_flagged(): void
     {
-        $sultana = $this->teacher('Sultana Begum', '4444', 'Toddler');
+        $sultana = $this->teacher('Sultana Begum', '444444', 'Toddler');
         $this->pair($this->tablet);
 
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '4444'])
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '444444'])
             ->assertOk()
             ->assertJson(['status' => 'done'])
             ->assertJsonPath('done.title', 'Clocked in for you')
@@ -169,13 +173,13 @@ class RoomTabletTest extends TestCase
 
     public function test_somebody_working_elsewhere_can_check_into_this_room(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
         Setting::put('rooms.Toddler.ratio', 5);
         $this->childrenIn('Toddler', 4);
-        $this->clockInAtDoor('3333', 'Toddler');
+        $this->clockInAtDoor('333333', 'Toddler');
         $this->pair($this->tablet);
 
-        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->assertOk()->assertJson(['status' => 'ok']);
+        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '333333'])->assertOk()->assertJson(['status' => 'ok']);
         $screen->assertJsonPath('staff.can_here', true)
             ->assertJsonPath('staff.is_here', false)
             ->assertJsonPath('staff.on_break', false)
@@ -203,13 +207,13 @@ class RoomTabletTest extends TestCase
 
     public function test_a_room_tap_from_a_break_ends_the_break(): void
     {
-        $evana = $this->teacher('Evana Roy', '5555', 'Infant');
-        $this->clockInAtDoor('5555', 'Infant');
-        $this->punchAtDoor('5555', 'break_start');
+        $evana = $this->teacher('Evana Roy', '555555', 'Infant');
+        $this->clockInAtDoor('555555', 'Infant');
+        $this->punchAtDoor('555555', 'break_start');
         $this->travel(15)->minutes();
         $this->pair($this->tablet);
 
-        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '5555'])->assertJson(['status' => 'ok']);
+        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '555555'])->assertJson(['status' => 'ok']);
         $screen->assertJsonPath('staff.on_break', true)
             ->assertJsonPath('staff.now', 'On break since 10:30 AM · was in Infant')
             ->assertJsonPath('staff.here_sub', 'Ends your break · No children right now')
@@ -227,13 +231,13 @@ class RoomTabletTest extends TestCase
 
     public function test_taking_a_break_at_the_tablet_is_start_break_at_the_door(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
         Setting::put('rooms.PreK.ratio', 7);
         $this->childrenIn('PreK', 7);
-        $this->clockInAtDoor('3333', 'PreK');
+        $this->clockInAtDoor('333333', 'PreK');
         $this->pair($this->tablet);
 
-        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->assertJson(['status' => 'ok']);
+        $screen = $this->postJson(route('room.kiosk.identify'), ['pin' => '333333'])->assertJson(['status' => 'ok']);
         $screen->assertJsonPath('staff.is_here', true)->assertJsonPath('staff.can_here', false);
 
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $screen->json('ticket'), 'action' => 'break_start'])
@@ -248,11 +252,11 @@ class RoomTabletTest extends TestCase
 
     public function test_a_tablet_cannot_clock_anyone_out_and_has_no_office_tile(): void
     {
-        $lana = $this->teacher('Lana Ortiz', '3333', 'PreK');
-        $this->clockInAtDoor('3333', 'PreK');
+        $lana = $this->teacher('Lana Ortiz', '333333', 'PreK');
+        $this->clockInAtDoor('333333', 'PreK');
         $this->pair($this->tablet);
 
-        $ticket = fn () => $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->json('ticket');
+        $ticket = fn () => $this->postJson(route('room.kiosk.identify'), ['pin' => '333333'])->json('ticket');
 
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket(), 'action' => 'clock_out'])->assertJson(['status' => 'stale']);
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket(), 'action' => 'check_in', 'room' => 'office'])->assertJson(['status' => 'stale']);
@@ -264,11 +268,11 @@ class RoomTabletTest extends TestCase
 
     public function test_a_tablet_with_no_room_yet_takes_nobody(): void
     {
-        $this->teacher('Lana Ortiz', '3333', 'PreK');
+        $this->teacher('Lana Ortiz', '333333', 'PreK');
         $this->tablet->setRoom(null);
         $this->pair($this->tablet);
 
-        $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->assertJson(['status' => 'no_room']);
+        $this->postJson(route('room.kiosk.identify'), ['pin' => '333333'])->assertJson(['status' => 'no_room']);
 
         $this->assertSame(0, TimePunch::count());
         $this->get(route('room.kiosk'))->assertSee('has not been told which room it is in');
@@ -276,11 +280,11 @@ class RoomTabletTest extends TestCase
 
     public function test_a_ticket_is_the_tablet_s_own_and_is_spent_once(): void
     {
-        $this->teacher('Lana Ortiz', '3333', 'PreK');
-        $this->clockInAtDoor('3333', 'Toddler');
+        $this->teacher('Lana Ortiz', '333333', 'PreK');
+        $this->clockInAtDoor('333333', 'Toddler');
         $this->pair($this->tablet);
 
-        $ticket = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->json('ticket');
+        $ticket = $this->postJson(route('room.kiosk.identify'), ['pin' => '333333'])->json('ticket');
 
         // A press with somebody else's ticket is refused — and, as at the
         // door, it spends the real one: whoever keyed the PIN has walked away.
@@ -288,7 +292,7 @@ class RoomTabletTest extends TestCase
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in'])->assertJson(['status' => 'expired']);
 
         // Keyed again: one press, and the ticket is gone.
-        $ticket = $this->postJson(route('room.kiosk.identify'), ['pin' => '3333'])->json('ticket');
+        $ticket = $this->postJson(route('room.kiosk.identify'), ['pin' => '333333'])->json('ticket');
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in'])->assertJson(['status' => 'ok']);
         $this->postJson(route('room.kiosk.punch'), ['ticket' => $ticket, 'action' => 'check_in'])->assertJson(['status' => 'expired']);
     }

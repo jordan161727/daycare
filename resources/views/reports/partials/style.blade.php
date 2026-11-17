@@ -8,6 +8,20 @@
     .dark .ch .rcard { background: rgb(30 41 59); color: #e2e8f0; border-color: rgb(255 255 255 / .12); }
     .ch .chip.f { font-size: 12.5px; padding: 6px 12px; min-height: 32px; text-decoration: none; }
     .ch .chip.f.on { background: #1b5e91; border-color: #1b5e91; color: #fff; }
+    /* The month stepper. Classes rather than inline hex (QA #10, 12 Nov
+       2026): its white pill kept the page's dark-mode text colour, so the
+       month was light grey on white. */
+    .ch .mstep { display: inline-flex; align-items: stretch; border: 1px solid #cfd3de; border-radius: 999px; background: #fff; overflow: hidden; }
+    .ch .mstep-arrow { display: grid; place-items: center; width: 34px; color: #8a90a0; text-decoration: none; }
+    .ch .mstep-arrow.off { color: #cfd3de; }
+    .ch .mstep-label { display: flex; align-items: center; gap: 6px; border-left: 1px solid #e7e9f0; border-right: 1px solid #e7e9f0; padding: 0 12px; min-height: 32px; font-size: 12.5px; font-weight: 700; color: #1c2130; }
+    .ch .mstep-label.away { color: #1b5e91; }
+    .ch .mstep-icon { width: 13px; height: 13px; color: #8a90a0; }
+    .dark .ch .mstep { background: rgb(30 41 59); border-color: rgb(255 255 255 / .15); }
+    .dark .ch .mstep-label { color: #e2e8f0; border-color: rgb(255 255 255 / .12); }
+    .dark .ch .mstep-label.away { color: #7dd3fc; }
+    .dark .ch .mstep-arrow { color: #94a3b8; } .dark .ch .mstep-arrow.off { color: #475569; }
+    .dark .ch .mstep-icon { color: #94a3b8; }
     .ch .lblu { font-size: 11px; font-weight: 600; color: #5f6676; text-transform: uppercase; letter-spacing: .06em; }
     .ch .fg { display: flex; flex-direction: column; gap: 6px; }
     .ch .ct { border-collapse: separate; border-spacing: 0; font-size: 12px; width: 100%; }

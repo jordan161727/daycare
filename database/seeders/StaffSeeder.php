@@ -33,7 +33,7 @@ class StaffSeeder extends Seeder
      */
     private const STAFF = [
         [
-            'name' => 'Maria Santos', 'legal_name' => 'Maria G. Santos', 'employment' => 'LEAD',
+            'name' => 'Maria Santos', 'legal_name' => 'Maria G. Santos', 'employment' => 'FT', 'job_role' => 'Lead Teacher',
             'title' => 'Infant', 'phone' => '555-0142', 'emergency_contact' => 'Jose Santos',
             'emergency_phone' => '555-0188', 'start_date' => '2018-03-05', 'dob' => '1988-06-14',
             'transport' => 'Own car — 10 min drive', 'aspire_id' => 'A1042', 'direct_deposit' => true,

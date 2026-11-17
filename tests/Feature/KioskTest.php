@@ -222,21 +222,24 @@ class KioskTest extends TestCase
         $this->assertSame(0, Attendance::count());
     }
 
-    public function test_two_families_sharing_a_pin_are_asked_for_a_phone_number(): void
+    /**
+     * Two families can no longer share a PIN (QA K2, 16 Nov 2026), so the
+     * door never has to ask which of them is standing there.
+     */
+    public function test_two_families_cannot_share_a_pin_so_the_door_never_asks(): void
     {
         $grace = $this->guardian('Grace', '246810', '5581');
-        $marcus = $this->guardian('Marcus', '246810', '9032');
-        $graceChild = $this->child('Eli', 'PreK');
-        $this->clear($grace, $graceChild);
+        $this->clear($grace, $this->child('Eli', 'PreK'));
 
-        // Six digits cannot tell them apart, so the kiosk asks rather than guesses.
-        $this->postJson(route('kiosk.unlock'), ['pin' => '246810'])
-            ->assertOk()
-            ->assertJson(['status' => 'ambiguous']);
+        $this->expectException(\DomainException::class);
 
-        $this->postJson(route('kiosk.unlock'), ['pin' => '246810', 'last4' => '5581'])
-            ->assertOk()
-            ->assertJson(['status' => 'ok', 'guardian' => ['name' => 'Grace']]);
+        try {
+            $this->guardian('Marcus', '246810', '9032');
+        } finally {
+            $this->postJson(route('kiosk.unlock'), ['pin' => '246810'])
+                ->assertOk()
+                ->assertJson(['status' => 'ok', 'guardian' => ['name' => 'Grace']]);
+        }
     }
 
     public function test_five_wrong_tries_locks_the_pin(): void

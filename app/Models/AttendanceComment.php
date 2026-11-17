@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\CommentTag;
+use App\Observers\AttendanceCommentObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Carbon;
@@ -17,7 +19,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * The day is written on the note itself (20 Oct 2026) so a child's earlier
  * notes can be read back by day — Friday's, on Monday — and the log page can
  * list every note of a day without walking the attendance table.
+ *
+ * Parents see it in the app's Daily report and get a push (17 Nov 2026):
+ * AttendanceCommentObserver → ParentAlerts.
  */
+#[ObservedBy([AttendanceCommentObserver::class])]
 class AttendanceComment extends Model
 {
     use SoftDeletes;
