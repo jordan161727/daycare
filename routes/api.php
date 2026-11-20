@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ParentAccountController;
 use App\Http\Controllers\Api\ParentAppController;
 use App\Http\Controllers\Api\ParentDayController;
 use Illuminate\Support\Facades\Route;
@@ -18,10 +19,19 @@ Route::prefix('parent')->name('api.parent.')->group(function () {
     Route::get('/ping', [ParentAppController::class, 'ping'])->middleware('throttle:parent-api')->name('ping');
     Route::post('/login/start', [ParentAppController::class, 'start'])->middleware('throttle:parent-login-start')->name('login.start');
     Route::post('/login/verify', [ParentAppController::class, 'verify'])->middleware('throttle:parent-login-verify')->name('login.verify');
+    // After the first code, a parent's own username (or mobile number) and password.
+    Route::post('/login/password', [ParentAppController::class, 'passwordLogin'])->middleware('throttle:parent-login-password')->name('login.password');
 
     Route::middleware(['auth:sanctum', 'parent', 'throttle:parent-api'])->group(function () {
         Route::post('/logout', [ParentAppController::class, 'logout'])->name('logout');
         Route::get('/me', [ParentAppController::class, 'me'])->name('me');
+
+        // The parent's own account (19 Nov 2026) — docs/parent-app-api.md §4.18.
+        Route::post('/account', [ParentAccountController::class, 'store'])->name('account.store');
+        Route::patch('/account', [ParentAccountController::class, 'update'])->name('account.update');
+        Route::post('/account/photo', [ParentAccountController::class, 'photo'])->name('account.photo');
+        Route::delete('/account/photo', [ParentAccountController::class, 'deletePhoto'])->name('account.photo.destroy');
+        Route::put('/account/password', [ParentAccountController::class, 'password'])->name('account.password');
 
         Route::get('/threads', [ParentAppController::class, 'threads'])->name('threads');
         Route::get('/threads/{thread}', [ParentAppController::class, 'thread'])->whereNumber('thread')->name('thread');

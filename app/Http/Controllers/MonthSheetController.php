@@ -213,6 +213,8 @@ class MonthSheetController extends Controller
                     // Every clock-in and clock-out of the day, in order, each
                     // with the check taken at it.
                     'entries' => self::entries($onDay, $timezone),
+                    // On the premises now: a session clocked in and not out.
+                    'here' => $onDay->contains(fn (Attendance $row) => $row->signed_in_at !== null && $row->signed_out_at === null),
                 ];
             }
 
@@ -242,7 +244,9 @@ class MonthSheetController extends Controller
 
         $stats = [
             'enrolled' => $rows->count(),
-            'in' => $todayRows->filter(fn (?array $day) => $day !== null && $day['in'] !== null)->count(),
+            // In the building now — checked out is not in (QA, 19 Nov 2026),
+            // the same count as the check-in screen and the dashboard.
+            'in' => $todayRows->filter(fn (?array $day) => $day !== null && $day['here'])->count(),
             'sick' => $todayRows->filter(fn (?array $day) => $day !== null
                 && ((($day['in_code'] ?? null) !== null && $day['in_code'] !== 0)
                     || (($day['out_code'] ?? null) !== null && $day['out_code'] !== 0)))->count(),
@@ -257,7 +261,7 @@ class MonthSheetController extends Controller
             'room' => $room,
             'animal' => ClassroomAssignment::animal($room),
             'total' => $group->count(),
-            'in' => $group->filter(fn (array $row) => ($row['byDay'][today()->toDateString()]['in'] ?? null) !== null)->count(),
+            'in' => $group->filter(fn (array $row) => $row['byDay'][$today]['here'] ?? false)->count(),
         ])->sortBy('room')->values();
 
         // The two totals the paper form carries: how many children were in on

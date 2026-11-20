@@ -6,6 +6,7 @@ use App\Models\Child;
 use App\Models\ChildPerson;
 use App\Models\Message;
 use App\Models\MessageThread;
+use App\Models\ParentAccount;
 use App\Models\ParentLoginCode;
 use App\Models\ParentNotificationPref;
 use App\Models\Person;
@@ -155,11 +156,49 @@ class ParentPortal
     }
 
     /** A token for the app: says it is a parent's, and lasts a while. */
-    public function issueToken(Person $person, string $device): string
+    /**
+     * Sign in with the username (or mobile number) and password the parent
+     * chose. The same rules as a code apply: a person who may no longer use
+     * the app (Texts unticked, a restriction, no Active or Pending child) is
+     * turned away even with the right password. Says nothing about which part
+     * was wrong.
+     */
+    public function passwordLogin(string $login, string $password): ?Person
+    {
+        $login = trim($login);
+        $isPhone = ! preg_match('/[a-z]/i', $login) && strlen(Person::digits($login)) >= 10;
+
+        $person = $isPhone
+            ? $this->personForPhone($login)
+            : ParentAccount::where('username', ParentAccount::normalise($login))->first()?->person;
+
+        $account = $person?->parentAccount;
+
+        if (! $account) {
+            Hash::check($password, '$2y$12$'.str_repeat('a', 53)); // the same time either way
+
+            return null;
+        }
+
+        if (! Hash::check($password, $account->password) || $this->links($person)->isEmpty()) {
+            return null;
+        }
+
+        $account->forceFill(['last_login_at' => now()])->save();
+
+        return $person;
+    }
+
+    /**
+     * A token for the app. One made by a texted code also carries "code": for
+     * a few minutes after, the parent may set a new password without the old
+     * one — how "Forgot password?" works.
+     */
+    public function issueToken(Person $person, string $device, bool $viaCode = false): string
     {
         return $person->createToken(
             Str::limit($device ?: 'Parent app', 60, ''),
-            ['parent'],
+            $viaCode ? ['parent', 'code'] : ['parent'],
             now()->addDays((int) config('daycare.parent_app.token_days', 90)),
         )->plainTextToken;
     }

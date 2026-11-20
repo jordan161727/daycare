@@ -208,6 +208,51 @@ class CheckInQaNovemberTest extends TestCase
         $this->assertSame('', $room('?date=2026-11-11&room=all'));
     }
 
+    /* ------------------------------------------- QA, 19 Nov 2026: "in" */
+
+    /**
+     * School Age read 9 on the sheet while 8 were in the room: the sheet
+     * counted every child who had arrived today, picked up or not.
+     */
+    private function schoolAgeDay(): void
+    {
+        $at = fn (string $time) => Carbon::parse('2026-11-12 '.$time, config('app.timezone'));
+        foreach ([['Ada', null], ['Ben', null], ['Cal', '13:00']] as $i => [$name, $out]) {
+            $child = Child::create([
+                'lan' => '52'.$i, 'first_name' => $name, 'last_name' => 'School', 'status' => 'Active',
+                'classroom' => 'School Age', 'dob' => '2019-03-01', 'schedule_days' => [1, 2, 3, 4, 5],
+                'start_date' => '2026-01-05',
+            ]);
+            DoorAttendance::create([
+                'child_id' => $child->id, 'attendance_date' => '2026-11-12', 'session' => 'FULL',
+                'signed_in_at' => $at('08:00'), 'signed_out_at' => $out ? $at($out) : null,
+            ]);
+        }
+    }
+
+    public function test_the_sheet_counts_who_is_in_now_not_who_came(): void
+    {
+        $this->schoolAgeDay();
+
+        $html = $this->actingAs($this->admin)->get(route('check-in.index', ['view' => 'sheet']))->getContent();
+        $result = $this->click($html, 'sheetcounts', 'http://localhost/check-in?view=sheet');
+
+        // Ada and Ben are in; Cal came and was picked up at one.
+        $this->assertStringContainsString('2/', $result['roomChip']);
+        $this->assertSame('All 2/4', $result['allChip']);
+        $this->assertSame('2 in', $result['inLine']);
+    }
+
+    public function test_the_month_sheet_counts_who_is_in_now_not_who_came(): void
+    {
+        $this->schoolAgeDay();
+
+        $response = $this->actingAs($this->admin)->get(route('attendance.month-sheet'));
+        $this->assertSame(2, $response->viewData('stats')['in']);
+        $this->assertSame(2, $response->viewData('stats')['not_in']);
+        $this->assertSame(2, collect($response->viewData('roomChips'))->firstWhere('room', 'School Age')['in']);
+    }
+
     /* ----------------------------------------------------- page weight */
 
     public function test_the_sheet_is_not_built_on_the_cards_view(): void

@@ -364,6 +364,30 @@ Two writes, each answering the whole object above and posting a note in the chil
 - `PUT /notification-preferences` with any of those keys as booleans answers the full set.
 - `messages` and `announcements` control the message pushes in §4.11, and `daily` the register pushes (comments and health checks). `photos` is stored for pushes the centre doesn't send yet.
 
+### 4.18 The parent's own account (added 19 Nov 2026)
+The first sign-in is always a texted code (§4.1–4.2). The parent then chooses a username and password, and after that signs in with those. The code is still how a forgotten password is replaced. All of this is stored in `parent_accounts`, beside the contact record; the office's `people` row is not changed.
+
+`GET /me` (and `parent` in every sign-in answer) now carries two more keys:
+```json
+"account": { "username": "kate.t", "display_name": "Katie", "email": "kate@example.com",
+             "photo_url": "https://…/messages/media?…&signature=…", "profile_done": true },
+"can_reset_password": false
+```
+- `account` is `null` until the parent has a username. With `null`, or `profile_done: false`, the app shows setup first.
+- `can_reset_password` is `true` for 15 minutes after a sign-in by code. During that time `PUT /account/password` needs no current password.
+
+**Signing in with a password:** `POST /login/password` (no token) with `{ "login": "kate.t", "password": "…", "device_name": "Pixel 8" }`. `login` is the username in any case, or the mobile number. It answers like `/login/verify`. A wrong username or password, or a parent who may no longer use the app (§2), answers `422` with `errors.password` "That username or password is wrong." It is limited to 10 tries a minute per address and 20 an hour per login.
+
+These all need the token. Each answers the full `/me` profile.
+
+| Call | Body | Notes |
+|---|---|---|
+| `POST /account` | `username`, `password`, `password_confirmation` | `201`. Once only: `409` if there is already an account. Username: 3–30 of `a-z 0-9 . _`, stored lower-case, unique. Password: at least 8 characters, with a letter and a number. |
+| `PATCH /account` | any of `display_name`, `email`, `username`, `profile_done: true` | `409` before `POST /account`. `profile_done: true` ends setup, whether or not anything else is sent. |
+| `POST /account/photo` | multipart `photo` (JPEG, PNG, WebP or HEIC, up to 10 MB) | Replaces the old photo. Stored under `messages/media/parent-{id}/profile/`, and served by the same signed link as message photos. |
+| `DELETE /account/photo` | none | |
+| `PUT /account/password` | `current_password`, `password`, `password_confirmation` | `current_password` is not needed while `can_reset_password` is true. Signs out every other phone. |
+
 ---
 
 ## 5. How the app should behave
@@ -640,3 +664,4 @@ On the local server the sign-in code is in `storage/logs/laravel.log`; in the sa
 | Version 2 tables | `database/migrations/2026_11_09_000001_create_parent_app_v2_tables.php` (models `ParentAbsenceReport`, `ParentPickupPlan`, `ParentNotificationPref`) |
 | Version 2 tests | `tests/Feature/ParentAppDayTest.php` (12 tests) |
 | Register pushes (comments, health checks) | `app/Services/ParentAlerts.php`, `app/Observers/AttendanceCommentObserver.php`, the call at the end of `HealthScreening::record()`; tests in `tests/Feature/ParentAlertsTest.php` |
+| Parent accounts (§4.18: username, password, photo) | `app/Http/Controllers/Api/ParentAccountController.php`, `ParentPortal::passwordLogin()`, model `ParentAccount`, migration `2026_11_19_000001_create_parent_accounts_table.php`; tests in `tests/Feature/ParentAccountTest.php` (8 tests) |

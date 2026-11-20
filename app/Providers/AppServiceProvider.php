@@ -39,6 +39,11 @@ class AppServiceProvider extends ServiceProvider
         ]);
         // Checking a code: each code already dies after five wrong tries.
         RateLimiter::for('parent-login-verify', fn (Request $request) => Limit::perMinute(20)->by('verify-ip:'.$request->ip()));
+        // A password has no five-tries limit of its own: hold each address and each username.
+        RateLimiter::for('parent-login-password', fn (Request $request) => [
+            Limit::perMinute(10)->by('password-ip:'.$request->ip()),
+            Limit::perHour(20)->by('password-login:'.mb_strtolower(trim((string) $request->input('login')))),
+        ]);
         RateLimiter::for('parent-api', fn (Request $request) => Limit::perMinute(120)->by('parent:'.($request->user()?->id ?? $request->ip())));
 
         // Who sees the DSS page (Phase 8.1, "Only you"): the users named in

@@ -80,9 +80,9 @@ class ParentAppApiTest extends TestCase
         $token = $response->json('token');
         $this->withToken($token)->getJson('/api/parent/me')->assertOk()->assertJsonPath('id', $this->kate->id);
 
-        // The token runs out, and says it is a parent's.
+        // The token runs out, and says it is a parent's — made by a code (see ParentAccountTest).
         $row = $this->kate->tokens()->first();
-        $this->assertSame(['parent'], $row->abilities);
+        $this->assertSame(['parent', 'code'], $row->abilities);
         $this->assertTrue($row->expires_at->between(now()->addDays(89), now()->addDays(91)));
     }
 

@@ -81,6 +81,29 @@ class ParentAppController extends Controller
         }
 
         return response()->json([
+            'token' => $this->portal->issueToken($person, (string) ($data['device_name'] ?? ''), viaCode: true),
+            'token_type' => 'Bearer',
+            'expires_in_days' => (int) config('daycare.parent_app.token_days', 90),
+            'parent' => $this->profile($person, canResetPassword: true),
+        ]);
+    }
+
+    /** Sign in with the username (or mobile number) and password chosen after the first code. */
+    public function passwordLogin(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'login' => ['required', 'string', 'max:60'],
+            'password' => ['required', 'string', 'max:200'],
+            'device_name' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $person = $this->portal->passwordLogin($data['login'], $data['password']);
+
+        if (! $person) {
+            throw ValidationException::withMessages(['password' => 'That username or password is wrong.']);
+        }
+
+        return response()->json([
             'token' => $this->portal->issueToken($person, (string) ($data['device_name'] ?? '')),
             'token_type' => 'Bearer',
             'expires_in_days' => (int) config('daycare.parent_app.token_days', 90),
@@ -99,17 +122,29 @@ class ParentAppController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        return response()->json($this->profile($request->user()));
+        return response()->json($this->profile($request->user(), ParentAccountController::freshCodeToken($request)));
     }
 
     /** The parent, their children, and the centre's lines — never the whole Person (it carries an SSN). */
-    private function profile(Person $person): array
+    public function profile(Person $person, bool $canResetPassword = false): array
     {
+        $account = $person->parentAccount()->first();
+
         return [
             'id' => $person->id,
             'name' => $person->name,
             'cell' => $person->cell,
             'email' => $person->email,
+            // null until the parent chooses a username and password (after their first code).
+            'account' => $account ? [
+                'username' => $account->username,
+                'display_name' => $account->display_name,
+                'email' => $account->email,
+                'photo_url' => $account->photo_path ? app(Messaging::class)->mediaUrl($account->photo_path) : null,
+                'profile_done' => $account->profile_done_at !== null,
+            ] : null,
+            // Signed in by a texted code in the last few minutes: a new password needs no old one.
+            'can_reset_password' => $canResetPassword,
             'children' => $this->portal->children($person)->map(fn (Child $c) => [
                 'id' => $c->id,
                 'name' => $c->displayName(),

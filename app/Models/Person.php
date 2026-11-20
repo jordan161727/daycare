@@ -82,6 +82,12 @@ class Person extends Model implements AuthenticatableContract
         return $this->hasMany(ChildPerson::class);
     }
 
+    /** Their parent-app username, password and photo, once they have set one up. */
+    public function parentAccount(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ParentAccount::class);
+    }
+
     /**
      * Digits only, which is how two telephone numbers are compared.
      *

@@ -1827,7 +1827,12 @@ function checkInGrid() { return {
 
             if (! day) return;
 
-            if (day.in) inNow++;
+            // In the building now: arrived and not gone. A child checked out
+            // (picked up, or off to school) is not "in" — the cards, the
+            // dashboard and the floor plan all count it so (QA, 19 Nov 2026:
+            // School Age read 9 here while 8 were in the room). The day's
+            // "out" stays empty while any session is still open.
+            if (day.in && ! day.out) inNow++;
 
             if ((day.in_code !== null && day.in_code !== 0)
                 || (day.out_code !== null && day.out_code !== 0)) sick++;
@@ -1838,7 +1843,7 @@ function checkInGrid() { return {
 
     roomCount(room) {
         return Object.values(this.rows)
-            .filter(row => row.room === room && row.byDay?.[this.today]?.in)
+            .filter(row => row.room === room && row.byDay?.[this.today]?.in && ! row.byDay?.[this.today]?.out)
             .length;
     },
 

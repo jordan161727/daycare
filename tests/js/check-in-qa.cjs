@@ -147,6 +147,14 @@ const text = el => el?.textContent.trim().replace(/\s+/g, ' ') ?? null;
         result.headingAll = text(doc.querySelector('section.glass-card h2'));
     }
 
+    if (scenario === 'sheetcounts') {
+        // The sheet's chips and its "N in": who is in the building now.
+        const sheet = [...doc.querySelectorAll('button')].filter(b => b.closest('[x-show="view === \'sheet\'"]'));
+        result.allChip = text(sheet.find(b => b.textContent.trim().startsWith('All')));
+        result.roomChip = text(sheet.find(b => b.textContent.includes('School Age')));
+        result.inLine = text([...doc.querySelectorAll('span.text-emerald-600')].find(s => /\bin$/.test(s.textContent.trim())));
+    }
+
     if (scenario === 'weight') {
         result.elements = doc.querySelectorAll('*').length;
         result.sheetCells = doc.querySelectorAll('.att-grid-table td').length;
